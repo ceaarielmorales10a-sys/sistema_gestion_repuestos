@@ -1,0 +1,524 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administración de Usuarios - Importadora Morales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='usuario.css') }}">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:h-auto md:min-h-screen md:self-stretch bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <div class="p-6 flex flex-col items-center border-b border-slate-800 bg-slate-950/20">
+                <img src="{{ url_for('static', filename='logo.png') }}" 
+                     alt="Logo Importadora Morales" 
+                     class="h-26 w-auto object-contain mb-3 filter drop-shadow-md transition-transform duration-300 hover:scale-105">
+            </div>
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                </a>
+                <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                </a>
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
+                </a>
+                {% endif %}
+                <a href="/inventario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-box text-base w-5"></i> Inventario
+                </a>
+                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Vendedor' %}
+                <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' %}
+                <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
+                    <i class="fa-solid fa-users text-base w-5"></i> Usuarios
+                </a>
+                <a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+            <div class="mb-3 px-2">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
+                <p class="text-xs font-bold text-slate-200 mt-0.5 capitalize">{{ user_name }}</p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('role', 'Usuario') }}</p>
+            </div>
+            <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </a>
+        </div>
+    </aside>
+
+    <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-6 space-y-3">
+                    {% for category, message in messages %}
+                        <div class="flash-message {% if category == 'success' %}flash-success{% else %}flash-error{% endif %}">
+                            <i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Administración de Usuarios</h1>
+                    <p class="text-sm text-slate-500 mt-1">Gestiona los usuarios y sus permisos del sistema</p>
+                </div>
+                <a href="/usuario/nuevo" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
+                    <i class="fa-solid fa-plus"></i> Nuevo Usuario
+                </a>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="rounded-3xl bg-violet-50 border border-violet-100 p-6">
+                    <p class="text-sm uppercase tracking-[0.24em] font-bold text-violet-500">Administrador</p>
+                    <p class="mt-3 text-sm text-slate-600">Acceso completo a todas las funciones del sistema</p>
+                </div>
+                <div class="rounded-3xl bg-sky-50 border border-sky-100 p-6">
+                    <p class="text-sm uppercase tracking-[0.24em] font-bold text-sky-600">Vendedor</p>
+                    <p class="mt-3 text-sm text-slate-600">Gestión de ventas y consulta de inventario</p>
+                </div>
+                <div class="rounded-3xl bg-emerald-50 border border-emerald-100 p-6">
+                    <p class="text-sm uppercase tracking-[0.24em] font-bold text-emerald-600">Bodeguero</p>
+                    <p class="mt-3 text-sm text-slate-600">Control de inventario y préstamos</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="view-switcher">
+            <div class="report-header-row">
+                <div class="report-tabs">
+                    <button type="button" class="report-tab active" data-view="list"><i class="fa-regular fa-rectangle-list"></i> Lista</button>
+                    <button type="button" class="report-tab" data-view="report"><i class="fa-solid fa-chart-column"></i> Reportes</button>
+                </div>
+            </div>
+
+            <div id="list-view" class="view-panel">
+                <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center gap-4 justify-between mb-6">
+                        <label class="flex-1 relative">
+                            <span class="sr-only">Buscar usuarios</span>
+                            <input id="user-search-input" type="text" placeholder="Buscar por usuario, nombre o email..." class="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        </label>
+                        <select id="role-filter" class="w-full lg:w-72 rounded-2xl border border-slate-200 bg-white py-3 px-4 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                            <option value="">Todos los roles</option>
+                            {% for role in roles %}
+                                <option value="{{ role.id }}">{{ role.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full border-separate border-spacing-y-3">
+                            <thead>
+                                <tr class="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+                                    <th class="px-4 py-3">Usuario</th>
+                                    <th class="px-4 py-3">Contraseña</th>
+                                    <th class="px-4 py-3">Nombre Completo</th>
+                                    <th class="px-4 py-3">Rol</th>
+                                    <th class="px-4 py-3">Email</th>
+                                    <th class="px-4 py-3">Teléfono</th>
+                                    <th class="px-4 py-3">Estado</th>
+                                    <th class="px-4 py-3">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in usuarios %}
+                                <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.rol }}">
+                                    <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-600">
+                                        <div class="password-cell">
+                                            <span class="password-text" data-password="{{ user.password_hash or user.password or '********' }}">••••••••</span>
+                                            <button type="button" class="password-toggle" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+                                                <i class="fa-regular fa-eye"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-600">
+                                        <span class="role-pill">{{ user.rol }}</span>
+                                    </td>
+                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.email }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.telefono }}</td>
+                                    <td class="px-4 py-4">
+                                        <span class="status-pill {% if user.estado|lower == 'activo' %}status-active{% else %}status-inactive{% endif %}">{{ user.estado }}</span>
+                                    </td>
+                                    <td class="px-4 py-4 text-sm text-slate-700 flex gap-3 items-center">
+                                        <a href="{{ url_for('modificar_usuario', id_usuario=user.id_usuario) }}" class="text-blue-600 hover:text-blue-800" title="Editar usuario"><i class="fa-solid fa-pencil"></i></a>
+                                        <button type="button" class="delete-user-btn text-red-600 hover:text-red-800" data-user-id="{{ user.id_usuario }}" data-user-name="{{ user.username }}" data-delete-url="{{ url_for('eliminar_usuario', id_usuario=user.id_usuario) }}" title="Eliminar usuario">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="8" class="px-4 py-8 text-center text-sm text-slate-500">No se encontraron usuarios.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="report-view" class="view-panel hidden-panel">
+                <div class="report-card">
+                    <div class="report-title-row">
+                        <div class="report-title-wrap">
+                            <i class="fa-regular fa-calendar-days"></i>
+                            <span>Rango de Fechas (Fecha Creación)</span>
+                        </div>
+                    </div>
+
+                    <div class="report-controls-row">
+                        <div class="date-field">
+                            <label>Desde</label>
+                            <input id="date-from" type="date" class="report-input" placeholder="dd/mm/aaaa">
+                        </div>
+                        <div class="date-field">
+                            <label>Hasta</label>
+                            <input id="date-to" type="date" class="report-input" placeholder="dd/mm/aaaa">
+                        </div>
+                        <button id="clear-report" type="button" class="secondary-btn">Limpiar</button>
+                        <button id="print-report" type="button" class="primary-btn"><i class="fa-solid fa-print"></i> Imprimir PDF</button>
+                    </div>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stat-box stat-purple">
+                        <div class="stat-label">Usuarios en Periodo</div>
+                        <div id="period-users-count" class="stat-value">8</div>
+                    </div>
+                    <div class="stat-box stat-green">
+                        <div class="stat-label">Activos</div>
+                        <div id="active-users-count" class="stat-value">7</div>
+                    </div>
+                    <div class="stat-box stat-blue">
+                        <div class="stat-label">Administradores</div>
+                        <div id="admin-users-count" class="stat-value">2</div>
+                    </div>
+                </div>
+
+                <div class="table-summary-row">
+                    <div class="table-summary-label">Vista previa del reporte</div>
+                    <div id="report-total" class="table-summary-count">8 registros</div>
+                </div>
+
+                <div class="preview-table-wrap">
+                    <table class="report-preview-table">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre Completo</th>
+                                <th>Rol</th>
+                                <th>Email</th>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th>Creado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in usuarios %}
+                            <tr class="user-row" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-status="{{ user.estado or '' }}">
+                                <td>{{ user.username }}</td>
+                                <td>{{ user.full_name }}</td>
+                                <td><span class="role-pill report-role-pill">{{ user.rol }}</span></td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.telefono }}</td>
+                                <td><span class="status-pill {% if user.estado|lower == 'activo' %}status-active{% else %}status-inactive{% endif %}">{{ user.estado }}</span></td>
+                                <td>{{ user.created_at or '-' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center">No se encontraron usuarios.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="delete-user-modal" class="delete-user-modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-user-title">
+        <div class="delete-user-backdrop"></div>
+        <div class="delete-user-card">
+            <div id="delete-user-title" class="delete-user-title">¿Está seguro de eliminar el usuario "<span id="delete-user-name">usuario</span>"?</div>
+            <div class="delete-user-actions">
+                <button type="button" id="cancel-delete-user" class="delete-cancel-btn">Cancelar</button>
+                <button type="button" id="confirm-delete-user" class="delete-confirm-btn">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const mobileToggle = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-sidebar-overlay');
+        const deleteModal = document.getElementById('delete-user-modal');
+        const deleteUserName = document.getElementById('delete-user-name');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-user');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-user');
+        let pendingDeleteUrl = '';
+
+        document.querySelectorAll('.delete-user-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                pendingDeleteUrl = button.dataset.deleteUrl || '';
+                const username = button.dataset.userName || 'usuario';
+                deleteUserName.textContent = username;
+                deleteModal.classList.remove('hidden');
+            });
+        });
+
+        cancelDeleteBtn?.addEventListener('click', () => {
+            deleteModal.classList.add('hidden');
+            pendingDeleteUrl = '';
+        });
+
+        confirmDeleteBtn?.addEventListener('click', () => {
+            if (!pendingDeleteUrl) return;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = pendingDeleteUrl;
+            document.body.appendChild(form);
+            form.submit();
+        });
+
+        deleteModal?.querySelector('.delete-user-backdrop')?.addEventListener('click', () => {
+            deleteModal.classList.add('hidden');
+            pendingDeleteUrl = '';
+        });
+
+        function toggleSidebar() {
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full');
+            if (isClosed) {
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        mobileToggle?.addEventListener('click', toggleSidebar);
+        overlay?.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
+
+        function normalizeSidebarOnResize() {
+            if (window.innerWidth >= 768) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        function setView(viewName) {
+            const tabs = document.querySelectorAll('.report-tab');
+            const panels = document.querySelectorAll('.view-panel');
+
+            tabs.forEach((tab) => {
+                tab.classList.toggle('active', tab.dataset.view === viewName);
+            });
+
+            panels.forEach((panel) => {
+                const isList = panel.id === 'list-view';
+                panel.classList.toggle('hidden-panel', viewName === 'list' ? !isList : isList);
+            });
+        }
+
+        function applyUserFilters() {
+            const searchInput = document.getElementById('user-search-input');
+            const roleFilter = document.getElementById('role-filter');
+            const rows = document.querySelectorAll('.user-row');
+            const query = (searchInput?.value || '').toLowerCase().trim();
+            const roleValue = (roleFilter?.value || '').toString();
+
+            rows.forEach((row) => {
+                const searchable = (row.dataset.search || '').toLowerCase();
+                const rowRole = (row.dataset.role || '').toLowerCase();
+                const matchesSearch = !query || searchable.includes(query);
+                const matchesRole = !roleValue || rowRole === roleValue.toLowerCase();
+                row.style.display = matchesSearch && matchesRole ? '' : 'none';
+            });
+        }
+
+        document.querySelectorAll('.report-tab').forEach((tab) => {
+            tab.addEventListener('click', () => setView(tab.dataset.view));
+        });
+
+        document.getElementById('user-search-input')?.addEventListener('input', applyUserFilters);
+        document.getElementById('role-filter')?.addEventListener('change', applyUserFilters);
+
+        document.querySelectorAll('.password-toggle').forEach((button) => {
+            button.addEventListener('click', () => {
+                const wrapper = button.closest('.password-cell');
+                const text = wrapper.querySelector('.password-text');
+                const passwordValue = text.dataset.password || '';
+                const isHidden = text.textContent.includes('•') || text.textContent === '••••••••';
+
+                text.textContent = isHidden ? passwordValue : '••••••••';
+                button.innerHTML = isHidden ? '<i class="fa-regular fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
+                button.setAttribute('aria-label', isHidden ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                button.setAttribute('title', isHidden ? 'Ocultar contraseña' : 'Mostrar contraseña');
+            });
+        });
+
+        function getDateFromValue(value) {
+            if (!value) return null;
+            const trimmed = String(value).trim();
+            if (!trimmed) return null;
+            const directDate = new Date(trimmed + 'T00:00:00');
+            if (!Number.isNaN(directDate.getTime())) {
+                return directDate;
+            }
+            const parsed = new Date(trimmed);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
+            return null;
+        }
+
+        function applyReportDateFilter() {
+            const from = document.getElementById('date-from')?.value || '';
+            const to = document.getElementById('date-to')?.value || '';
+            const rows = document.querySelectorAll('.report-preview-table tbody tr[data-created-at]');
+            const fromDate = getDateFromValue(from);
+            const toDate = getDateFromValue(to);
+            let visibleRows = 0;
+            let activeUsers = 0;
+            let adminUsers = 0;
+
+            rows.forEach((row) => {
+                const rowDate = getDateFromValue(row.dataset.createdAt || '');
+                let isVisible = true;
+
+                if (!rowDate) {
+                    isVisible = false;
+                } else {
+                    if (fromDate && rowDate < fromDate) isVisible = false;
+                    if (toDate && rowDate > toDate) isVisible = false;
+                }
+
+                row.style.display = isVisible ? '' : 'none';
+                if (isVisible) {
+                    visibleRows += 1;
+                    const status = (row.dataset.status || '').toLowerCase();
+                    const role = (row.dataset.role || '').toLowerCase();
+                    if (status === 'activo') activeUsers += 1;
+                    if (role.includes('admin')) adminUsers += 1;
+                }
+            });
+
+            const reportTotal = document.getElementById('report-total');
+            if (reportTotal) {
+                reportTotal.textContent = `${visibleRows} registros`;
+            }
+
+            const periodUsersCount = document.getElementById('period-users-count');
+            if (periodUsersCount) periodUsersCount.textContent = visibleRows;
+
+            const activeUsersCount = document.getElementById('active-users-count');
+            if (activeUsersCount) activeUsersCount.textContent = activeUsers;
+
+            const adminUsersCount = document.getElementById('admin-users-count');
+            if (adminUsersCount) adminUsersCount.textContent = adminUsers;
+        }
+
+        document.getElementById('print-report')?.addEventListener('click', () => {
+            const params = new URLSearchParams();
+            const fromValue = document.getElementById('date-from')?.value;
+            const toValue = document.getElementById('date-to')?.value;
+            if (fromValue) params.set('from_date', fromValue);
+            if (toValue) params.set('to_date', toValue);
+            const queryString = params.toString();
+            window.location.href = `/usuario/exportar-pdf${queryString ? `?${queryString}` : ''}`;
+        });
+
+        document.getElementById('date-from')?.addEventListener('change', applyReportDateFilter);
+        document.getElementById('date-to')?.addEventListener('change', applyReportDateFilter);
+
+        document.getElementById('clear-report')?.addEventListener('click', () => {
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value = '';
+            document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').forEach((row) => {
+                row.style.display = '';
+            });
+            const reportTotal = document.getElementById('report-total');
+            if (reportTotal) reportTotal.textContent = `${document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').length} registros`;
+            const periodUsersCount = document.getElementById('period-users-count');
+            if (periodUsersCount) periodUsersCount.textContent = document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').length;
+        });
+
+        const reportDate = new Date();
+        const reportStamp = reportDate.toLocaleString('es-ES', {
+            day: '2-digit',
+            month: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        const reportCurrent = document.getElementById('report-current-time');
+        const reportGenerated = document.getElementById('report-generated');
+        if (reportCurrent) reportCurrent.textContent = reportStamp;
+        if (reportGenerated) reportGenerated.textContent = reportStamp;
+
+        window.addEventListener('resize', normalizeSidebarOnResize);
+        window.addEventListener('DOMContentLoaded', () => {
+            normalizeSidebarOnResize();
+            setView('list');
+        });
+    </script>
+</body>
+</html>

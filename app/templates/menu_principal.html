@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menú Principal - Importadora Morales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:self-stretch md:min-h-screen bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <div class="p-6 flex flex-col items-center border-b border-slate-800 bg-slate-950/20">
+                <img src="{{ url_for('static', filename='logo.png') }}" 
+                     alt="Logo Importadora Morales" 
+                     class="h-26 w-auto object-contain mb-3 filter drop-shadow-md transition-transform duration-300 hover:scale-105">
+            </div>
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-slate-800 text-white transition-all">
+                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                </a>
+
+                <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                </a>
+
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
+                </a>
+                {% endif %}
+
+                <a href="/inventario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-box text-base w-5"></i> Inventario
+                </a>
+
+                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
+                </a>
+                {% endif %}
+
+                {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                </a>
+                {% endif %}
+
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
+                </a>
+                {% endif %}
+
+                {% if session.get('role') != 'Vendedor' %}
+                <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
+                </a>
+                {% endif %}
+
+                {% if session.get('role') == 'Administrador del Sistema' %}
+                <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Usuarios
+                </a>
+                <a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+            <div class="mb-3 px-2">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
+                <p class="text-xs font-bold text-slate-200 mt-0.5 capitalize">{{ user_name }}</p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('role', 'Usuario') }}</p>
+            </div>
+            <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </a>
+        </div>
+    </aside>
+
+    <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto min-h-screen">
+        <div class="flex-grow p-8 overflow-y-auto">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Menú Principal</h1>
+                <p class="text-sm text-gray-500 font-medium mt-0.5">Seleccione el módulo con el que desea trabajar</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+                <a href="/analytics" class="modulo-card bg-violet-500 text-white rounded-2xl p-6 shadow-lg shadow-violet-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Analytics IA</h2>
+                    <p class="text-xs text-violet-100 font-medium mt-1">Reportes inteligentes e indicadores</p>
+                </a>
+
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/clientes" class="modulo-card bg-teal-500 text-white rounded-2xl p-6 shadow-lg shadow-teal-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-user-group"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Clientes</h2>
+                    <p class="text-xs text-teal-100 font-medium mt-1">Registro y gestión de clientes</p>
+                </a>
+                {% endif %}
+
+                <a href="/inventario" class="modulo-card bg-sky-500 text-white rounded-2xl p-6 shadow-lg shadow-sky-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-box"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Inventario</h2>
+                    <p class="text-xs text-sky-100 font-medium mt-1">Gestión de productos y stock</p>
+                </a>
+
+                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                <a href="/ventas" class="modulo-card bg-emerald-500 text-white rounded-2xl p-6 shadow-lg shadow-emerald-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-cart-shopping"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Ventas</h2>
+                    <p class="text-xs text-emerald-100 font-medium mt-1">Registro de ventas y clientes</p>
+                </a>
+                {% endif %}
+
+                {% if session.get('role') not in ['Vendedor', 'Bodeguero'] %}
+                <a href="/prestamos" class="modulo-card bg-violet-500 text-white rounded-2xl p-6 shadow-lg shadow-violet-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-handshake"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Préstamos</h2>
+                    <p class="text-xs text-violet-100 font-medium mt-1">Préstamos de repuestos</p>
+                </a>
+                {% endif %}
+
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/devoluciones" class="modulo-card bg-orange-500 text-white rounded-2xl p-6 shadow-lg shadow-orange-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Devoluciones</h2>
+                    <p class="text-xs text-orange-100 font-medium mt-1">Gestión de devoluciones</p>
+                </a>
+                {% endif %}
+
+                {% if session.get('role') != 'Vendedor' %}
+                <a href="/desarme" class="modulo-card bg-amber-500 text-white rounded-2xl p-6 shadow-lg shadow-amber-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-screwdriver-wrench"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Desarme de Vehículos</h2>
+                    <p class="text-xs text-amber-100 font-medium mt-1">Registro de piezas desarmadas</p>
+                </a>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm flex items-center gap-4">
+                    <div class="bg-blue-50 text-blue-600 p-3.5 rounded-xl text-lg">
+                        <i class="fa-solid fa-server"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Sistema</p>
+                        <p class="text-sm font-bold text-gray-800">Gestión Completa</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm flex items-center gap-4">
+                    <div class="bg-emerald-50 text-emerald-600 p-3.5 rounded-xl text-lg">
+                        <i class="fa-solid fa-money-bill-1-wave"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Moneda</p>
+                        <p class="text-sm font-bold text-gray-800">Quetzales (Q)</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm flex items-center gap-4">
+                    <div class="bg-purple-50 text-purple-600 p-3.5 rounded-xl text-lg">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Usuario Activo</p>
+                        <p class="text-sm font-bold text-gray-700 uppercase">{{ user_name }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <button class="fixed bottom-4 right-4 bg-slate-800 text-white w-8 h-8 rounded-full shadow-lg flex justify-center items-center text-xs font-bold hover:bg-slate-700 transition-colors">
+        ?
+    </button>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const mobileToggle = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-sidebar-overlay');
+
+        function toggleSidebar() {
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full');
+            if (isClosed) {
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        mobileToggle?.addEventListener('click', toggleSidebar);
+        overlay?.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
+
+        function normalizeSidebarOnResize() {
+            if (window.innerWidth >= 768) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        window.addEventListener('resize', normalizeSidebarOnResize);
+        window.addEventListener('DOMContentLoaded', normalizeSidebarOnResize);
+    </script>
+</body>
+</html>

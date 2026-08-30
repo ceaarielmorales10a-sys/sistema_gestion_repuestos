@@ -1,0 +1,377 @@
+.inventory-view-switcher {
+    margin-bottom: 1.5rem;
+}
+
+.inventory-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem;
+    border-radius: 1rem;
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.inventory-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.1rem;
+    border-radius: 0.8rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.inventory-tab:hover {
+    background: rgba(255, 255, 255, 0.7);
+    color: #0f172a;
+}
+
+.inventory-tab.active {
+    background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+    color: #0f172a;
+    border-color: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
+}
+
+.view-panel {
+    display: block;
+}
+
+.hidden-panel {
+    display: none;
+}
+
+.report-card {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid #dfe7ef;
+    border-radius: 1.15rem;
+    padding: 1.2rem 1.25rem 1rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.report-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 1rem;
+}
+
+.report-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #374151;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.report-controls-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto;
+    gap: 0.9rem;
+    align-items: end;
+}
+
+.date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.date-field label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.report-input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.8rem;
+    background: rgba(255,255,255,0.88);
+    padding: 0.8rem 0.9rem;
+    font-size: 0.9rem;
+    color: #334155;
+    outline: none;
+}
+
+.report-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.secondary-btn,
+.primary-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 0.8rem 1.05rem;
+    min-height: 2.8rem;
+    cursor: pointer;
+}
+
+.secondary-btn {
+    background: transparent;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+.primary-btn {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: white;
+    box-shadow: 0 10px 18px rgba(37, 99, 235, 0.18);
+}
+
+.stats-row {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 0.9rem;
+}
+
+.stat-box {
+    border-radius: 0.95rem;
+    border: 1px solid #dfe7ef;
+    padding: 1rem 1.1rem;
+    min-height: 5.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.stat-blue {
+    background: #eff6ff;
+    border-color: rgba(59, 130, 246, 0.2);
+    color: #2563eb;
+}
+
+.stat-red {
+    background: #fef2f2;
+    border-color: rgba(239, 68, 68, 0.18);
+    color: #b91c1c;
+}
+
+.stat-yellow {
+    background: #fff7ed;
+    border-color: rgba(245, 158, 11, 0.2);
+    color: #b45309;
+}
+
+.stat-purple {
+    background: #f5f3ff;
+    border-color: rgba(168, 85, 247, 0.22);
+    color: #7c3aed;
+}
+
+.stat-green {
+    background: #ecfdf5;
+    border-color: rgba(16, 185, 129, 0.2);
+    color: #0f766e;
+}
+
+.stat-label {
+    color: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-top: 0.45rem;
+    line-height: 1;
+}
+
+.table-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 1rem 0 0.7rem;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.table-summary-label {
+    font-weight: 500;
+}
+
+.table-summary-count {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.preview-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.95rem;
+    background: rgba(255,255,255,0.7);
+}
+
+.report-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 860px;
+}
+
+.report-preview-table th,
+.report-preview-table td {
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    padding: 0.72rem 0.75rem;
+    text-align: left;
+    font-size: 0.82rem;
+    color: #334155;
+    background: #fff;
+}
+
+.report-preview-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.report-preview-table tbody tr:nth-child(even) td {
+    background: #fbfdff;
+}
+
+/* Ajustes de scroll suave y base de renderizado */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Efecto de transición elegante en las acciones de la tabla */
+.divide-y tr {
+    transition: background-color 0.15s ease-in-out;
+}
+
+/* Iconos de acción con ligera escala al pasar el mouse */
+table button i {
+    transition: transform 0.15s ease;
+}
+
+table button:hover i {
+    transform: scale(1.15);
+}
+
+.inventory-row td {
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+}
+
+.inventory-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem 1.5rem;
+    padding: 0.5rem 0.25rem;
+}
+
+.inventory-detail-grid > div {
+    min-width: 0;
+}
+
+.inventory-detail-grid p {
+    margin: 0;
+}
+
+.inventory-detail-grid p + p {
+    margin-top: 0.35rem;
+}
+
+/* Personalización estética para la flecha del <select> */
+.select-arrow {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.25em;
+    padding-right: 2.5rem;
+}
+
+/* Badge de Notificación flotante redondo para los préstamos de la barra lateral */
+.header-badge {
+    min-width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* Scrollbar estilizada para áreas con desbordamiento */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+@media (min-width: 768px) {
+    #sidebar {
+        position: static !important;
+        transform: none !important;
+        left: auto !important;
+        top: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    main {
+        padding: 1.25rem !important;
+    }
+    .flex.justify-between.items-center.mb-6,
+    .flex.flex-col.sm\:flex-row.gap-4.mb-6,
+    .grid.grid-cols-1.md\:grid-cols-2.gap-6 {
+        flex-direction: column;
+    }
+    table {
+        font-size: 0.8rem;
+    }
+    thead th,
+    tbody td {
+        padding: 0.75rem 0.5rem;
+    }
+    .px-6 {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    .py-4 {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
+    }
+    .fixed.bottom-4.right-4 {
+        right: 1rem;
+        bottom: 1rem;
+    }
+}

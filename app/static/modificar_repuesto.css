@@ -1,0 +1,75 @@
+/* Estilos personalizados para el sistema de Inventario - Importadora Morales */
+
+/* Fuentes e importación opcional para pulir la visualización */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html, body {
+    height: 100%;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+}
+
+/* Deshabilitar la selección de texto en botones o menús dinámicos para simular App nativa */
+.select-none {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Suavizar transiciones en campos de formulario y botones */
+input, select, button, a {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Corrección visual para selectores nativos en navegadores antiguos */
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.2em;
+    padding-right: 2.5rem;
+}
+
+/* Efecto sutil scrollbar personalizado para el menú o panel principal */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+@media (min-width: 768px) {
+    #sidebar {
+        position: static !important;
+        transform: none !important;
+        left: auto !important;
+        top: auto !important;
+        min-height: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        min-height: 100vh;
+    }
+    header {
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+}

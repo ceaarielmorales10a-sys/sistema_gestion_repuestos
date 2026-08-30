@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ventas - Importadora Morales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ventas.css') }}">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:h-auto md:max-h-none md:min-h-screen md:self-stretch bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <div class="p-6 flex flex-col items-center border-b border-slate-800 bg-slate-950/20">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Importadora Morales" class="h-26 w-auto object-contain mb-3 filter drop-shadow-md transition-transform duration-300 hover:scale-105">
+            </div>
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                </a>
+                <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                </a>
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
+                </a>
+                {% endif %}
+                <a href="{{ url_for('inventario') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-box text-base w-5"></i> Inventario
+                </a>
+                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
+                    <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Vendedor' %}
+                <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' %}
+                <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Usuarios
+                </a>
+                <a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+            <div class="mb-3 px-2">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
+                <p class="text-xs font-bold text-slate-200 mt-0.5">{{ session.get('role', 'Administrador del Sistema') }}</p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('full_name', session.get('user', 'Admin')) }}</p>
+            </div>
+            <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </a>
+        </div>
+    </aside>
+
+    <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto md:min-h-screen">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Ventas</h1>
+            <a href="/ventas/nueva" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-blue-600/10 transition-colors flex items-center gap-2">
+                <i class="fa-solid fa-plus text-xs"></i> Nueva Venta
+            </a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm">
+                        <i class="fa-solid {% if category == 'success' %} fa-circle-check {% else %} fa-circle-exclamation {% endif %} text-base"></i>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50/70 border-b border-gray-200 text-gray-500 text-[13px] font-semibold">
+                            <th class="px-6 py-4">ID</th>
+                            <th class="px-6 py-4">Fecha venta</th>
+                            <th class="px-6 py-4">Cliente</th>
+                            <th class="px-6 py-4">Usuario</th>
+                            <th class="px-6 py-4">Repuesto</th>
+                            <th class="px-6 py-4">Precio unitario</th>
+                            <th class="px-6 py-4">Subtotal</th>
+                            <th class="px-6 py-4">Cantidad</th>
+                            <th class="px-6 py-4">Descuento</th>
+                            <th class="px-6 py-4">Total</th>
+                            <th class="px-6 py-4">Observaciones</th>
+                            <th class="px-6 py-4">Estado</th>
+                            <th class="px-6 py-4">Método pago</th>
+                            <th class="px-6 py-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-150 text-sm text-gray-700 font-medium">
+                        {% for venta in ventas %}
+                        <tr class="hover:bg-gray-50/50 transition-colors">
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.id_venta }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.fecha_venta }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.cliente }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.usuario }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.repuesto }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">Q {{ '%.2f'|format(venta.precio_unitario or 0) }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">Q {{ '%.2f'|format(venta.subtotal or 0) }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.cantidad }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">Q {{ '%.2f'|format(venta.descuento or 0) }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">Q {{ '%.2f'|format(venta.total or 0) }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.observaciones }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.estado }}</td>
+                            <td class="px-6 py-4 text-gray-500 font-normal">{{ venta.metodo_pago }}</td>
+                            <td class="px-6 py-4 text-center">
+                                <div class="flex justify-center gap-3 items-center">
+                                    <a href="/ventas/modificar/{{ venta.id_venta }}" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>
+                                    <form action="/ventas/eliminar/{{ venta.id_venta }}" method="POST" onsubmit="return confirm('¿Eliminar esta venta? Esta acción no se puede deshacer.');" class="m-0">
+                                        <button type="submit" class="text-red-500 hover:text-red-700 transition-colors bg-transparent border-none p-0 cursor-pointer">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="14" class="px-6 py-4 text-center text-gray-500">No hay ventas registradas.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 px-4 py-4 bg-white border border-gray-200/80 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p class="text-sm text-gray-600">Mostrando {{ ventas|length }} de {{ total_items }} ventas. Página {{ current_page }} de {{ total_pages }}.</p>
+                <div class="flex flex-wrap items-center gap-2">
+                    {% if current_page > 1 %}
+                    <a href="{{ url_for('ventas', page=current_page-1) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition">Anterior</a>
+                    {% else %}
+                    <span class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400">Anterior</span>
+                    {% endif %}
+
+                    {% for p in range(1, total_pages + 1) %}
+                    <a href="{{ url_for('ventas', page=p) }}" class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition {{ 'bg-slate-900 text-white' if p == current_page else 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50' }}">{{ p }}</a>
+                    {% endfor %}
+
+                    {% if current_page < total_pages %}
+                    <a href="{{ url_for('ventas', page=current_page+1) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition">Siguiente</a>
+                    {% else %}
+                    <span class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400">Siguiente</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <button class="fixed bottom-4 right-4 bg-slate-800 text-white w-8 h-8 rounded-full shadow-lg flex justify-center items-center text-xs font-bold hover:bg-slate-700 transition-colors">?</button>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const mobileToggle = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-sidebar-overlay');
+
+        function toggleSidebar() {
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full');
+            if (isClosed) {
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        mobileToggle?.addEventListener('click', toggleSidebar);
+        overlay?.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
+
+        function normalizeSidebarOnResize() {
+            if (window.innerWidth >= 768) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        window.addEventListener('resize', normalizeSidebarOnResize);
+        window.addEventListener('DOMContentLoaded', normalizeSidebarOnResize);
+    </script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+/* Ventas - Estilos basados en Inventario */
+
+html {
+    scroll-behavior: smooth;
+}
+
+.divide-y tr {
+    transition: background-color 0.15s ease-in-out;
+}
+
+table button i {
+    transition: transform 0.15s ease;
+}
+
+table button:hover i {
+    transform: scale(1.15);
+}
+
+.select-arrow {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.25em;
+    padding-right: 2.5rem;
+}
+
+.header-badge {
+    min-width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+@media (min-width: 768px) {
+    #sidebar {
+        position: static !important;
+        transform: none !important;
+        left: auto !important;
+        top: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    main {
+        padding: 1.25rem !important;
+    }
+    table {
+        font-size: 0.8rem;
+    }
+    thead th,
+    tbody td {
+        padding: 0.75rem 0.5rem;
+    }
+    .px-6 {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    .py-4 {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
+    }
+    .fixed.bottom-4.right-4 {
+        right: 1rem;
+        bottom: 1rem;
+    }
+}

@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario - Importadora Morales</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome para los iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <!-- Archivo CSS personalizado para Inventario -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='inventario.css') }}">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <!-- 1. BARRA LATERAL IZQUIERDA (Sidebar) -->
+    <aside id="sidebar" class="fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:h-auto md:max-h-none md:min-h-screen md:self-stretch bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <!-- Contenedor del Logo -->
+            <div class="p-6 flex flex-col items-center border-b border-slate-800 bg-slate-950/20">
+                <img src="{{ url_for('static', filename='logo.png') }}" 
+                     alt="Logo Importadora Morales" 
+                     class="h-26 w-auto object-contain mb-3 filter drop-shadow-md transition-transform duration-300 hover:scale-105">
+            </div>
+            <!-- Menú de Navegación Lateral -->
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                </a>
+                <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                </a>
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
+                </a>
+                {% endif %}
+                <a href="{{ url_for('inventario') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
+                    <i class="fa-solid fa-box text-base w-5"></i> Inventario
+                </a>
+                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Bodeguero' %}
+                <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
+                </a>
+                {% endif %}
+                {% if session.get('role') != 'Vendedor' %}
+                <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'Administrador del Sistema' %}
+                <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Usuarios
+                </a>
+                <a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <!-- Información de Sesión en la parte inferior -->
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+            <div class="mb-3 px-2">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
+                <p class="text-xs font-bold text-slate-200 mt-0.5">
+                    {{ session.get('role', 'Administrador del Sistema') }}
+                </p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('full_name', session.get('user', 'Admin')) }}</p>
+            </div>
+            <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </a>
+        </div>
+    </aside>
+
+    <!-- 2. ÁREA DE CONTENIDO DE INVENTARIO -->
+    <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto md:min-h-screen">
+        
+        <!-- Fila del Título y Botón de Acción -->
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Inventario de Repuestos</h1>
+                <p class="text-sm text-slate-500 mt-1">Control de stock, tipos y vehículos origen en un solo lugar.</p>
+            </div>
+            {% if session.get('role') != 'Vendedor' %}
+            <a href="/inventario/agregar" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-blue-600/10 transition-colors">
+                <i class="fa-solid fa-plus text-xs"></i> Agregar Repuesto
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="inventory-view-switcher">
+            <div class="inventory-tabs">
+                <button type="button" class="inventory-tab active" data-view="list"><i class="fa-regular fa-rectangle-list"></i> Lista</button>
+                {% if session.get('role') != 'Vendedor' %}
+                <button type="button" class="inventory-tab" data-view="movimientos"><i class="fa-solid fa-right-left"></i> Movimientos</button>
+                <button type="button" class="inventory-tab" data-view="report"><i class="fa-solid fa-chart-column"></i> Reportes</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="list-view" class="view-panel">
+            <div class="grid gap-4 mb-6 md:grid-cols-4">
+                <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                    <p class="text-xs uppercase tracking-[0.35em] text-slate-400 mb-3">Total Repuestos</p>
+                    <p class="text-3xl font-semibold text-slate-900">{{ total_items }}</p>
+                </div>
+                <div class="rounded-3xl border border-red-200/80 bg-red-50/70 p-5 shadow-sm">
+                    <p class="text-xs uppercase tracking-[0.35em] text-red-600 mb-3">Stock Bajo</p>
+                    <p class="text-3xl font-semibold text-red-700">{{ stock_bajo }}</p>
+                </div>
+                <div class="rounded-3xl border border-violet-200/80 bg-violet-50/70 p-5 shadow-sm">
+                    <p class="text-xs uppercase tracking-[0.35em] text-violet-700 mb-3">Tipos</p>
+                    <p class="text-3xl font-semibold text-violet-900">{{ tipos_count }}</p>
+                </div>
+                <div class="rounded-3xl border border-emerald-200/80 bg-emerald-50/70 p-5 shadow-sm">
+                    <p class="text-xs uppercase tracking-[0.35em] text-emerald-700 mb-3">Vehículos Origen</p>
+                    <p class="text-3xl font-semibold text-emerald-900">{{ vehiculos_origen_count }}</p>
+                </div>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm">
+                            <i class="fa-solid {% if category == 'success' %} fa-circle-check {% else %} fa-circle-exclamation {% endif %} text-base"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <!-- Filtros superiores (Buscador + Selector de Categorías) -->
+            <div class="bg-white rounded-3xl border border-gray-200/80 shadow-sm p-4 mb-6">
+                <form id="search-form" method="get" autocomplete="off" class="grid gap-4 md:grid-cols-[1.8fr_1fr] items-center">
+                    <div class="relative w-full min-w-0">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400">
+                            <i class="fa-solid fa-magnifying-glass text-sm"></i>
+                        </span>
+                        <input id="search-input" type="text" name="q" autocomplete="off"
+                               value="{{ search_query }}"
+                               placeholder="Buscar por código, tipo, marca, modelo, vehículo..."
+                               class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-400 text-slate-700 shadow-sm">
+                    </div>
+                    <div class="w-full md:w-auto">
+                        <select id="tipo-repuesto-filter" name="tipo_repuesto" class="w-full min-w-[12rem] px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-gray-700 shadow-sm appearance-none cursor-pointer select-arrow">
+                            <option value="">Todos los tipos</option>
+                            {% for tipo in tipo_repuestos %}
+                            <option value="{{ tipo.id }}" {% if tipo.id|string == selected_tipo_id %}selected{% endif %}>{{ tipo.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tabla de Datos -->
+            <div class="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50/70 border-b border-gray-200 text-gray-500 text-[13px] font-semibold">
+                                <th class="px-6 py-4">ID</th>
+                                <th class="px-6 py-4">Código</th>
+                                <th class="px-6 py-4">Repuesto</th>
+                                <th class="px-6 py-4">Vehículo Origen</th>
+                                <th class="px-6 py-4">Lado / Pos.</th>
+                                <th class="px-6 py-4">Estado</th>
+                                <th class="px-6 py-4">P. Compra</th>
+                                <th class="px-6 py-4">P. Venta</th>
+                                <th class="px-6 py-4 text-center">Stock</th>
+                                <th class="px-6 py-4 text-center">Acc.</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-150 text-sm text-gray-700 font-medium">
+                            {% for repuesto in repuestos %}
+                            <tr class="inventory-row hover:bg-gray-50/50 transition-colors" data-tipo="{{ repuesto.tipo_repuesto or '' }}" data-search="{{ repuesto.codigo_repuesto or '' }} {{ repuesto.tipo_repuesto or '' }} {{ repuesto.marca or '' }} {{ repuesto.modelo or '' }} {{ repuesto.vehiculo_origen or '' }} {{ repuesto.estado_repuesto or '' }} {{ repuesto.lado or '' }} {{ repuesto.posicion or '' }}">
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">
+                                    <div class="flex items-center gap-3">
+                                        <button type="button" class="detail-toggle inline-flex items-center justify-center w-7 h-7 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition" aria-expanded="false">
+                                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                                        </button>
+                                        <span class="text-[12px] font-medium tracking-[0.12em] uppercase text-slate-500">{{ repuesto.id_repuesto }}</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 align-middle">
+                                    <div class="text-[13px] font-semibold text-blue-700 tracking-wide">{{ repuesto.codigo_repuesto }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-slate-900 font-semibold align-middle">{{ repuesto.tipo_repuesto or '-' }}</td>
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">{{ repuesto.vehiculo_origen }}</td>
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">{{ repuesto.lado }}{% if repuesto.posicion %} / {{ repuesto.posicion }}{% endif %}</td>
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">{{ repuesto.estado_repuesto }}</td>
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_compra)) }}</td>
+                                <td class="px-4 py-3 text-gray-500 font-normal align-middle">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) }}</td>
+                                <td class="px-4 py-3 text-center align-middle {% if repuesto.stock <= 5 %}text-red-600 font-bold{% endif %}">
+                                    {% if repuesto.stock is not none and repuesto.stock <= 5 %}
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        <span>{{ repuesto.stock }}</span>
+                                        <i class="fa-solid fa-circle-exclamation text-[10px]"></i>
+                                    </div>
+                                    {% else %}
+                                    {{ repuesto.stock }}
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-center align-middle">
+                                    <div class="flex justify-center gap-3 items-center">
+                                        {% if session.get('role') != 'Vendedor' %}
+                                        <a href="/inventario/modificar/{{ repuesto.id_repuesto }}" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>
+                                        {% endif %}
+                                        {% if session.get('role') != 'Vendedor' %}
+                                        <form action="/inventario/eliminar/{{ repuesto.id_repuesto }}" method="POST" onsubmit="return confirm('¿Está seguro que desea eliminar este repuesto? Esta acción no se puede deshacer.');">
+                                            <button type="submit" class="text-red-500 hover:text-red-700 transition-colors bg-transparent border-none p-0 cursor-pointer">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="detail-row bg-slate-50/80 hidden">
+                                <td colspan="10" class="px-6 py-4">
+                                    <div class="inventory-detail-grid">
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Código</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.codigo_repuesto or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Modelo</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.modelo or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Posición</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.posicion or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Stock mínimo</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.stock_minimo if repuesto.stock_minimo is not none else '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Fecha ingreso</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.fecha_ingreso or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Vehículo origen</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.vehiculo_origen or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Año</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.anio or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Transmisión</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.transmision or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Stock máximo</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.stock_maximo if repuesto.stock_maximo is not none else '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Registrado por</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.usuario_registro or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Tipo de repuesto</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.tipo_repuesto or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Color</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.color or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Ubicación en bodega</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.ubicacion_bodega or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Precio compra</p>
+                                            <p class="font-medium text-slate-800">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_compra)) if repuesto.precio_compra is not none else '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Marca</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.marca or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Lado</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.lado or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Estado repuesto</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.estado_repuesto or '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Stock</p>
+                                            <p class="font-medium text-slate-800">{{ repuesto.stock if repuesto.stock is not none else '-' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Precio venta</p>
+                                            <p class="font-medium text-slate-800">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) if repuesto.precio_venta is not none else '-' }}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr class="server-no-data">
+                                <td colspan="10" class="px-6 py-4 text-center text-gray-500">No hay repuestos registrados.</td>
+                            </tr>
+                            {% endfor %}
+                            <tr id="search-no-results" class="hidden">
+                                <td colspan="10" class="px-6 py-4 text-center text-gray-500">No se encontraron coincidencias.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 px-4 py-4 bg-white border border-gray-200/80 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <p class="text-sm text-gray-600">Mostrando {{ repuestos|length }} de {{ total_items }} repuestos. Página {{ current_page }} de {{ total_pages }}.</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        {% if current_page > 1 %}
+                        <a href="{{ url_for('inventario', page=current_page-1, q=search_query, tipo_repuesto=selected_tipo_id) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition">Anterior</a>
+                        {% else %}
+                        <span class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400">Anterior</span>
+                        {% endif %}
+
+                        {% for p in range(1, total_pages + 1) %}
+                        <a href="{{ url_for('inventario', page=p, q=search_query, tipo_repuesto=selected_tipo_id) }}" class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition {{ 'bg-slate-900 text-white' if p == current_page else 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50' }}">{{ p }}</a>
+                        {% endfor %}
+
+                        {% if current_page < total_pages %}
+                        <a href="{{ url_for('inventario', page=current_page+1, q=search_query, tipo_repuesto=selected_tipo_id) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition">Siguiente</a>
+                        {% else %}
+                        <span class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400">Siguiente</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if session.get('role') != 'Vendedor' %}
+        <div id="movimientos-view" class="view-panel hidden-panel">
+            <div class="report-card">
+                <div class="report-title-row">
+                    <div class="report-title-wrap">
+                        <i class="fa-solid fa-right-left"></i>
+                        <span>Movimientos de Inventario</span>
+                    </div>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stat-box stat-blue">
+                        <div class="stat-label">Ingresos</div>
+                        <div class="stat-value">{{ ingresos_count }}</div>
+                    </div>
+                    <div class="stat-box stat-red">
+                        <div class="stat-label">Ventas</div>
+                        <div class="stat-value">{{ ventas_count }}</div>
+                    </div>
+                    <div class="stat-box stat-yellow">
+                        <div class="stat-label">Préstamos</div>
+                        <div class="stat-value">{{ prestamos_count }}</div>
+                    </div>
+                    <div class="stat-box stat-purple">
+                        <div class="stat-label">Devoluciones</div>
+                        <div class="stat-value">{{ devoluciones_count }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-card" style="margin-top: 1.25rem;">
+                <div class="report-title-row">
+                    <div class="report-title-wrap">
+                        <i class="fa-solid fa-filter"></i>
+                        <span>Filtros</span>
+                    </div>
+                </div>
+
+                <div class="report-controls-row">
+                    <div class="date-field">
+                        <label>Buscar</label>
+                        <input id="movimientos-search" type="text" class="report-input" placeholder="Buscar por repuesto, detalle, ID...">
+                    </div>
+                    <div class="date-field">
+                        <label>Tipo</label>
+                        <select id="movimientos-type-filter" class="report-input report-select">
+                            <option value="">Todos los tipos</option>
+                            {% for tipo in movimientos_tipos %}
+                            <option value="{{ tipo }}">{{ tipo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field">
+                        <label>Usuario</label>
+                        <select id="movimientos-user-filter" class="report-input report-select">
+                            <option value="">Filtrar por usuario</option>
+                            {% for usuario in movimientos_usuarios %}
+                            <option value="{{ usuario }}">{{ usuario }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field">
+                        <label>Desde</label>
+                        <input id="movimientos-date-from" type="date" class="report-input" placeholder="dd/mm/aaaa">
+                    </div>
+                    <div class="date-field">
+                        <label>Hasta</label>
+                        <input id="movimientos-date-to" type="date" class="report-input" placeholder="dd/mm/aaaa">
+                    </div>
+                    <button id="clear-movimientos-report" type="button" class="secondary-btn">Limpiar filtros</button>
+                    <button id="print-movimientos-report" type="button" class="primary-btn"><i class="fa-solid fa-print"></i> Imprimir PDF</button>
+                </div>
+            </div>
+
+            <div class="table-summary-row">
+                <div class="table-summary-label">Registro automático del historial</div>
+                <div id="movimientos-total" class="table-summary-count">{{ movimientos|length }} movimientos</div>
+            </div>
+
+            <div class="preview-table-wrap">
+                <table id="movimientos-table" class="report-preview-table">
+                    <thead>
+                        <tr>
+                            <th>ID Movimiento</th>
+                            <th>Repuesto</th>
+                            <th>Tipo Movimiento</th>
+                            <th>Fecha Movimiento</th>
+                            <th>Cantidad</th>
+                            <th>Detalle</th>
+                            <th>Usuario</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for movimiento in movimientos %}
+                        <tr data-search="{{ movimiento.id_movimiento }} {{ movimiento.repuesto_nombre or movimiento.id_repuesto }} {{ movimiento.tipo_movimiento }} {{ movimiento.detalle }} {{ movimiento.usuario }} {{ movimiento.codigo_repuesto }}" data-tipo="{{ movimiento.tipo_movimiento }}" data-usuario="{{ movimiento.usuario }}" data-date="{{ movimiento.fecha_movimiento }}">
+                            <td>{{ movimiento.id_movimiento }}</td>
+                            <td>{{ movimiento.repuesto_nombre or movimiento.id_repuesto }}</td>
+                            <td>{{ movimiento.tipo_movimiento }}</td>
+                            <td>{{ movimiento.fecha_movimiento }}</td>
+                            <td>{{ movimiento.cantidad }}</td>
+                            <td>{{ movimiento.detalle }}</td>
+                            <td>{{ movimiento.usuario }}</td>
+                            <td>{{ movimiento.estado }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-slate-500 py-6">No hay movimientos registrados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="report-view" class="view-panel hidden-panel">
+            <div class="report-card">
+                <div class="report-title-row">
+                    <div class="report-title-wrap">
+                        <i class="fa-solid fa-filter"></i>
+                        <span>Filtros del Reporte</span>
+                    </div>
+                </div>
+
+                <div class="report-controls-row">
+                    <div class="date-field">
+                        <label>Fecha Ingreso Desde</label>
+                        <input id="date-from" type="date" class="report-input">
+                    </div>
+                    <div class="date-field">
+                        <label>Fecha Ingreso Hasta</label>
+                        <input id="date-to" type="date" class="report-input">
+                    </div>
+                    <div class="date-field">
+                        <label>Tipo de Repuesto</label>
+                        <select id="report-type-filter" class="report-input report-select">
+                            <option value="">Todos los tipos</option>
+                            {% for tipo in tipo_repuestos %}
+                            <option value="{{ tipo.nombre }}">{{ tipo.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field">
+                        <label>Marca</label>
+                        <select id="report-brand-filter" class="report-input report-select">
+                            <option value="">Todas las marcas</option>
+                            {% for marca in report_marcas %}
+                            <option value="{{ marca }}">{{ marca }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field">
+                        <label>Estado Repuesto</label>
+                        <select id="report-status-filter" class="report-input report-select">
+                            <option value="">Todos los estados</option>
+                            {% for estado in report_estados %}
+                            <option value="{{ estado }}">{{ estado }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field">
+                        <label>Ubicación</label>
+                        <select id="report-location-filter" class="report-input report-select">
+                            <option value="">Todas las ubicaciones</option>
+                            {% for ubicacion in report_ubicaciones %}
+                            <option value="{{ ubicacion }}">{{ ubicacion }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="date-field report-inline">
+                        <label class="checkbox-label">
+                            <input id="stock-bajo-only" type="checkbox">
+                            <span>Solo stock bajo (≤ 5)</span>
+                        </label>
+                    </div>
+                    <button id="clear-report" type="button" class="secondary-btn">Limpiar filtros</button>
+                    <button id="print-report" type="button" class="primary-btn"><i class="fa-solid fa-print"></i> Imprimir PDF</button>
+                </div>
+            </div>
+
+            <div class="stats-row">
+                <div class="stat-box stat-blue">
+                    <div class="stat-label">Repuestos en Periodo</div>
+                    <div id="period-items-count" class="stat-value">{{ report_repuestos|length }}</div>
+                </div>
+                <div class="stat-box stat-red">
+                    <div class="stat-label">Stock Bajo</div>
+                    <div id="stock-bajo-count" class="stat-value">{{ stock_bajo }}</div>
+                </div>
+                <div class="stat-box stat-green">
+                    <div class="stat-label">Valor Inventario (P. Venta)</div>
+                    <div id="inventory-value-count" class="stat-value">Q {{ '%.2f'|format(total_valor_venta) }}</div>
+                </div>
+            </div>
+
+            <div class="table-summary-row">
+                <div class="table-summary-label">Vista previa del reporte</div>
+                <div id="report-total" class="table-summary-count">{{ report_repuestos|length }} registros</div>
+            </div>
+
+            <div class="preview-table-wrap">
+                <table class="report-preview-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Tipo</th>
+                            <th>Marca</th>
+                            <th>Modelo</th>
+                            <th>Año</th>
+                            <th>Stock</th>
+                            <th>P. Compra</th>
+                            <th>P. Venta</th>
+                            <th>Ubicación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for repuesto in report_repuestos %}
+                        <tr class="inventory-row" data-created-at="{{ repuesto.fecha_ingreso or '' }}" data-type="{{ repuesto.tipo_repuesto or '' }}" data-brand="{{ repuesto.marca or '' }}" data-status="{{ repuesto.estado_repuesto or '' }}" data-location="{{ repuesto.ubicacion_bodega or '' }}" data-stock="{{ repuesto.stock if repuesto.stock is not none else 0 }}">
+                            <td>{{ repuesto.codigo_repuesto or '-' }}</td>
+                            <td>{{ repuesto.tipo_repuesto or '-' }}</td>
+                            <td>{{ repuesto.marca or '-' }}</td>
+                            <td>{{ repuesto.modelo or '-' }}</td>
+                            <td>{{ repuesto.anio or '-' }}</td>
+                            <td>{{ repuesto.stock if repuesto.stock is not none else '-' }}</td>
+                            <td>{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_compra)) if repuesto.precio_compra is not none else '-' }}</td>
+                            <td>{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) if repuesto.precio_venta is not none else '-' }}</td>
+                            <td>{{ repuesto.ubicacion_bodega or '-' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-slate-500 py-6">No se encontraron repuestos.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const mobileToggle = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-sidebar-overlay');
+
+        function toggleSidebar() {
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full');
+            if (isClosed) {
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        mobileToggle?.addEventListener('click', toggleSidebar);
+        overlay?.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
+
+        function normalizeSidebarOnResize() {
+            if (window.innerWidth >= 768) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        window.addEventListener('resize', normalizeSidebarOnResize);
+        window.addEventListener('DOMContentLoaded', normalizeSidebarOnResize);
+
+        function setView(viewName) {
+            const tabs = document.querySelectorAll('.inventory-tab');
+            const panels = document.querySelectorAll('.view-panel');
+
+            tabs.forEach((tab) => {
+                tab.classList.toggle('active', tab.dataset.view === viewName);
+            });
+
+            panels.forEach((panel) => {
+                const isListPanel = panel.id === 'list-view';
+                const isReportPanel = panel.id === 'report-view';
+                const isMovimientosPanel = panel.id === 'movimientos-view';
+                const shouldShow = viewName === 'report'
+                    ? isReportPanel
+                    : viewName === 'movimientos'
+                        ? isMovimientosPanel
+                        : isListPanel;
+                panel.classList.toggle('hidden-panel', !shouldShow);
+            });
+        }
+
+        const searchInput = document.getElementById('search-input');
+        const tipoFiltro = document.getElementById('tipo-repuesto-filter');
+        const searchForm = document.getElementById('search-form');
+        const noResultsRow = document.getElementById('search-no-results');
+
+        document.querySelectorAll('.inventory-tab').forEach((tab) => {
+            tab.addEventListener('click', () => setView(tab.dataset.view));
+        });
+
+        function getDateFromValue(value) {
+            if (!value) return null;
+            const trimmed = String(value).trim();
+            if (!trimmed) return null;
+            const directDate = new Date(trimmed + 'T00:00:00');
+            if (!Number.isNaN(directDate.getTime())) {
+                return directDate;
+            }
+            const parsed = new Date(trimmed);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
+            return null;
+        }
+
+        function applyMovementFilters() {
+            const search = (document.getElementById('movimientos-search')?.value || '').trim().toLowerCase();
+            const tipo = (document.getElementById('movimientos-type-filter')?.value || '').trim().toLowerCase();
+            const usuario = (document.getElementById('movimientos-user-filter')?.value || '').trim().toLowerCase();
+            const from = document.getElementById('movimientos-date-from')?.value || '';
+            const to = document.getElementById('movimientos-date-to')?.value || '';
+            const rows = document.querySelectorAll('#movimientos-table tbody tr[data-search]');
+            const fromDate = getDateFromValue(from);
+            const toDate = getDateFromValue(to);
+            let visibleRows = 0;
+
+            rows.forEach((row) => {
+                const rowSearch = (row.dataset.search || '').toLowerCase();
+                const rowTipo = (row.dataset.tipo || '').toLowerCase();
+                const rowUsuario = (row.dataset.usuario || '').toLowerCase();
+                const rowDate = getDateFromValue(row.dataset.date || '');
+                let isVisible = true;
+
+                if (search && !rowSearch.includes(search)) isVisible = false;
+                if (tipo && rowTipo !== tipo) isVisible = false;
+                if (usuario && rowUsuario !== usuario) isVisible = false;
+                if (fromDate && rowDate && rowDate < fromDate) isVisible = false;
+                if (toDate && rowDate && rowDate > toDate) isVisible = false;
+                if (!rowDate) isVisible = false;
+
+                row.style.display = isVisible ? '' : 'none';
+                if (isVisible) visibleRows += 1;
+            });
+
+            const total = document.getElementById('movimientos-total');
+            if (total) total.textContent = `${visibleRows} movimientos`;
+        }
+
+        function applyReportDateFilter() {
+            const from = document.getElementById('date-from')?.value || '';
+            const to = document.getElementById('date-to')?.value || '';
+            const type = document.getElementById('report-type-filter')?.value || '';
+            const brand = document.getElementById('report-brand-filter')?.value || '';
+            const status = document.getElementById('report-status-filter')?.value || '';
+            const location = document.getElementById('report-location-filter')?.value || '';
+            const stockBajoOnly = document.getElementById('stock-bajo-only')?.checked || false;
+            const rows = document.querySelectorAll('.report-preview-table tbody tr[data-created-at]');
+            const fromDate = getDateFromValue(from);
+            const toDate = getDateFromValue(to);
+            let visibleRows = 0;
+            let stockBajoRows = 0;
+            let inventoryValue = 0;
+
+            rows.forEach((row) => {
+                const rowDate = getDateFromValue(row.dataset.createdAt || '');
+                const rowType = (row.dataset.type || '').trim().toLowerCase();
+                const rowBrand = (row.dataset.brand || '').trim().toLowerCase();
+                const rowStatus = (row.dataset.status || '').trim().toLowerCase();
+                const rowLocation = (row.dataset.location || '').trim().toLowerCase();
+                const rowStock = Number(row.dataset.stock || 0);
+                const rowPrice = Number((row.textContent.match(/Q\s*([\d.,]+)/)?.[1] || '').replace(/[.,]/g, '')) || 0;
+
+                let isVisible = true;
+                if (!rowDate) isVisible = false;
+                if (fromDate && rowDate < fromDate) isVisible = false;
+                if (toDate && rowDate > toDate) isVisible = false;
+                if (type && rowType !== type.trim().toLowerCase()) isVisible = false;
+                if (brand && rowBrand !== brand.trim().toLowerCase()) isVisible = false;
+                if (status && rowStatus !== status.trim().toLowerCase()) isVisible = false;
+                if (location && rowLocation !== location.trim().toLowerCase()) isVisible = false;
+                if (stockBajoOnly && rowStock > 5) isVisible = false;
+
+                row.style.display = isVisible ? '' : 'none';
+                if (isVisible) {
+                    visibleRows += 1;
+                    if (rowStock <= 5) stockBajoRows += 1;
+                    inventoryValue += Number(row.dataset.stock || 0) * Number((row.textContent.match(/Q\s*([\d.,]+)/g)?.[1] || '').replace(/[^\d.]/g, '') || 0);
+                }
+            });
+
+            const reportTotal = document.getElementById('report-total');
+            if (reportTotal) reportTotal.textContent = `${visibleRows} registros`;
+
+            const periodCount = document.getElementById('period-items-count');
+            if (periodCount) periodCount.textContent = visibleRows;
+
+            const stockBajoCount = document.getElementById('stock-bajo-count');
+            if (stockBajoCount) stockBajoCount.textContent = stockBajoRows;
+
+            const inventoryValueCount = document.getElementById('inventory-value-count');
+            if (inventoryValueCount) {
+                inventoryValueCount.textContent = `Q ${inventoryValue.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+        }
+
+        document.getElementById('print-report')?.addEventListener('click', () => {
+            const params = new URLSearchParams();
+            const fromValue = document.getElementById('date-from')?.value;
+            const toValue = document.getElementById('date-to')?.value;
+            const typeValue = document.getElementById('report-type-filter')?.value;
+            const brandValue = document.getElementById('report-brand-filter')?.value;
+            const statusValue = document.getElementById('report-status-filter')?.value;
+            const locationValue = document.getElementById('report-location-filter')?.value;
+            const stockBajoValue = document.getElementById('stock-bajo-only')?.checked ? '1' : '';
+            if (fromValue) params.set('from_date', fromValue);
+            if (toValue) params.set('to_date', toValue);
+            if (typeValue) params.set('tipo_repuesto', typeValue);
+            if (brandValue) params.set('marca', brandValue);
+            if (statusValue) params.set('estado_repuesto', statusValue);
+            if (locationValue) params.set('ubicacion', locationValue);
+            if (stockBajoValue) params.set('stock_bajo', stockBajoValue);
+            const queryString = params.toString();
+            window.location.href = `/inventario/exportar-pdf${queryString ? `?${queryString}` : ''}`;
+        });
+
+        document.getElementById('print-movimientos-report')?.addEventListener('click', () => {
+            const params = new URLSearchParams();
+            const searchValue = document.getElementById('movimientos-search')?.value || '';
+            const tipoValue = document.getElementById('movimientos-type-filter')?.value || '';
+            const userValue = document.getElementById('movimientos-user-filter')?.value || '';
+            const fromValue = document.getElementById('movimientos-date-from')?.value || '';
+            const toValue = document.getElementById('movimientos-date-to')?.value || '';
+
+            if (searchValue) params.set('search', searchValue);
+            if (tipoValue) params.set('tipo', tipoValue);
+            if (userValue) params.set('usuario', userValue);
+            if (fromValue) params.set('from_date', fromValue);
+            if (toValue) params.set('to_date', toValue);
+
+            window.location.href = `/inventario/movimientos/exportar-pdf${params.toString() ? `?${params.toString()}` : ''}`;
+        });
+
+        ['date-from', 'date-to', 'report-type-filter', 'report-brand-filter', 'report-status-filter', 'report-location-filter', 'stock-bajo-only'].forEach((id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('change', applyReportDateFilter);
+                element.addEventListener('input', applyReportDateFilter);
+            }
+        });
+
+        ['movimientos-search', 'movimientos-type-filter', 'movimientos-user-filter', 'movimientos-date-from', 'movimientos-date-to'].forEach((id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('input', applyMovementFilters);
+                element.addEventListener('change', applyMovementFilters);
+            }
+        });
+
+        document.getElementById('clear-report')?.addEventListener('click', () => {
+            ['date-from', 'date-to', 'report-type-filter', 'report-brand-filter', 'report-status-filter', 'report-location-filter', 'stock-bajo-only'].forEach((id) => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                if (element.type === 'checkbox') element.checked = false;
+                else element.value = '';
+            });
+            applyReportDateFilter();
+        });
+
+        document.getElementById('clear-movimientos-report')?.addEventListener('click', () => {
+            ['movimientos-search', 'movimientos-type-filter', 'movimientos-user-filter', 'movimientos-date-from', 'movimientos-date-to'].forEach((id) => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                if (element.type === 'checkbox') element.checked = false;
+                else element.value = '';
+            });
+            applyMovementFilters();
+        });
+
+        function applyInventoryFilters() {
+            const query = (searchInput?.value || '').trim().toLowerCase();
+            const selectedTipoOption = tipoFiltro?.selectedOptions?.[0];
+            const selectedTipoName = (selectedTipoOption?.textContent || '').trim().toLowerCase();
+            const isAllTypes = selectedTipoName === '' || selectedTipoName === 'todos los tipos';
+            const rows = Array.from(document.querySelectorAll('tbody tr')).filter((row) => {
+                return !row.classList.contains('detail-row') && row.id !== 'search-no-results' && !row.classList.contains('server-no-data');
+            });
+
+            let matchCount = 0;
+
+            rows.forEach((row) => {
+                const text = (row.dataset.search || row.textContent || '').toLowerCase();
+                const detailRow = row.nextElementSibling;
+                const detailText = detailRow && detailRow.classList.contains('detail-row') ? (detailRow.textContent || '').toLowerCase() : '';
+                const rowTipo = (row.dataset.tipo || '').toLowerCase();
+                const matchesQuery = query === '' || (text + ' ' + detailText).includes(query);
+                const matchesTipo = isAllTypes || rowTipo === selectedTipoName;
+                const visible = matchesQuery && matchesTipo;
+
+                row.style.display = visible ? '' : 'none';
+
+                if (detailRow && detailRow.classList.contains('detail-row')) {
+                    detailRow.style.display = visible ? '' : 'none';
+                }
+
+                if (visible) {
+                    matchCount += 1;
+                }
+            });
+
+            if (noResultsRow) {
+                noResultsRow.classList.toggle('hidden', matchCount > 0 || (query === '' && isAllTypes));
+            }
+        }
+
+        if (searchForm) {
+            searchForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                applyInventoryFilters();
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', applyInventoryFilters);
+        }
+
+        if (tipoFiltro) {
+            tipoFiltro.addEventListener('change', applyInventoryFilters);
+        }
+
+        // Toggle de filas de detalle por registro
+        document.querySelectorAll('.detail-toggle').forEach((button) => {
+            button.addEventListener('click', () => {
+                const row = button.closest('tr');
+                const detailRow = row.nextElementSibling;
+                const expanded = button.getAttribute('aria-expanded') === 'true';
+                button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                button.querySelector('i').classList.toggle('fa-chevron-down', expanded);
+                button.querySelector('i').classList.toggle('fa-chevron-up', !expanded);
+                if (detailRow && detailRow.classList.contains('detail-row')) {
+                    detailRow.classList.toggle('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

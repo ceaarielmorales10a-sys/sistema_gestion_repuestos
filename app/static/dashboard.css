@@ -1,0 +1,53 @@
+/* app/static/dashboard.css */
+
+/* Animación y efecto de elevación 3D para las tarjetas de módulos */
+.modulo-card {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
+}
+
+.modulo-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Suavizado para las transiciones de la barra lateral */
+nav a {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Ocultar barra de scroll predeterminada manteniendo la funcionalidad */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+@media (min-width: 768px) {
+    #sidebar {
+        position: static !important;
+        transform: none !important;
+        left: auto !important;
+        top: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        min-height: 100vh;
+    }
+    header {
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+    .modulo-card {
+        min-height: 180px;
+    }
+}

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modificar Usuario</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='modificar_usuario.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="page-shell">
+        <div class="form-card">
+            <h2>Modificar Usuario</h2>
+
+            <form method="POST" action="{{ url_for('modificar_usuario', id_usuario=usuario.id_usuario) }}" autocomplete="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+
+                <div style="display:none !important; position:absolute !important; left:-9999px !important;">
+                    <input type="text" name="fake_full_name" tabindex="-1" autocomplete="off">
+                    <input type="text" name="fake_address_line" tabindex="-1" autocomplete="off">
+                    <input type="password" name="fake_password_field" tabindex="-1" autocomplete="off">
+                </div>
+
+                <div class="field-row two-col">
+                    <div class="field-group">
+                        <label for="field_username">Nombre de Usuario <span>*</span></label>
+                        <input id="field_username" name="username" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.username or '' }}">
+                    </div>
+
+                    <div class="field-group password-wrap">
+                        <label for="field_password">Contraseña <span>*</span></label>
+                        <input id="field_password" name="password" type="password" required autocomplete="new-password" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.password_hash or '' }}">
+                        <button type="button" class="toggle-password" aria-label="Mostrar contraseña">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="field-row two-col">
+                    <div class="field-group">
+                        <label for="field_primer_nombre">Primer Nombre <span>*</span></label>
+                        <input id="field_primer_nombre" name="primer_nombre" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.primer_nombre or '' }}">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="field_segundo_nombre">Segundo Nombre</label>
+                        <input id="field_segundo_nombre" name="segundo_nombre" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.segundo_nombre or '' }}">
+                    </div>
+                </div>
+
+                <div class="field-row two-col">
+                    <div class="field-group">
+                        <label for="field_primer_apellido">Primer Apellido <span>*</span></label>
+                        <input id="field_primer_apellido" name="primer_apellido" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.primer_apellido or '' }}">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="field_segundo_apellido">Segundo Apellido</label>
+                        <input id="field_segundo_apellido" name="segundo_apellido" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.segundo_apellido or '' }}">
+                    </div>
+                </div>
+
+                <div class="field-row two-col">
+                    <div class="field-group">
+                        <label for="field_rol_id">Rol <span>*</span></label>
+                        <select id="field_rol_id" name="rol_id" required autocomplete="off" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                            <option value="">Selecciona un rol</option>
+                            {% for role in roles %}
+                            <option value="{{ role[0] }}" {% if usuario.id_rol == role[0] %}selected{% endif %}>{{ role[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="field_email">Email <span>*</span></label>
+                        <input id="field_email" name="email" type="email" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.correo or '' }}">
+                    </div>
+                </div>
+
+                <div class="field-row one-col">
+                    <div class="field-group">
+                        <label for="field_telefono">Teléfono</label>
+                        <input id="field_telefono" name="telefono" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="{{ usuario.telefono or '' }}">
+                    </div>
+                </div>
+
+                <div class="checkbox-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="activo" {% if usuario.id_estado == 1 %}checked{% endif %}>
+                        <span class="checkmark"></span>
+                        <span>Usuario activo</span>
+                    </label>
+                    <small>Los usuarios inactivos no podrían iniciar sesión en el sistema</small>
+                </div>
+
+                <div id="permissions-box" class="permissions-box" aria-live="polite">
+                    <strong>Permisos del rol:</strong>
+                    <span>Selecciona un rol para ver sus permisos.</span>
+                </div>
+
+                <div class="actions">
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('usuarios') }}'">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='registrar_usuario.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('form input').forEach(input => {
+                input.setAttribute('autocomplete', 'chrome-off');
+            });
+        });
+    </script>
+</body>
+</html>
