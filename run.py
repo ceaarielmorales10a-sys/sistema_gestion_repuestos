@@ -53,6 +53,30 @@ def get_db_connection():
     return pyodbc.connect(CONN_STR)
 
 
+def get_estado_usuario_id(cursor, activo):
+    """Obtiene un estado válido para usuario; 0 no es una clave foránea válida."""
+    if activo:
+        return 1
+
+    try:
+        columns = get_table_columns(cursor, 'estado_general')
+        display_column = choose_display_column(columns)
+        if display_column:
+            cursor.execute(
+                f"SELECT TOP 1 id_estado FROM estado_general "
+                f"WHERE LOWER(LTRIM(RTRIM({display_column}))) = ?",
+                ('inactivo',),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+    except Exception:
+        pass
+
+    # En el catálogo estándar: 1 = Activo y 2 = Inactivo.
+    return 2
+
+
 def get_table_columns(cursor, table_name):
     try:
         cursor.execute(f"SELECT TOP 1 * FROM {table_name}")
@@ -470,7 +494,7 @@ def validar_usuario_db(usuario, password):
             "u.primer_apellido, u.segundo_apellido, u.id_rol, r.nombre "
             "FROM usuario u "
             "LEFT JOIN rol r ON u.id_rol = r.id_rol "
-            "WHERE u.username = ? AND u.password_hash = ?"
+            "WHERE u.username = ? AND u.password_hash = ? AND u.id_estado = 1"
         )
         cursor.execute(query, (usuario, password))
         row = cursor.fetchone()
@@ -965,7 +989,7 @@ def nuevo_usuario():
                     email,
                     telefono or None,
                     int(rol_id),
-                    1 if activo else 0,
+                    get_estado_usuario_id(cursor, activo),
                 )
             )
             conn.commit()
@@ -1048,7 +1072,7 @@ def modificar_usuario(id_usuario):
                     email,
                     telefono or None,
                     int(rol_id),
-                    1 if activo else 0,
+                    get_estado_usuario_id(cursor, activo),
                     id_usuario,
                 )
             )
