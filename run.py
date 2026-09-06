@@ -92,7 +92,14 @@ def get_table_columns(cursor, table_name):
 
 def choose_display_column(columns):
     # Prefer columns that contain these tokens
-    preferred = ['nombre', 'tipo', 'marca', 'modelo', 'color', 'lado', 'posicion', 'descripcion', 'name']
+    # La descripción nunca es el nombre principal de un catálogo.  Esto es
+    # importante para tablas como vehiculo_origen, que usan `origen` en vez
+    # de `nombre` y ahora también tienen una columna `descripcion`.
+    preferred = [
+        'nombre', 'motivo', 'origen', 'estado', 'transmision', 'ubicacion',
+        'rol', 'tipo', 'marca', 'modelo', 'color', 'lado', 'posicion',
+        'name', 'descripcion'
+    ]
     for token in preferred:
         for c in columns:
             if token in c.lower() and not c.lower().startswith('id'):
@@ -1298,10 +1305,29 @@ MANTENIMIENTO_CATALOGOS = [
     ('ubicaciones', 'Ubicaciones', 'fa-map-pin', ['ubicacion', 'bodega', 'ubicacion_bodega']),
     ('roles', 'Roles', 'fa-book-open', ['rol']),
     ('estado_desarme', 'Estado de Desarme', 'fa-truck-ramp-box', ['estado_desarme']),
+    ('estado_pieza_desarme', 'Estado Pieza Desarme', 'fa-boxes-stacked', ['estado_pieza_desarme']),
+    ('motivo_devolucion', 'Motivo Devolución', 'fa-arrow-rotate-left', ['motivo_devolucion']),
+    ('estado_prestamo', 'Estado Préstamo', 'fa-handshake', ['estado_prestamo']),
     ('tipo_desarme', 'Tipo de Desarme', 'fa-hammer', ['tipo_desarme']),
     ('estado_pieza', 'Estado de Pieza', 'fa-box-open', ['estado_pieza']),
     ('motivo_incidencia', 'Motivo de Incidencia', 'fa-circle-exclamation', ['motivo_incidencia']),
 ]
+
+# Campos adicionales que se muestran y editan en cada catálogo.  Sólo se
+# habilitan si la columna existe, para conservar compatibilidad con bases
+# anteriores a la migración incluida en database/mantenimiento_catalogos.sql.
+CATALOGO_CAMPOS_ADICIONALES = {
+    'marcas': [('descripcion', 'Descripción')],
+    'colores': [('descripcion', 'Descripción')],
+    'tipos': [('ubicacion_bodega', 'Ubicación en bodega')],
+    'estados': [('descripcion', 'Descripción')],
+    'origenes': [('descripcion', 'Descripción')],
+    'transmisiones': [('descripcion', 'Descripción')],
+    'ubicaciones': [('descripcion', 'Descripción')],
+    'roles': [('descripcion', 'Descripción')],
+    'estado_desarme': [('descripcion', 'Descripción')],
+    'estado_pieza_desarme': [('descripcion', 'Descripción'), ('id_estado', 'Estado (ID)')],
+}
 
 
 def get_mantenimiento_catalogo(key, cursor):
@@ -1315,7 +1341,15 @@ def get_mantenimiento_catalogo(key, cursor):
             display_column = choose_display_column(columns)
             if id_column and display_column:
                 return {'key': catalogo_key, 'label': label, 'icon': icon,
-                        'table': table, 'id_column': id_column, 'display_column': display_column}
+                        'table': table, 'id_column': id_column, 'display_column': display_column,
+                        'name_label': 'Motivo' if catalogo_key == 'motivo_devolucion' else (
+                            'Estado' if catalogo_key == 'estado_prestamo' else 'Nombre'
+                        ),
+                        'fields': [
+                            {'name': field_name, 'label': field_label}
+                            for field_name, field_label in CATALOGO_CAMPOS_ADICIONALES.get(catalogo_key, [])
+                            if any(column.lower() == field_name for column in columns)
+                        ]}
     return None
 
 
@@ -1360,12 +1394,21 @@ def mantenimiento():
                 ]
                 catalogo['rows'] = rows
             else:
-                cursor.execute(
-                    f"SELECT {catalogo['id_column']} AS id, {catalogo['display_column']} AS nombre "
-                    f"FROM {catalogo['table']} ORDER BY {catalogo['display_column']}"
-                )
-                rows = cursor.fetchall()
-                catalogo['rows'] = [{'id': row[0], 'nombre': row[1]} for row in rows]
+                columns = get_table_columns(cursor, catalogo['table'])
+                # Motivo de devolución debe conservar el orden definido en la
+                # tabla (id_motivo), no el alfabético de la descripción.
+                order_column = catalogo['id_column'] if key == 'motivo_devolucion' else catalogo['display_column']
+                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {order_column}")
+                column_names = [column[0] for column in cursor.description]
+                rows = []
+                for raw_row in cursor.fetchall():
+                    item = dict(zip(column_names, raw_row))
+                    extra = {field['name']: item.get(field['name']) for field in catalogo['fields']}
+                    search = ' '.join(str(value or '') for value in [item.get(catalogo['display_column'])] + list(extra.values()))
+                    rows.append({'id': item.get(catalogo['id_column']),
+                                 'nombre': item.get(catalogo['display_column']),
+                                 'extra': extra, 'search': search.lower()})
+                catalogo['rows'] = rows
             catalogo['count'] = len(rows)
             total_registros += len(rows)
             catalogos.append(catalogo)
@@ -1438,12 +1481,29 @@ def guardar_catalogo_mantenimiento(key):
                 message = 'Modelos: registro actualizado correctamente.'
             else:
                 raise ValueError('La operación solicitada no es válida.')
-        elif action == 'add':
-            cursor.execute(f'INSERT INTO {table} ({display_column}) VALUES (?)', (value,))
-            message = f'{catalogo["label"]}: registro agregado correctamente.'
-        elif action == 'edit' and row_id:
-            cursor.execute(f'UPDATE {table} SET {display_column} = ? WHERE {id_column} = ?', (value, row_id))
-            message = f'{catalogo["label"]}: registro actualizado correctamente.'
+        elif action in ('add', 'edit'):
+            columns = get_table_columns(cursor, table)
+            extra_data = {
+                field['name']: request.form.get(field['name'], '').strip() or None
+                for field in catalogo['fields'] if field['name'] in columns
+            }
+            data = {display_column: value, **extra_data}
+            if action == 'add':
+                insert_columns = list(data)
+                cursor.execute(
+                    f"INSERT INTO {table} ({', '.join(insert_columns)}) VALUES ({', '.join('?' for _ in insert_columns)})",
+                    tuple(data[column] for column in insert_columns),
+                )
+                message = f'{catalogo["label"]}: registro agregado correctamente.'
+            elif row_id:
+                update_columns = list(data)
+                cursor.execute(
+                    f"UPDATE {table} SET {', '.join(f'{column} = ?' for column in update_columns)} WHERE {id_column} = ?",
+                    tuple(data[column] for column in update_columns) + (row_id,),
+                )
+                message = f'{catalogo["label"]}: registro actualizado correctamente.'
+            else:
+                raise ValueError('La operación solicitada no es válida.')
         elif action == 'delete' and row_id:
             cursor.execute(f'DELETE FROM {table} WHERE {id_column} = ?', (row_id,))
             message = f'{catalogo["label"]}: registro eliminado correctamente.'
