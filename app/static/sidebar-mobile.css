@@ -1,0 +1,40 @@
+/* Comportamiento común del menú lateral en pantallas pequeñas. */
+/* En escritorio acompaña la altura real del contenido, incluso si la página
+   es más alta que la ventana inicial. */
+@media (min-width: 768px) {
+    #sidebar {
+        position: static !important;
+        inset: auto !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        align-self: stretch !important;
+        overflow: visible !important;
+    }
+}
+
+@media (max-width: 767px) {
+    #sidebar {
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+
+    /* Solo los enlaces se desplazan: la sesión y el cierre quedan visibles. */
+    #sidebar > div:first-child {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #sidebar > div:last-child {
+        flex: 0 0 auto;
+        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+
+    #sidebar nav {
+        padding-bottom: 1rem;
+    }
+}

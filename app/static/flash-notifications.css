@@ -1,0 +1,30 @@
+.success-flash {
+    position: relative;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.success-flash.is-closing {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+}
+
+.success-flash-close {
+    margin-left: auto;
+    display: inline-flex;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 0.45rem;
+    background: transparent;
+    color: currentColor;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.success-flash-close:hover {
+    background: rgba(22, 101, 52, 0.1);
+}

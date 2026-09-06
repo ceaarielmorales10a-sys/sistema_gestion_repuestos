@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -161,6 +162,16 @@
                     </div>
                     <h2 class="text-xl font-bold tracking-wide">Desarme de Vehículos</h2>
                     <p class="text-xs text-amber-100 font-medium mt-1">Registro de piezas desarmadas</p>
+                </a>
+                {% endif %}
+
+                {% if session.get('role') == 'Administrador del Sistema' %}
+                <a href="{{ url_for('mantenimiento') }}" class="modulo-card bg-slate-700 text-white rounded-2xl p-6 shadow-lg shadow-slate-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                    <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
+                        <i class="fa-solid fa-gears"></i>
+                    </div>
+                    <h2 class="text-xl font-bold tracking-wide">Mantenimiento</h2>
+                    <p class="text-xs text-slate-200 font-medium mt-1">Catálogos, respaldo y auditoría</p>
                 </a>
                 {% endif %}
             </div>

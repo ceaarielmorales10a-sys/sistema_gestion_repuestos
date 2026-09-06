@@ -1,0 +1,19 @@
+.table-heading{display:flex;align-items:center;gap:7px}
+.brand-filter{height:25px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#243b5a;padding:0 8px;font-size:9px;outline:none}
+.brand-badge{display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#8b22db;padding:2px 5px;border-radius:4px;font-size:8px;font-weight:700}
+.brand-badge i{font-size:7px}
+.modal-body select{height:30px;width:100%;border:1px solid #1764f5;box-shadow:0 0 0 2px #dbeafe;border-radius:7px;padding:0 9px;font-size:11px;outline:0;background:#fff}
+.modal-body #model-fields,.modal-body #description-field{margin-bottom:13px}
+
+/* El formulario de modelos sigue el estilo morado del catálogo de la referencia. */
+.model-modal{width:min(100%,282px)}
+.model-modal .modal-body{padding:15px}
+.model-modal .modal-body label{font-size:8px;margin-bottom:5px}
+.model-modal .modal-body input,.model-modal .modal-body select{height:28px;border-color:#cbd5e1;box-shadow:none;border-radius:7px;font-size:9px}
+.model-modal .modal-body input:focus,.model-modal .modal-body select:focus{border-color:#7c16f5;box-shadow:0 0 0 2px rgba(124,22,245,.14)}
+.model-modal .modal-body #model-fields,.model-modal .modal-body #description-field{margin-bottom:10px}
+.model-modal footer{padding:10px 15px}
+.model-modal footer .primary{background:linear-gradient(100deg,#7525f3,#a10df3)!important;color:#fff!important;opacity:1!important;text-shadow:none!important;min-width:121px}
+.model-modal footer .primary:hover{background:#7817df!important;color:#fff!important}
+
+@media (max-width:760px){.table-heading{width:100%;justify-content:space-between}.brand-filter{max-width:170px}}

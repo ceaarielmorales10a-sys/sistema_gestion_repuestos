@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='flash-notifications.css') }}">
 </head>
 <body style="background-image: url('{{ url_for('static', filename='Fondo_login.jpeg') }}'); background-size: cover; background-position: center center; background-repeat: no-repeat; background-attachment: fixed;">
 
@@ -27,8 +28,9 @@
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="flash-message">
+                        <div {% if category == 'success' %}data-success-flash{% endif %} class="flash-message {% if category == 'success' %}success-flash{% endif %}">
                             <p>{{ message }}</p>
+                            {% if category == 'success' %}<button type="button" class="success-flash-close" aria-label="Cerrar mensaje">&times;</button>{% endif %}
                         </div>
                     {% endfor %}
                 {% endif %}
@@ -62,5 +64,6 @@
             </div>
         </section>
     </main>
+    <script src="{{ url_for('static', filename='flash-notifications.js') }}"></script>
 </body>
 </html>

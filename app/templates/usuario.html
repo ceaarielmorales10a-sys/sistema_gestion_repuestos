@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='usuario.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='flash-notifications.css') }}">
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -74,7 +76,7 @@
             <div class="mb-3 px-2">
                 <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
                 <p class="text-xs font-bold text-slate-200 mt-0.5 capitalize">{{ user_name }}</p>
-                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('role', 'Usuario') }}</p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ user_role }}</p>
             </div>
             <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
                 <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
@@ -87,9 +89,10 @@
             {% if messages %}
                 <div class="mb-6 space-y-3">
                     {% for category, message in messages %}
-                        <div class="flash-message {% if category == 'success' %}flash-success{% else %}flash-error{% endif %}">
+                        <div {% if category == 'success' %}data-success-flash{% endif %} class="flash-message {% if category == 'success' %}success-flash flash-success{% else %}flash-error{% endif %}">
                             <i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>
                             <span>{{ message }}</span>
+                            {% if category == 'success' %}<button type="button" class="success-flash-close" aria-label="Cerrar mensaje">&times;</button>{% endif %}
                         </div>
                     {% endfor %}
                 </div>
@@ -184,9 +187,6 @@
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700 flex gap-3 items-center">
                                         <a href="{{ url_for('modificar_usuario', id_usuario=user.id_usuario) }}" class="text-blue-600 hover:text-blue-800" title="Editar usuario"><i class="fa-solid fa-pencil"></i></a>
-                                        <button type="button" class="delete-user-btn text-red-600 hover:text-red-800" data-user-id="{{ user.id_usuario }}" data-user-name="{{ user.username }}" data-delete-url="{{ url_for('eliminar_usuario', id_usuario=user.id_usuario) }}" title="Eliminar usuario">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
                                     </td>
                                 </tr>
                                 {% else %}
@@ -279,54 +279,11 @@
         </div>
     </main>
 
-    <div id="delete-user-modal" class="delete-user-modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-user-title">
-        <div class="delete-user-backdrop"></div>
-        <div class="delete-user-card">
-            <div id="delete-user-title" class="delete-user-title">¿Está seguro de eliminar el usuario "<span id="delete-user-name">usuario</span>"?</div>
-            <div class="delete-user-actions">
-                <button type="button" id="cancel-delete-user" class="delete-cancel-btn">Cancelar</button>
-                <button type="button" id="confirm-delete-user" class="delete-confirm-btn">Aceptar</button>
-            </div>
-        </div>
-    </div>
-
+    <script src="{{ url_for('static', filename='flash-notifications.js') }}"></script>
     <script>
         const sidebar = document.getElementById('sidebar');
         const mobileToggle = document.getElementById('mobile-menu-button');
         const overlay = document.getElementById('mobile-sidebar-overlay');
-        const deleteModal = document.getElementById('delete-user-modal');
-        const deleteUserName = document.getElementById('delete-user-name');
-        const cancelDeleteBtn = document.getElementById('cancel-delete-user');
-        const confirmDeleteBtn = document.getElementById('confirm-delete-user');
-        let pendingDeleteUrl = '';
-
-        document.querySelectorAll('.delete-user-btn').forEach((button) => {
-            button.addEventListener('click', () => {
-                pendingDeleteUrl = button.dataset.deleteUrl || '';
-                const username = button.dataset.userName || 'usuario';
-                deleteUserName.textContent = username;
-                deleteModal.classList.remove('hidden');
-            });
-        });
-
-        cancelDeleteBtn?.addEventListener('click', () => {
-            deleteModal.classList.add('hidden');
-            pendingDeleteUrl = '';
-        });
-
-        confirmDeleteBtn?.addEventListener('click', () => {
-            if (!pendingDeleteUrl) return;
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = pendingDeleteUrl;
-            document.body.appendChild(form);
-            form.submit();
-        });
-
-        deleteModal?.querySelector('.delete-user-backdrop')?.addEventListener('click', () => {
-            deleteModal.classList.add('hidden');
-            pendingDeleteUrl = '';
-        });
 
         function toggleSidebar() {
             const isClosed = sidebar.classList.contains('-translate-x-full');

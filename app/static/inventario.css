@@ -347,8 +347,42 @@ table button:hover i {
 }
 
 @media (max-width: 768px) {
+    html, body {
+        overflow-x: hidden;
+    }
+
     main {
+        width: 100%;
+        max-width: 100vw;
         padding: 1.25rem !important;
+        overflow-x: hidden;
+    }
+
+    .inventory-tabs {
+        display: flex;
+        max-width: 100%;
+        overflow-x: auto;
+        border-radius: 0.75rem;
+    }
+
+    .inventory-tab {
+        flex: 0 0 auto;
+        padding: 0.65rem 0.8rem;
+    }
+
+    .report-controls-row,
+    .stats-row {
+        grid-template-columns: 1fr;
+    }
+
+    .report-card {
+        padding: 1rem;
+    }
+
+    .table-summary-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.35rem;
     }
     .flex.justify-between.items-center.mb-6,
     .flex.flex-col.sm\:flex-row.gap-4.mb-6,

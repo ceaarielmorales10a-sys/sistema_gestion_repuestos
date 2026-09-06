@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 import os
 import io
+from uuid import uuid4
 from datetime import datetime
 import pyodbc
+from werkzeug.utils import secure_filename
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
@@ -18,6 +20,9 @@ static_dir = os.path.join(base_dir, 'app', 'static')
 # Inicializamos Flask vinculando correctamente la subcarpeta 'app'
 app = Flask('app', template_folder=templates_dir, static_folder=static_dir)
 app.secret_key = 'clave_secreta_umg_2026'
+UPLOAD_REPUESTOS_DIR = os.path.join(static_dir, 'uploads', 'repuestos')
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+MAX_IMAGE_SIZE = 3 * 1024 * 1024
 
 
 @app.before_request
@@ -316,6 +321,43 @@ def insert_row_filtered(cursor, table_name, data_dict):
     return cursor.rowcount
 
 
+def ensure_repuesto_photo_column(cursor):
+    """Agrega el campo de fotografía una única vez en instalaciones antiguas."""
+    columns = get_table_columns(cursor, 'repuesto')
+    if not any(column.lower() == 'fotografia' for column in columns):
+        cursor.execute("ALTER TABLE repuesto ADD fotografia VARCHAR(500) NULL")
+
+
+def save_repuesto_photo(file_storage):
+    """Valida y guarda una imagen de repuesto, devolviendo su ruta relativa."""
+    if not file_storage or not file_storage.filename:
+        return None
+
+    filename = secure_filename(file_storage.filename)
+    extension = os.path.splitext(filename)[1].lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError('La fotografía debe ser JPG, PNG o WEBP.')
+
+    file_storage.stream.seek(0, os.SEEK_END)
+    file_size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if file_size > MAX_IMAGE_SIZE:
+        raise ValueError('La fotografía no puede superar 3 MB.')
+
+    os.makedirs(UPLOAD_REPUESTOS_DIR, exist_ok=True)
+    photo_name = f"{uuid4().hex}{extension}"
+    file_storage.save(os.path.join(UPLOAD_REPUESTOS_DIR, photo_name))
+    return f"uploads/repuestos/{photo_name}"
+
+
+def get_uploaded_repuesto_photo():
+    """Obtiene el archivo elegido entre cámara y galería del formulario."""
+    return next(
+        (file_storage for file_storage in request.files.getlist('fotografia') if file_storage and file_storage.filename),
+        None,
+    )
+
+
 def get_tipo_movimiento_by_id(cursor, id_tipo_movimiento):
     if id_tipo_movimiento is None:
         return None
@@ -555,6 +597,32 @@ def get_user_full_name_by_id(user_id):
     except Exception as e:
         print(f"⚠️ ERROR al obtener el nombre de usuario: {e}")
     return None
+
+
+def get_current_sidebar_user():
+    """Obtiene nombre y rol actualizados para el pie del menú lateral."""
+    sidebar_user = {'name': session.get('user', 'Usuario'), 'role': session.get('role', 'Usuario')}
+    user_id = session.get('user_id')
+    if not user_id:
+        return sidebar_user
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido, "
+            "u.username, r.nombre FROM usuario u LEFT JOIN rol r ON u.id_rol = r.id_rol "
+            "WHERE u.id_usuario = ?",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if row:
+            sidebar_user['name'] = ' '.join(part for part in row[:4] if part) or row[4] or sidebar_user['name']
+            sidebar_user['role'] = row[5] or sidebar_user['role']
+    except Exception:
+        pass
+    return sidebar_user
 
 
 def get_usuarios_reporte(from_date=None, to_date=None):
@@ -1170,13 +1238,9 @@ def usuarios():
         cursor.close()
         conn.close()
 
-    user_name = session.get('user', 'Usuario')
-    if 'user_id' in session:
-        nombre_db = get_user_full_name_by_id(session['user_id'])
-        if nombre_db:
-            user_name = nombre_db
-
-    return render_template('usuario.html', usuarios=usuarios, roles=roles, user_name=user_name)
+    sidebar_user = get_current_sidebar_user()
+    return render_template('usuario.html', usuarios=usuarios, roles=roles,
+                           user_name=sidebar_user['name'], user_role=sidebar_user['role'])
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -1217,6 +1281,187 @@ def dashboard():
             user_name = nombre_db
     # Renderiza la plantilla única; los bloques {% if %} de Jinja ocultarán/mostrarán los módulos
     return render_template('menu_principal.html', user_name=user_name)
+
+
+# Catálogos que se administran desde el módulo de mantenimiento.  Se prueban
+# nombres alternos porque hay instalaciones antiguas de la base de datos con
+# una nomenclatura ligeramente distinta.
+MANTENIMIENTO_CATALOGOS = [
+    ('anios', 'Años', 'fa-calendar-days', ['anio_vehiculo', 'anio']),
+    ('marcas', 'Marcas', 'fa-car', ['marca_vehiculo', 'marca']),
+    ('modelos', 'Modelos', 'fa-chevron-right', ['modelo_vehiculo', 'modelo']),
+    ('colores', 'Colores', 'fa-palette', ['color', 'color_repuesto']),
+    ('tipos', 'Tipos de Repuesto', 'fa-screwdriver-wrench', ['tipo_repuesto']),
+    ('estados', 'Estados', 'fa-tag', ['estado_general', 'estado_repuesto']),
+    ('origenes', 'Origen Vehículo', 'fa-location-dot', ['vehiculo_origen']),
+    ('transmisiones', 'Transmisiones', 'fa-gears', ['transmision', 'transmision_vehiculo']),
+    ('ubicaciones', 'Ubicaciones', 'fa-map-pin', ['ubicacion', 'bodega', 'ubicacion_bodega']),
+    ('roles', 'Roles', 'fa-book-open', ['rol']),
+    ('estado_desarme', 'Estado de Desarme', 'fa-truck-ramp-box', ['estado_desarme']),
+    ('tipo_desarme', 'Tipo de Desarme', 'fa-hammer', ['tipo_desarme']),
+    ('estado_pieza', 'Estado de Pieza', 'fa-box-open', ['estado_pieza']),
+    ('motivo_incidencia', 'Motivo de Incidencia', 'fa-circle-exclamation', ['motivo_incidencia']),
+]
+
+
+def get_mantenimiento_catalogo(key, cursor):
+    """Resuelve sólo tablas permitidas para evitar nombres SQL recibidos del cliente."""
+    for catalogo_key, label, icon, candidates in MANTENIMIENTO_CATALOGOS:
+        if catalogo_key != key:
+            continue
+        for table in candidates:
+            columns = get_table_columns(cursor, table)
+            id_column = next((column for column in columns if column.lower().startswith('id')), None)
+            display_column = choose_display_column(columns)
+            if id_column and display_column:
+                return {'key': catalogo_key, 'label': label, 'icon': icon,
+                        'table': table, 'id_column': id_column, 'display_column': display_column}
+    return None
+
+
+@app.route('/mantenimiento')
+def mantenimiento():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    if session.get('role') != 'Administrador del Sistema':
+        flash('No tienes permisos para acceder al módulo de mantenimiento.', 'error')
+        return redirect(url_for('dashboard'))
+
+    catalogos, total_registros = [], 0
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for key, label, icon, _ in MANTENIMIENTO_CATALOGOS:
+            catalogo = get_mantenimiento_catalogo(key, cursor)
+            if not catalogo:
+                continue
+            if key == 'modelos':
+                # Un modelo depende de una marca, por eso requiere una vista
+                # propia con marca y descripción, no la tabla genérica.
+                columns = get_table_columns(cursor, catalogo['table'])
+                marca_column = next((c for c in columns if c.lower() == 'id_marca'), None)
+                descripcion_column = next((c for c in columns if 'descripcion' in c.lower() or 'observacion' in c.lower()), None)
+                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {catalogo['display_column']}")
+                column_names = [column[0] for column in cursor.description]
+                rows = []
+                for raw_row in cursor.fetchall():
+                    item = dict(zip(column_names, raw_row))
+                    marca_id = item.get(marca_column) if marca_column else None
+                    rows.append({
+                        'id': item.get(catalogo['id_column']),
+                        'nombre': item.get(catalogo['display_column']),
+                        'marca_id': marca_id,
+                        'marca': get_display_name_by_id(cursor, ['marca_vehiculo', 'marca'], marca_id) or 'Sin marca',
+                        'descripcion': item.get(descripcion_column) if descripcion_column else '',
+                    })
+                catalogo['marcas'] = [
+                    {'id': row[0], 'nombre': row[1]}
+                    for row in fetch_catalog_for_candidates(cursor, ['marca_vehiculo', 'marca'])
+                ]
+                catalogo['rows'] = rows
+            else:
+                cursor.execute(
+                    f"SELECT {catalogo['id_column']} AS id, {catalogo['display_column']} AS nombre "
+                    f"FROM {catalogo['table']} ORDER BY {catalogo['display_column']}"
+                )
+                rows = cursor.fetchall()
+                catalogo['rows'] = [{'id': row[0], 'nombre': row[1]} for row in rows]
+            catalogo['count'] = len(rows)
+            total_registros += len(rows)
+            catalogos.append(catalogo)
+        cursor.close()
+        conn.close()
+    except Exception as error:
+        flash(f'No fue posible cargar los catálogos: {error}', 'error')
+
+    # Estas tablas contienen transacciones y se presentan por separado para
+    # operaciones de limpieza, tal como el diseño de referencia.
+    tablas_sistema = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for table, label in [('repuesto', 'Productos'), ('venta', 'Ventas'), ('prestamo', 'Préstamos'),
+                             ('usuario', 'Usuarios'), ('devolucion', 'Devoluciones')]:
+            if get_table_columns(cursor, table):
+                cursor.execute(f'SELECT COUNT(*) FROM {table}')
+                tablas_sistema.append({'table': table, 'label': label, 'count': cursor.fetchone()[0]})
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+    sidebar_user = get_current_sidebar_user()
+    return render_template('mantenimiento.html', catalogos=catalogos, total_registros=total_registros,
+                           tablas_sistema=tablas_sistema, user_name=sidebar_user['name'], user_role=sidebar_user['role'])
+
+
+@app.route('/mantenimiento/catalogo/<key>', methods=['POST'])
+def guardar_catalogo_mantenimiento(key):
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        flash('No tienes permisos para modificar catálogos.', 'error')
+        return redirect(url_for('dashboard'))
+
+    action = request.form.get('action', 'add')
+    value = request.form.get('nombre', '').strip()
+    row_id = request.form.get('id', '').strip()
+    if action != 'delete' and not value:
+        flash('Ingresa un valor para el catálogo.', 'error')
+        return redirect(url_for('mantenimiento'))
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        catalogo = get_mantenimiento_catalogo(key, cursor)
+        if not catalogo:
+            raise ValueError('El catálogo seleccionado no está disponible.')
+        table, id_column, display_column = catalogo['table'], catalogo['id_column'], catalogo['display_column']
+        if key == 'modelos' and action != 'delete':
+            marca_id = request.form.get('id_marca', '').strip()
+            if not marca_id:
+                raise ValueError('Selecciona la marca del modelo.')
+            columns = get_table_columns(cursor, table)
+            descripcion_column = next((c for c in columns if 'descripcion' in c.lower() or 'observacion' in c.lower()), None)
+            model_data = {display_column: value, 'id_marca': marca_id}
+            if descripcion_column:
+                model_data[descripcion_column] = request.form.get('descripcion', '').strip() or None
+            if action == 'add':
+                insert_columns = [column for column in model_data if column in columns]
+                cursor.execute(
+                    f"INSERT INTO {table} ({', '.join(insert_columns)}) VALUES ({', '.join('?' for _ in insert_columns)})",
+                    tuple(model_data[column] for column in insert_columns),
+                )
+                message = 'Modelos: registro agregado correctamente.'
+            elif action == 'edit' and row_id:
+                update_columns = [column for column in model_data if column in columns]
+                cursor.execute(
+                    f"UPDATE {table} SET {', '.join(f'{column} = ?' for column in update_columns)} WHERE {id_column} = ?",
+                    tuple(model_data[column] for column in update_columns) + (row_id,),
+                )
+                message = 'Modelos: registro actualizado correctamente.'
+            else:
+                raise ValueError('La operación solicitada no es válida.')
+        elif action == 'add':
+            cursor.execute(f'INSERT INTO {table} ({display_column}) VALUES (?)', (value,))
+            message = f'{catalogo["label"]}: registro agregado correctamente.'
+        elif action == 'edit' and row_id:
+            cursor.execute(f'UPDATE {table} SET {display_column} = ? WHERE {id_column} = ?', (value, row_id))
+            message = f'{catalogo["label"]}: registro actualizado correctamente.'
+        elif action == 'delete' and row_id:
+            cursor.execute(f'DELETE FROM {table} WHERE {id_column} = ?', (row_id,))
+            message = f'{catalogo["label"]}: registro eliminado correctamente.'
+        else:
+            raise ValueError('La operación solicitada no es válida.')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash(message, 'success')
+    except Exception as error:
+        try:
+            conn.rollback()
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+        flash(f'No se pudo guardar el cambio. Puede estar relacionado con otros registros: {error}', 'error')
+    return redirect(url_for('mantenimiento'))
 
 def clean_duplicate_movements():
     """Limpia movimientos duplicados de la BD. Elimina movimientos automáticos si existen movimientos iniciales del mismo repuesto."""
@@ -1292,12 +1537,14 @@ def inventario():
         # Note: some schemas used to have an `id_estado` column which was removed in
         # newer schemas. We avoid referencing that non-existent column here and
         # prefer `id_estado_repuesto` which exists on current installations.
+        repuesto_columns = get_table_columns(cursor, 'repuesto')
+        photo_select = ', fotografia' if any(column.lower() == 'fotografia' for column in repuesto_columns) else ''
         base_sql = (
             "SELECT id_repuesto, codigo_repuesto, id_vehiculo_origen, id_tipo_repuesto, "
             "id_marca, id_modelo, id_anio, id_color, id_lado, id_posicion, id_estado_repuesto, "
             "id_ubicacion, precio_compra, precio_venta, observaciones, fecha_ingreso, "
             "id_usuario_registro, stock, stock_minimo, stock_maximo "
-            "FROM repuesto"
+            f"{photo_select} FROM repuesto"
         )
         params = []
         if selected_tipo_id:
@@ -1404,6 +1651,7 @@ def inventario():
                 'precio_compra': precio_compra_val,
                 'precio_venta': precio_val,
                 'observaciones': data.get('observaciones'),
+                'fotografia': data.get('fotografia'),
                 'fecha_ingreso': data.get('fecha_ingreso'),
                 'usuario_registro': usuario_registro,
                 'estado': estado_general,
@@ -1512,6 +1760,7 @@ def inventario():
     end_index = start_index + page_size
     repuestos_paginados = lista_repuestos[start_index:end_index]
 
+    sidebar_user = get_current_sidebar_user()
     return render_template(
         'inventario.html',
         repuestos=repuestos_paginados,
@@ -1535,7 +1784,9 @@ def inventario():
         prestamos_count=prestamos_count,
         devoluciones_count=devoluciones_count,
         selected_tipo_id=selected_tipo_id,
-        search_query=search_query
+        search_query=search_query,
+        user_name=sidebar_user['name'],
+        user_role=sidebar_user['role']
     )
 
 
@@ -1586,6 +1837,11 @@ def agregar_repuesto():
             precio_venta = request.form.get('precio_venta')
             stock = request.form.get('stock')
             observaciones = request.form.get('observaciones') or None
+            fotografia = None
+            photo_file = get_uploaded_repuesto_photo()
+            if photo_file and photo_file.filename:
+                ensure_repuesto_photo_column(cursor)
+                fotografia = save_repuesto_photo(photo_file)
             id_estado = 1  # Estado inicial por defecto (ej: Disponible)
             id_usuario_registro = session.get('user_id')
             fecha_ingreso = __import__('datetime').datetime.now()
@@ -1611,6 +1867,7 @@ def agregar_repuesto():
                 'precio_venta': precio_venta,
                 'stock': stock,
                 'observaciones': observaciones,
+                'fotografia': fotografia,
                 'fecha_ingreso': fecha_ingreso,
                 'id_usuario_registro': id_usuario_registro,
                 'id_estado': id_estado
@@ -1780,6 +2037,10 @@ def modificar_repuesto(id_repuesto):
                 'stock': request.form.get('stock'),
                 'observaciones': request.form.get('observaciones') or None,
             }
+            photo_file = get_uploaded_repuesto_photo()
+            if photo_file and photo_file.filename:
+                ensure_repuesto_photo_column(cursor)
+                update_data['fotografia'] = save_repuesto_photo(photo_file)
             columns = get_table_columns(cursor, 'repuesto')
             set_cols = [col for col in update_data if col in columns]
             if set_cols:

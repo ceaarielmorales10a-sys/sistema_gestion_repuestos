@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mantenimiento - Importadora Morales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento-modelos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col md:flex-row font-sans antialiased">
+    <div class="md:hidden fixed top-4 left-4 z-40"><button id="mobile-menu-button" class="bg-white text-slate-900 p-3 rounded-xl shadow border"><i class="fa-solid fa-bars"></i></button></div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-72 max-w-[18rem] -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:w-64 bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen">
+        <div>
+            <div class="p-6 flex justify-center border-b border-slate-800"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales" class="h-26 w-auto object-contain"></div>
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="side-link"><i class="fa-solid fa-house"></i> Menú Principal</a>
+                <a href="/analytics" class="side-link"><i class="fa-solid fa-brain"></i> Analytics IA</a>
+                <a href="/clientes" class="side-link"><i class="fa-solid fa-users"></i> Clientes</a>
+                <a href="{{ url_for('inventario') }}" class="side-link"><i class="fa-solid fa-box"></i> Inventario</a>
+                <a href="/ventas" class="side-link"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>
+                <a href="/prestamos" class="side-link"><i class="fa-solid fa-handshake"></i> Préstamos</a>
+                <a href="/devoluciones" class="side-link"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>
+                <a href="/desarme" class="side-link"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>
+                <a href="/usuario" class="side-link"><i class="fa-solid fa-users-gear"></i> Usuarios</a>
+                <a href="{{ url_for('mantenimiento') }}" class="side-link active"><i class="fa-solid fa-gears"></i> Mantenimiento</a>
+            </nav>
+        </div>
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40"><div class="mb-3 px-2"><p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p><p class="text-xs font-bold text-slate-200 mt-1 capitalize">{{ user_name }}</p><p class="text-[11px] text-slate-400 capitalize">{{ user_role }}</p></div><a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div>
+    </aside>
+
+    <main class="flex-1 min-w-0 p-5 md:p-6 lg:p-7">
+        <header class="page-header">
+            <div><h1><i class="fa-solid fa-database"></i> Mantenimiento de Base de Datos</h1><p>Gestión de catálogos, backups, limpieza y auditoría</p></div>
+            <div class="header-tabs"><button class="selected"><i class="fa-solid fa-database"></i> Base de Datos</button><button><i class="fa-regular fa-file-lines"></i> Auditoría y Bitácoras</button></div>
+        </header>
+
+        <section class="stats-grid">
+            <article class="stat-card blue"><span>Total Registros</span><strong>{{ total_registros }}</strong><i class="fa-solid fa-database"></i></article>
+            <article class="stat-card purple"><span>Tablas Activas</span><strong>{{ catalogos|length }}</strong><i class="fa-solid fa-file-code"></i></article>
+            <article class="stat-card orange"><span>Espacio Usado</span><strong>Base de datos</strong><i class="fa-solid fa-hard-drive"></i></article>
+        </section>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid fa-circle-{{ 'check' if category == 'success' else 'exclamation' }}"></i>{{ message }}</div>{% endfor %}{% endwith %}
+
+        <section class="panel catalog-panel">
+            <h2><i class="fa-regular fa-map"></i> Gestión de Catálogos</h2>
+            <div class="catalog-layout">
+                <aside class="catalog-menu" aria-label="Catálogos">
+                    {% for catalogo in catalogos %}<button type="button" class="catalog-tab {% if loop.first %}active{% endif %}" data-catalog="{{ catalogo.key }}"><i class="fa-solid {{ catalogo.icon }}"></i><span>{{ catalogo.label }}</span><b>{{ catalogo.count }}</b></button>{% endfor %}
+                </aside>
+                <div class="catalog-content">
+                    {% for catalogo in catalogos %}
+                    <section class="catalog-table {% if not loop.first %}hidden{% endif %}" id="catalog-{{ catalogo.key }}" data-label="{{ catalogo.label }}" data-url="{{ url_for('guardar_catalogo_mantenimiento', key=catalogo.key) }}">
+                        <div class="table-tools"><div class="table-heading"><h3>{{ catalogo.label }}</h3>{% if catalogo.key == 'modelos' %}<select class="brand-filter" aria-label="Filtrar modelos por marca"><option value="">— Todas las marcas —</option>{% for marca in catalogo.marcas %}<option value="{{ marca.id }}">{{ marca.nombre }}</option>{% endfor %}</select>{% endif %}</div><div><label class="search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Buscar..."></label><button class="primary add-catalog" type="button"><i class="fa-solid fa-plus"></i> Agregar</button></div></div>
+                        <div class="table-scroll"><table><thead>{% if catalogo.key == 'modelos' %}<tr><th>#</th><th>MARCA</th><th>NOMBRE</th><th>DESCRIPCIÓN</th><th>ACCIONES</th></tr>{% else %}<tr><th>#</th><th>{{ 'AÑO' if catalogo.key == 'anios' else 'NOMBRE' }}</th><th>ACCIONES</th></tr>{% endif %}</thead><tbody>
+                            {% for row in catalogo.rows %}<tr data-search="{{ (row.nombre ~ ' ' ~ row.marca ~ ' ' ~ row.descripcion)|lower if catalogo.key == 'modelos' else row.nombre|lower }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}"{% endif %}><td>{{ loop.index }}</td>{% if catalogo.key == 'modelos' %}<td><span class="brand-badge"><i class="fa-solid fa-car"></i>{{ row.marca }}</span></td>{% endif %}<td>{{ row.nombre }}</td>{% if catalogo.key == 'modelos' %}<td>{{ row.descripcion or '—' }}</td>{% endif %}<td class="actions"><button type="button" class="edit-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}" data-description="{{ row.descripcion or '' }}"{% endif %} title="Editar"><i class="fa-solid fa-pen"></i></button><button type="button" class="delete-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" title="Eliminar"><i class="fa-solid fa-trash"></i></button></td></tr>{% else %}<tr class="empty"><td colspan="{{ 5 if catalogo.key == 'modelos' else 3 }}">No hay registros en este catálogo.</td></tr>{% endfor %}
+                        </tbody></table></div>
+                    </section>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="panel system-panel"><h2>Tablas del Sistema</h2><div class="system-tables">{% for tabla in tablas_sistema %}<article><div><strong>{{ tabla.label }}</strong><small>{{ tabla.count }} registros</small></div><button type="button" class="clear-button" data-name="{{ tabla.label }}"><i class="fa-regular fa-trash-can"></i> Limpiar</button></article>{% else %}<p class="text-slate-500 text-sm">No hay tablas transaccionales disponibles.</p>{% endfor %}</div></section>
+
+        <section class="panel backups"><h2>Gestión de Backups</h2><p>Selecciona las tablas (vacío = todas):</p><div class="backup-tags">{% for tabla in tablas_sistema %}<span>{{ tabla.label }}</span>{% endfor %}</div><div class="backup-grid"><article><h3><i class="fa-solid fa-download text-emerald-600"></i> Crear Backup</h3><p>Descarga una copia de seguridad de los datos seleccionados.</p><button class="backup-download"><i class="fa-solid fa-download"></i> Descargar Backup</button></article><article><h3><i class="fa-solid fa-upload text-blue-600"></i> Restaurar Backup</h3><p>Restaura los datos desde un archivo de backup.</p><button class="backup-upload"><i class="fa-solid fa-upload"></i> Seleccionar Archivo</button></article></div></section>
+        <section class="danger"><h2><i class="fa-solid fa-triangle-exclamation"></i> Zona de Peligro</h2><p>Las siguientes acciones son irreversibles. Proceder con extrema precaución.</p><button type="button" id="reset-database"><i class="fa-solid fa-rotate"></i> Reiniciar Base de Datos Completa</button></section>
+    </main>
+
+    <div class="modal-backdrop hidden" id="catalog-modal"><form class="modal" method="post"><input type="hidden" name="action" id="modal-action" value="add"><input type="hidden" name="id" id="modal-id"><header><h2 id="modal-title">Agregar</h2><button type="button" class="close-modal">&times;</button></header><div class="modal-body"><div id="model-fields" class="hidden"><label for="modal-brand">Marca <em>*</em></label><select id="modal-brand" name="id_marca"><option value="">Selecciona una marca</option></select></div><label id="modal-label" for="modal-name">Nombre <em>*</em></label><input id="modal-name" name="nombre" required autocomplete="off"><div id="description-field" class="hidden"><label for="modal-description">Descripción</label><input id="modal-description" name="descripcion" autocomplete="off" placeholder="Ej. Sedán compacto"></div></div><footer><button type="button" class="cancel-modal">Cancelar</button><button class="primary" id="modal-submit" type="submit">Agregar</button></footer></form></div>
+    <div class="modal-backdrop hidden" id="confirm-modal"><div class="modal confirm"><header><h2>Confirmar eliminación</h2><button type="button" class="close-confirm">&times;</button></header><div class="modal-body"><p>¿Deseas eliminar <strong id="delete-name"></strong>? Esta acción puede estar bloqueada si el registro se encuentra en uso.</p></div><footer><button type="button" class="cancel-confirm">Cancelar</button><form method="post" id="delete-form"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" id="delete-id"><button class="danger-button" type="submit">Eliminar</button></form></footer></div></div>
+    <script>
+        const sidebar=document.getElementById('sidebar'), overlay=document.getElementById('mobile-sidebar-overlay');
+        document.getElementById('mobile-menu-button')?.addEventListener('click',()=>{sidebar.classList.toggle('-translate-x-full');overlay.classList.toggle('hidden')}); overlay?.addEventListener('click',()=>{sidebar.classList.add('-translate-x-full');overlay.classList.add('hidden')});
+        const modal=document.getElementById('catalog-modal'), form=modal.querySelector('form'), action=document.getElementById('modal-action'), id=document.getElementById('modal-id'), nameInput=document.getElementById('modal-name'), modelFields=document.getElementById('model-fields'), descriptionField=document.getElementById('description-field'), modalBrand=document.getElementById('modal-brand'), modalDescription=document.getElementById('modal-description');
+        const closeModal=()=>modal.classList.add('hidden'); document.querySelectorAll('.close-modal,.cancel-modal').forEach(x=>x.addEventListener('click',closeModal));
+        document.querySelectorAll('.catalog-tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.catalog-tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.catalog-table').forEach(x=>x.classList.add('hidden'));tab.classList.add('active');document.getElementById('catalog-'+tab.dataset.catalog).classList.remove('hidden')}));
+        function openCatalogModal(panel, mode, rowButton){const label=panel.dataset.label,isModel=panel.id==='catalog-modelos';form.action=panel.dataset.url;form.classList.toggle('model-modal',isModel);action.value=mode;id.value=rowButton?.dataset.id||'';nameInput.value=rowButton?.dataset.name||'';nameInput.placeholder=isModel?'Ej. Corolla':'';modelFields.classList.toggle('hidden',!isModel);descriptionField.classList.toggle('hidden',!isModel);modalBrand.required=isModel;if(isModel){const filter=panel.querySelector('.brand-filter');modalBrand.innerHTML=filter.innerHTML;modalBrand.value=rowButton?.dataset.brand||'';modalDescription.value=rowButton?.dataset.description||'';modalDescription.placeholder='Descripción opcional...';}document.getElementById('modal-title').textContent=(mode==='add'?'Agregar':'Editar')+' — '+label;document.getElementById('modal-label').innerHTML=(label==='Años'?'Año':'Nombre')+' <em>*</em>';document.getElementById('modal-submit').textContent=mode==='add'?'Agregar':'Guardar cambios';modal.classList.remove('hidden');nameInput.focus()}
+        document.querySelectorAll('.add-catalog').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'add')));
+        document.querySelectorAll('.edit-row').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'edit',button)));
+        document.querySelectorAll('.search input').forEach(input=>input.addEventListener('input',()=>input.closest('.catalog-table').querySelectorAll('tbody tr[data-search]').forEach(row=>row.classList.toggle('hidden',!row.dataset.search.includes(input.value.toLowerCase())))));
+        document.querySelectorAll('.brand-filter').forEach(filter=>filter.addEventListener('change',()=>filter.closest('.catalog-table').querySelectorAll('tbody tr[data-brand]').forEach(row=>row.classList.toggle('hidden',Boolean(filter.value)&&row.dataset.brand!==filter.value))));
+        const confirmModal=document.getElementById('confirm-modal'),closeConfirm=()=>confirmModal.classList.add('hidden');document.querySelectorAll('.close-confirm,.cancel-confirm').forEach(x=>x.addEventListener('click',closeConfirm));document.querySelectorAll('.delete-row').forEach(button=>button.addEventListener('click',()=>{document.getElementById('delete-form').action=button.closest('.catalog-table').dataset.url;document.getElementById('delete-id').value=button.dataset.id;document.getElementById('delete-name').textContent=button.dataset.name;confirmModal.classList.remove('hidden')}));
+        document.querySelectorAll('.clear-button,.backup-download,.backup-upload,#reset-database').forEach(button=>button.addEventListener('click',()=>alert('Esta acción requiere una confirmación y respaldo. La operación se habilitará cuando se configure el proceso de copias de seguridad.')));
+        document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeConfirm()}});
+    </script>
+</body>
+</html>
