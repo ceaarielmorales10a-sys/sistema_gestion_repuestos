@@ -226,21 +226,21 @@
                 <div class="stats-row">
                     <div class="stat-box stat-purple">
                         <div class="stat-label">Usuarios en Periodo</div>
-                        <div id="period-users-count" class="stat-value">8</div>
+                        <div id="period-users-count" class="stat-value">{{ total_usuarios }}</div>
                     </div>
                     <div class="stat-box stat-green">
                         <div class="stat-label">Activos</div>
-                        <div id="active-users-count" class="stat-value">7</div>
+                        <div id="active-users-count" class="stat-value">{{ usuarios_activos }}</div>
                     </div>
                     <div class="stat-box stat-blue">
                         <div class="stat-label">Administradores</div>
-                        <div id="admin-users-count" class="stat-value">2</div>
+                        <div id="admin-users-count" class="stat-value">{{ administradores }}</div>
                     </div>
                 </div>
 
                 <div class="table-summary-row">
                     <div class="table-summary-label">Vista previa del reporte</div>
-                    <div id="report-total" class="table-summary-count">8 registros</div>
+                    <div id="report-total" class="table-summary-count">{{ total_usuarios }} registros</div>
                 </div>
 
                 <div class="preview-table-wrap">
@@ -399,9 +399,10 @@
                 const rowDate = getDateFromValue(row.dataset.createdAt || '');
                 let isVisible = true;
 
-                if (!rowDate) {
-                    isVisible = false;
-                } else {
+                if (fromDate || toDate) {
+                    if (!rowDate) {
+                        isVisible = false;
+                    }
                     if (fromDate && rowDate < fromDate) isVisible = false;
                     if (toDate && rowDate > toDate) isVisible = false;
                 }
@@ -447,14 +448,12 @@
         document.getElementById('clear-report')?.addEventListener('click', () => {
             document.getElementById('date-from').value = '';
             document.getElementById('date-to').value = '';
-            document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').forEach((row) => {
-                row.style.display = '';
-            });
-            const reportTotal = document.getElementById('report-total');
-            if (reportTotal) reportTotal.textContent = `${document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').length} registros`;
-            const periodUsersCount = document.getElementById('period-users-count');
-            if (periodUsersCount) periodUsersCount.textContent = document.querySelectorAll('.report-preview-table tbody tr[data-created-at]').length;
+            applyReportDateFilter();
         });
+
+        // También sincroniza los indicadores al cargar la página, incluidas
+        // las filas que no tengan una fecha de creación registrada.
+        applyReportDateFilter();
 
         const reportDate = new Date();
         const reportStamp = reportDate.toLocaleString('es-ES', {

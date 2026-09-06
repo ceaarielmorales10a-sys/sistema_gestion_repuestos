@@ -174,7 +174,7 @@
                                     class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-gray-700 shadow-sm cursor-pointer">
                                 <option value="" disabled {% if not repuesto.id_tipo_repuesto %}selected{% endif %}>Seleccione...</option>
                                 {% for tipo in tipos %}
-                                    <option value="{{ tipo.id }}" {% if repuesto.id_tipo_repuesto == tipo.id %}selected{% endif %}>{{ tipo.nombre }}</option>
+                                    <option value="{{ tipo.id }}" data-ubicacion="{{ tipo.id_ubicacion or '' }}" {% if repuesto.id_tipo_repuesto == tipo.id %}selected{% endif %}>{{ tipo.nombre }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -303,13 +303,14 @@
 
                         <div>
                             <label for="id_ubicacion" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Ubicación</label>
-                            <select id="id_ubicacion" name="id_ubicacion" required
-                                    class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-gray-700 shadow-sm cursor-pointer">
+                            <select id="id_ubicacion" disabled
+                                    class="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-sm text-gray-600 shadow-sm cursor-not-allowed">
                                 <option value="" disabled {% if not repuesto.id_bodega and not repuesto.id_ubicacion %}selected{% endif %}>Seleccione una ubicación</option>
                                 {% for bodega in bodegas %}
                                     <option value="{{ bodega.id }}" {% if repuesto.id_bodega == bodega.id or repuesto.id_ubicacion == bodega.id %}selected{% endif %}>{{ bodega.nombre }}</option>
                                 {% endfor %}
                             </select>
+                            <input type="hidden" id="id_ubicacion_input" name="id_ubicacion" value="{{ repuesto.id_ubicacion or repuesto.id_bodega or '' }}">
                         </div>
 
                         <div>
@@ -393,6 +394,20 @@
 
         window.addEventListener('resize', normalizeSidebarOnResize);
         window.addEventListener('DOMContentLoaded', normalizeSidebarOnResize);
+
+        const tipoRepuestoSelect = document.getElementById('id_tipo_repuesto');
+        const ubicacionSelect = document.getElementById('id_ubicacion');
+        const ubicacionInput = document.getElementById('id_ubicacion_input');
+
+        function sincronizarUbicacionPorTipo() {
+            const ubicacionId = tipoRepuestoSelect?.selectedOptions[0]?.dataset.ubicacion || '';
+            if (!ubicacionSelect || !ubicacionInput) return;
+            ubicacionSelect.value = ubicacionId;
+            ubicacionInput.value = ubicacionId;
+        }
+
+        tipoRepuestoSelect?.addEventListener('change', sincronizarUbicacionPorTipo);
+        sincronizarUbicacionPorTipo();
 
         const photoPreview = document.getElementById('foto-preview');
         const photoPreviewWrap = document.getElementById('foto-preview-wrap');

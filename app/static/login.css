@@ -124,6 +124,7 @@ body::before {
 
 .login-panel {
     width: min(100%, 430px);
+    transform: translateY(-1.25rem);
     padding: 2rem 1.75rem 1.7rem;
     border-radius: 1.2rem;
     background: rgba(31, 32, 35, 0.42);
@@ -293,6 +294,65 @@ body::before {
 
     .field-group label {
         letter-spacing: 0.04em;
+    }
+}
+
+/* En ventanas bajas (por ejemplo, laptops con barra de tareas visible), se
+   compacta el acceso para que la tarjeta completa permanezca centrada. */
+@media (max-height: 800px) {
+    .login-shell {
+        padding-top: 0.5rem;
+    }
+
+    .brand-header {
+        margin-top: 0;
+        margin-bottom: 1.2rem;
+    }
+
+    .logo-login {
+        max-height: 100px;
+    }
+
+    .brand-subtitle {
+        margin-top: 0.45rem;
+    }
+
+    .login-panel {
+        transform: translateY(-0.5rem);
+        padding: 1.4rem 1.75rem 1.1rem;
+    }
+
+    .login-icon {
+        width: 56px;
+        height: 56px;
+        margin-bottom: 0.7rem;
+        font-size: 1.55rem;
+    }
+
+    .login-panel h1 {
+        margin-bottom: 1rem;
+    }
+
+    .login-form {
+        gap: 0.85rem;
+    }
+
+    .field-group {
+        gap: 0.4rem;
+    }
+
+    .input-wrap input {
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+
+    .login-form button {
+        margin-top: 0.35rem;
+        padding: 0.8rem 1rem;
+    }
+
+    .footer-login {
+        padding: 0.75rem 1rem 0.35rem;
     }
 }
 

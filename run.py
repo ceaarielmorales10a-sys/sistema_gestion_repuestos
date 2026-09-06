@@ -534,56 +534,66 @@ def parse_int_like(val):
     return 0
 
 def validar_usuario_db(usuario, password):
+    conn = None
+    cursor = None
     try:
         conn = pyodbc.connect(CONN_STR)
         cursor = conn.cursor()
-        
+
         query = (
             "SELECT u.id_usuario, u.username, u.primer_nombre, u.segundo_nombre, "
-            "u.primer_apellido, u.segundo_apellido, u.id_rol, r.nombre "
+            "u.primer_apellido, u.segundo_apellido, u.id_rol, r.nombre, "
+            "u.password_hash, u.id_estado "
             "FROM usuario u "
             "LEFT JOIN rol r ON u.id_rol = r.id_rol "
-            "WHERE u.username = ? AND u.password_hash = ? AND u.id_estado = 1"
+            "WHERE u.username = ?"
         )
-        cursor.execute(query, (usuario, password))
+        cursor.execute(query, (usuario,))
         row = cursor.fetchone()
-        
-        cursor.close()
-        conn.close()
-        
-        if row:
-            rol_nombre = row[7] or ''
-            rol_upper = rol_nombre.strip().upper()
-            if rol_upper.startswith('ADMIN'):
-                rol_texto = 'Administrador del Sistema'
-            elif rol_upper.startswith('VENDEDOR'):
-                rol_texto = 'Vendedor'
-            elif rol_upper.startswith('BODEGUERO'):
-                rol_texto = 'Bodeguero'
-            elif rol_upper.startswith('ALMACEN'):
-                rol_texto = 'Almacenista'
-            else:
-                rol_texto = rol_nombre.title() if rol_nombre else 'Usuario'
+        if not row or row[8] != password:
+            return None, 'Usuario o contraseña incorrectos.'
 
-            # Construir nombre completo con los cuatro campos
-            partes = [row[2], row[3], row[4], row[5]]
-            full_name = " ".join([p for p in partes if p])
-            
-            return {
-                'id': row[0],
-                'user': row[1],
-                'full_name': full_name or row[1],
-                'nombres': f"{row[2]} {row[3]}".strip(),
-                'apellidos': f"{row[4]} {row[5]}".strip(),
-                'role': rol_texto
-            }
-        return None
-        
+        estado_nombre = get_display_name_by_id(cursor, ['estado_general'], row[9])
+        esta_activo = (
+            str(estado_nombre).strip().casefold() == 'activo'
+            if estado_nombre is not None else row[9] == 1
+        )
+        if not esta_activo:
+            return None, 'El usuario está inactivo. Solicita al administrador que lo habilite.'
+
+        rol_nombre = row[7] or ''
+        rol_upper = rol_nombre.strip().upper()
+        if rol_upper.startswith('ADMIN'):
+            rol_texto = 'Administrador del Sistema'
+        elif rol_upper.startswith('VENDEDOR'):
+            rol_texto = 'Vendedor'
+        elif rol_upper.startswith('BODEGUERO'):
+            rol_texto = 'Bodeguero'
+        elif rol_upper.startswith('ALMACEN'):
+            rol_texto = 'Almacenista'
+        else:
+            rol_texto = rol_nombre.title() if rol_nombre else 'Usuario'
+
+        partes = [row[2], row[3], row[4], row[5]]
+        full_name = " ".join([p for p in partes if p])
+        return {
+            'id': row[0],
+            'user': row[1],
+            'full_name': full_name or row[1],
+            'nombres': f"{row[2]} {row[3]}".strip(),
+            'apellidos': f"{row[4]} {row[5]}".strip(),
+            'role': rol_texto
+        }, None
     except Exception as e:
         print("\n" + "="*50)
         print(f"⚠️ ERROR DE CONEXIÓN CON SQL SERVER: {e}")
         print("="*50 + "\n")
-        return None
+        return None, 'No fue posible conectar con la base de datos. Intenta nuevamente o contacta al administrador.'
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 def get_user_full_name_by_id(user_id):
     try:
@@ -1246,8 +1256,16 @@ def usuarios():
         conn.close()
 
     sidebar_user = get_current_sidebar_user()
+    # Los indicadores del reporte deben partir de la misma colección que se
+    # muestra en la tabla; así no quedan valores fijos desactualizados.
+    total_usuarios = len(usuarios)
+    usuarios_activos = sum(user['estado'].lower() == 'activo' for user in usuarios)
+    administradores = sum('admin' in user['rol'].lower() for user in usuarios)
     return render_template('usuario.html', usuarios=usuarios, roles=roles,
-                           user_name=sidebar_user['name'], user_role=sidebar_user['role'])
+                           user_name=sidebar_user['name'], user_role=sidebar_user['role'],
+                           total_usuarios=total_usuarios,
+                           usuarios_activos=usuarios_activos,
+                           administradores=administradores)
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -1259,7 +1277,7 @@ def login():
         usuario = request.form.get('username')
         password = request.form.get('password')
         
-        cuenta_valida = validar_usuario_db(usuario, password)
+        cuenta_valida, error_acceso = validar_usuario_db(usuario, password)
         
         if cuenta_valida:
             session['user_id'] = cuenta_valida['id']
@@ -1270,7 +1288,7 @@ def login():
             session['role'] = cuenta_valida['role']
             return redirect(url_for('dashboard'))
         else:
-            flash('Usuario o contraseña incorrectos o error de conexión.', 'error')
+            flash(error_acceso, 'error')
             return redirect(url_for('login'))
             
     return render_template('login.html')
@@ -1319,7 +1337,13 @@ MANTENIMIENTO_CATALOGOS = [
 CATALOGO_CAMPOS_ADICIONALES = {
     'marcas': [('descripcion', 'Descripción')],
     'colores': [('descripcion', 'Descripción')],
-    'tipos': [('ubicacion_bodega', 'Ubicación en bodega')],
+    # La tabla tipo_repuesto define la ubicación sugerida para cada tipo. Se
+    # usan las mismas columnas que el esquema actual de Sistema_repuestos.
+    'tipos': [
+        ('descripcion', 'Descripción'),
+        ('id_estado', 'Estado (ID)'),
+        ('id_ubicacion', 'Ubicación (ID)'),
+    ],
     'estados': [('descripcion', 'Descripción')],
     'origenes': [('descripcion', 'Descripción')],
     'transmisiones': [('descripcion', 'Descripción')],
@@ -1327,6 +1351,16 @@ CATALOGO_CAMPOS_ADICIONALES = {
     'roles': [('descripcion', 'Descripción')],
     'estado_desarme': [('descripcion', 'Descripción')],
     'estado_pieza_desarme': [('descripcion', 'Descripción'), ('id_estado', 'Estado (ID)')],
+}
+
+# Campos que son llaves foráneas dentro de los catálogos.  Además de evitar
+# que el usuario deba memorizar IDs, esta configuración permite mostrar el
+# nombre real del registro relacionado en la tabla de mantenimiento.
+CATALOGO_CAMPOS_RELACIONADOS = {
+    'tipos': {
+        'id_estado': ['estado_general', 'estado_repuesto'],
+        'id_ubicacion': ['ubicacion', 'bodega', 'ubicacion_bodega'],
+    },
 }
 
 
@@ -1346,11 +1380,70 @@ def get_mantenimiento_catalogo(key, cursor):
                             'Estado' if catalogo_key == 'estado_prestamo' else 'Nombre'
                         ),
                         'fields': [
-                            {'name': field_name, 'label': field_label}
+                            {
+                                'name': field_name,
+                                'label': field_label,
+                                'options': [
+                                    {'id': row[0], 'nombre': row[1]}
+                                    for row in fetch_catalog_for_candidates(
+                                        cursor,
+                                        CATALOGO_CAMPOS_RELACIONADOS.get(catalogo_key, {}).get(field_name, []),
+                                    )
+                                ],
+                            }
                             for field_name, field_label in CATALOGO_CAMPOS_ADICIONALES.get(catalogo_key, [])
                             if any(column.lower() == field_name for column in columns)
                         ]}
     return None
+
+
+def fetch_tipos_repuesto(cursor, only_active=True):
+    """Obtiene tipos junto con su ubicación sugerida; puede limitarse a activos."""
+    columns = get_table_columns(cursor, 'tipo_repuesto')
+    id_column = next((column for column in columns if column.lower().startswith('id')), None)
+    display_column = choose_display_column(columns)
+    ubicacion_column = next((column for column in columns if column.lower() == 'id_ubicacion'), None)
+    estado_column = next((column for column in columns if column.lower() == 'id_estado'), None)
+    if not id_column or not display_column:
+        return []
+
+    location_select = f', {ubicacion_column} AS id_ubicacion' if ubicacion_column else ''
+    status_select = f', {estado_column} AS id_estado' if estado_column else ''
+    cursor.execute(
+        f"SELECT {id_column} AS id, {display_column} AS nombre{location_select}{status_select} "
+        f"FROM tipo_repuesto ORDER BY {display_column}"
+    )
+    tipos = cursor.fetchall()
+
+    # Los tipos inactivos se conservan en el catálogo para el historial, pero
+    # no deben estar disponibles al registrar un nuevo repuesto.
+    if not estado_column or not only_active:
+        return tipos
+
+    tipos_activos = []
+    for tipo in tipos:
+        estado_id = tipo.id_estado
+        estado_nombre = get_display_name_by_id(
+            cursor, ['estado_general', 'estado_repuesto'], estado_id
+        )
+        if estado_nombre is None or str(estado_nombre).strip().casefold() == 'activo':
+            tipos_activos.append(tipo)
+    return tipos_activos
+
+
+def get_tipo_ubicacion(cursor, id_tipo_repuesto):
+    """Obtiene la ubicación asignada al tipo de repuesto seleccionado."""
+    columns = get_table_columns(cursor, 'tipo_repuesto')
+    id_column = next((column for column in columns if column.lower().startswith('id')), None)
+    ubicacion_column = next((column for column in columns if column.lower() == 'id_ubicacion'), None)
+    if not id_tipo_repuesto or not id_column or not ubicacion_column:
+        return None
+    cursor.execute(
+        f"SELECT {ubicacion_column} FROM tipo_repuesto WHERE {id_column} = ?",
+        (id_tipo_repuesto,),
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
 
 
 @app.route('/mantenimiento')
@@ -1362,6 +1455,7 @@ def mantenimiento():
         return redirect(url_for('dashboard'))
 
     catalogos, total_registros = [], 0
+    active_catalog = request.args.get('catalogo', '').strip()
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1404,10 +1498,18 @@ def mantenimiento():
                 for raw_row in cursor.fetchall():
                     item = dict(zip(column_names, raw_row))
                     extra = {field['name']: item.get(field['name']) for field in catalogo['fields']}
+                    extra_display = {}
+                    for field in catalogo['fields']:
+                        related_tables = CATALOGO_CAMPOS_RELACIONADOS.get(key, {}).get(field['name'])
+                        value = extra[field['name']]
+                        extra_display[field['name']] = (
+                            get_display_name_by_id(cursor, related_tables, value)
+                            if related_tables and value is not None else value
+                        )
                     search = ' '.join(str(value or '') for value in [item.get(catalogo['display_column'])] + list(extra.values()))
                     rows.append({'id': item.get(catalogo['id_column']),
                                  'nombre': item.get(catalogo['display_column']),
-                                 'extra': extra, 'search': search.lower()})
+                                 'extra': extra, 'extra_display': extra_display, 'search': search.lower()})
                 catalogo['rows'] = rows
             catalogo['count'] = len(rows)
             total_registros += len(rows)
@@ -1416,6 +1518,11 @@ def mantenimiento():
         conn.close()
     except Exception as error:
         flash(f'No fue posible cargar los catálogos: {error}', 'error')
+
+    # Si la URL no indica un catálogo válido, se abre el primero disponible.
+    available_catalogs = {catalogo['key'] for catalogo in catalogos}
+    if active_catalog not in available_catalogs:
+        active_catalog = catalogos[0]['key'] if catalogos else ''
 
     # Estas tablas contienen transacciones y se presentan por separado para
     # operaciones de limpieza, tal como el diseño de referencia.
@@ -1433,7 +1540,7 @@ def mantenimiento():
     except Exception:
         pass
     sidebar_user = get_current_sidebar_user()
-    return render_template('mantenimiento.html', catalogos=catalogos, total_registros=total_registros,
+    return render_template('mantenimiento.html', catalogos=catalogos, active_catalog=active_catalog, total_registros=total_registros,
                            tablas_sistema=tablas_sistema, user_name=sidebar_user['name'], user_role=sidebar_user['role'])
 
 
@@ -1448,7 +1555,7 @@ def guardar_catalogo_mantenimiento(key):
     row_id = request.form.get('id', '').strip()
     if action != 'delete' and not value:
         flash('Ingresa un valor para el catálogo.', 'error')
-        return redirect(url_for('mantenimiento'))
+        return redirect(url_for('mantenimiento', catalogo=key))
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1521,7 +1628,7 @@ def guardar_catalogo_mantenimiento(key):
         except Exception:
             pass
         flash(f'No se pudo guardar el cambio. Puede estar relacionado con otros registros: {error}', 'error')
-    return redirect(url_for('mantenimiento'))
+    return redirect(url_for('mantenimiento', catalogo=key))
 
 def clean_duplicate_movements():
     """Limpia movimientos duplicados de la BD. Elimina movimientos automáticos si existen movimientos iniciales del mismo repuesto."""
@@ -1891,7 +1998,9 @@ def agregar_repuesto():
             stock_maximo = request.form.get('stock_maximo') or None
             id_anio = request.form.get('id_anio')
             id_estado_repuesto = request.form.get('id_estado_repuesto')
-            id_ubicacion = request.form.get('id_ubicacion') or request.form.get('id_bodega') or None
+            # La ubicación se define por el tipo para evitar asignaciones
+            # manuales inconsistentes desde el formulario.
+            id_ubicacion = get_tipo_ubicacion(cursor, id_tipo_repuesto)
             id_bodega = id_ubicacion
             precio_compra = request.form.get('precio_compra')
             precio_venta = request.form.get('precio_venta')
@@ -1993,8 +2102,7 @@ def agregar_repuesto():
                 vehiculo_origen_candidates = ['vehiculo_origen']
                 vehiculos_origen = fetch_catalog_for_candidates(cursor, vehiculo_origen_candidates) or []
 
-                tipo_candidates = ['tipo_repuesto', 'tipo', 'tipo_repuesto_vehiculo']
-                tipos = fetch_catalog_for_candidates(cursor, tipo_candidates) or []
+                tipos = fetch_tipos_repuesto(cursor)
 
                 transmision_candidates = ['transmision', 'transmision_vehiculo', 'tipo_transmision']
                 transmisiones = fetch_catalog_for_candidates(cursor, transmision_candidates) or []
@@ -2090,8 +2198,9 @@ def modificar_repuesto(id_repuesto):
                 'stock_maximo': request.form.get('stock_maximo') or None,
                 'id_anio': request.form.get('id_anio'),
                 'id_estado_repuesto': request.form.get('id_estado_repuesto'),
-                'id_ubicacion': request.form.get('id_ubicacion') or request.form.get('id_bodega') or None,
-                'id_bodega': request.form.get('id_ubicacion') or request.form.get('id_bodega') or None,
+                # Siempre se conserva la ubicación configurada en el tipo.
+                'id_ubicacion': get_tipo_ubicacion(cursor, request.form.get('id_tipo_repuesto')),
+                'id_bodega': get_tipo_ubicacion(cursor, request.form.get('id_tipo_repuesto')),
                 'precio_compra': request.form.get('precio_compra'),
                 'precio_venta': request.form.get('precio_venta'),
                 'stock': request.form.get('stock'),
@@ -2125,8 +2234,7 @@ def modificar_repuesto(id_repuesto):
         vehiculo_origen_candidates = ['vehiculo_origen']
         vehiculos_origen = fetch_catalog_for_candidates(cursor, vehiculo_origen_candidates) or []
 
-        tipo_candidates = ['tipo_repuesto', 'tipo', 'tipo_repuesto_vehiculo']
-        tipos = fetch_catalog_for_candidates(cursor, tipo_candidates) or []
+        tipos = fetch_tipos_repuesto(cursor, only_active=False)
 
         transmision_candidates = ['transmision', 'transmision_vehiculo', 'tipo_transmision']
         transmisiones = fetch_catalog_for_candidates(cursor, transmision_candidates) or []
