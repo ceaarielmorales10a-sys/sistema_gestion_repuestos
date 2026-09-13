@@ -1,5 +1,7 @@
 /* Estilos personalizados para el sistema de Inventario - Importadora Morales */
 
+.photo-field{padding-top:4px}.photo-input{display:block;width:100%;padding:9px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px}.photo-help{display:block;margin-top:5px;color:#94a3b8;font-size:11px}.photo-preview,.current-photo{display:flex;align-items:center;gap:12px;margin:8px 0;padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#52637a;font-size:11px}.photo-preview img,.current-photo img{width:72px;height:58px;object-fit:cover;border-radius:7px;border:1px solid #cbd5e1}.current-photo{flex-wrap:wrap}.current-photo label{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b}.current-photo input{accent-color:#2563eb}
+
 /* Fuentes e importación opcional para pulir la visualización */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -10,6 +12,105 @@ html, body {
 body {
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
+}
+
+body.inventory-edit-modal-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 23, 42, 0.52);
+}
+
+body.inventory-edit-modal-page .repuesto-modal {
+    position: fixed;
+    z-index: 50;
+    top: 50%;
+    left: 50%;
+    width: min(58rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2.5rem);
+    margin: 0;
+    transform: translate(-50%, -50%);
+    border: 1px solid #e2e8f0;
+    border-radius: 0.8rem;
+    background: #ffffff;
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.36);
+    overflow: hidden;
+}
+
+body.inventory-edit-modal-page .repuesto-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 4rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+body.inventory-edit-modal-page .repuesto-modal-header h1 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+body.inventory-edit-modal-page .modal-close {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 1rem;
+}
+
+body.inventory-edit-modal-page .repuesto-modal > .bg-white\/90 {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+}
+
+body.inventory-edit-modal-page .repuesto-form {
+    max-height: calc(100vh - 6.5rem);
+    padding: 1.1rem 1.25rem 0;
+    overflow-y: auto;
+}
+
+body.inventory-edit-modal-page .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 1rem -1.25rem 0;
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, 0.98);
+}
+
+body.inventory-edit-modal-page .primary-action,
+body.inventory-edit-modal-page .secondary-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 12rem;
+    min-height: 2.45rem;
+    padding: 0.55rem 1rem;
+    border-radius: 0.45rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+body.inventory-edit-modal-page .primary-action {
+    border: 0;
+    background: #2563eb;
+    color: #fff;
+}
+
+body.inventory-edit-modal-page .secondary-action {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
 }
 
 /* Deshabilitar la selección de texto en botones o menús dinámicos para simular App nativa */
@@ -71,5 +172,29 @@ select {
     header {
         flex-wrap: wrap;
         justify-content: space-between;
+    }
+
+    body.inventory-edit-modal-page .repuesto-modal {
+        width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+    }
+
+    body.inventory-edit-modal-page .repuesto-modal-header,
+    body.inventory-edit-modal-page .repuesto-form {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    body.inventory-edit-modal-page .modal-actions {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        flex-direction: column-reverse;
+    }
+
+    body.inventory-edit-modal-page .primary-action,
+    body.inventory-edit-modal-page .secondary-action {
+        width: 100%;
     }
 }

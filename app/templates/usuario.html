@@ -170,10 +170,7 @@
                                     <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-600">
                                         <div class="password-cell">
-                                            <span class="password-text" data-password="{{ user.password_hash or user.password or '********' }}">••••••••</span>
-                                            <button type="button" class="password-toggle" aria-label="Mostrar contraseña" title="Mostrar contraseña">
-                                                <i class="fa-regular fa-eye"></i>
-                                            </button>
+                                            <span class="password-text">Protegida</span>
                                         </div>
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>

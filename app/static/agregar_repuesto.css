@@ -1,5 +1,9 @@
 /* Vista modal para agregar repuestos */
 
+.photo-field{padding-top:4px}.photo-input{display:block;width:100%;padding:9px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px}.photo-help{display:block;margin-top:5px;color:#94a3b8;font-size:11px}.photo-preview,.current-photo{display:flex;align-items:center;gap:12px;margin:8px 0;padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#52637a;font-size:11px}.photo-preview img,.current-photo img{width:72px;height:58px;object-fit:cover;border-radius:7px;border:1px solid #cbd5e1}.current-photo{flex-wrap:wrap}.current-photo label{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b}.current-photo input{accent-color:#2563eb}
+.form-section-title{margin-top:0.35rem;padding-bottom:0.28rem;border-bottom:1px solid #dbeafe;color:#2563eb;font-size:0.62rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase}
+.form-section-title em,.repuesto-form label em{color:#ef4444;font-style:normal}.registration-fields{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem}.registration-fields label{display:flex;flex-direction:column;gap:0.25rem}.registration-fields input{width:100%}
+
 .add-repuesto-page {
     position: relative;
     min-height: 100vh;
@@ -395,6 +399,82 @@ body.add-repuesto-page .repuesto-modal {
     overflow: hidden;
 }
 
+body.add-repuesto-page .repuesto-modal {
+    width: min(560px, calc(100vw - 1rem));
+    max-height: calc(100vh - 2rem);
+    border-radius: 0.8rem;
+}
+
+body.add-repuesto-page .repuesto-modal > .bg-white {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+}
+
+body.add-repuesto-page .repuesto-modal-header {
+    min-height: 3.6rem;
+    margin: 0;
+    padding: 0.9rem 1rem;
+}
+
+body.add-repuesto-page .repuesto-modal-header h1 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+body.add-repuesto-page .repuesto-form {
+    max-height: calc(100vh - 5.6rem);
+    padding: 0.9rem 1rem 0;
+    overflow-y: auto;
+    gap: 0.85rem;
+}
+
+body.add-repuesto-page .repuesto-form > .grid {
+    gap: 0.75rem;
+}
+
+body.add-repuesto-page .repuesto-form .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.65rem;
+}
+
+body.add-repuesto-page .repuesto-form label {
+    font-size: 0.58rem !important;
+    letter-spacing: 0.02em !important;
+}
+
+body.add-repuesto-page .repuesto-form input,
+body.add-repuesto-page .repuesto-form select {
+    min-height: 2.25rem;
+    padding: 0.4rem 0.55rem !important;
+    border-radius: 0.45rem !important;
+    font-size: 0.72rem !important;
+}
+
+body.add-repuesto-page .photo-field {
+    padding-top: 0;
+}
+
+body.add-repuesto-page .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 0 -1rem 0;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, 0.98);
+}
+
+body.add-repuesto-page .primary-action,
+body.add-repuesto-page .secondary-action {
+    min-width: 0;
+    min-height: 2.25rem;
+    flex: 1;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.45rem;
+    font-size: 0.72rem;
+}
+
 /* La plantilla de edición mantiene el modal dentro de este contenedor. */
 body.add-repuesto-page .relative.z-10 {
     z-index: 50;
@@ -491,4 +571,315 @@ body.add-repuesto-page .secondary-action {
         min-width: 0;
         width: 50%;
     }
+}
+
+/* Orden visual del formulario según el diseño de referencia. */
+@media (min-width: 641px) {
+    body.add-repuesto-page .repuesto-form > .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.55rem 0.65rem;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 {
+        display: contents;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > div {
+        min-width: 0;
+        margin: 0;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > .form-section-title {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        order: 0;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(2) { order: 1; grid-column: span 2; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(3) { order: 2; grid-column: span 2; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(4) { order: 3; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(5) { order: 4; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(6) { order: 5; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(7) { order: 6; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(8) { order: 7; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:first-child > div:nth-child(9) { order: 8; }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > .form-section-title {
+        grid-column: 1 / -1;
+        order: 11;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(2) { order: 9; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(3) { order: 10; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(4) { order: 15; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(5) { order: 16; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(6) { order: 13; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(7) { order: 17; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(8) { order: 18; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(9) { order: 14; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(10) { order: 12; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(11) { order: 19; grid-column: 1 / -1; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(12) { order: 20; grid-column: 1 / -1; }
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4:nth-child(2) > div:nth-child(13) { order: 21; grid-column: 1 / -1; }
+}
+
+    body.add-repuesto-page .repuesto-form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    body.add-repuesto-page .repuesto-form > .modal-actions {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    body.inventory-edit-modal-page .repuesto-modal {
+        height: auto;
+        max-height: calc(100vh - 1rem);
+    }
+
+    body.inventory-edit-modal-page .repuesto-form {
+        height: auto;
+        max-height: calc(100vh - 5rem);
+    }
+
+    body.inventory-edit-modal-page .repuesto-form > .grid {
+        flex: 0 1 auto;
+    }
+
+    body.add-repuesto-page:not(.inventory-edit-modal-page) .repuesto-modal {
+        width: min(640px, calc(100vw - 2rem));
+    }
+
+    body.inventory-edit-modal-page .repuesto-modal {
+        width: min(640px, calc(100vw - 2rem));
+    }
+
+    @media (max-width: 640px) {
+        body.add-repuesto-page:not(.inventory-edit-modal-page) .repuesto-modal {
+            width: calc(100vw - 1rem);
+        }
+
+        body.inventory-edit-modal-page .repuesto-modal {
+            width: calc(100vw - 1rem);
+        }
+    }
+
+    body.add-repuesto-page .repuesto-modal {
+        height: min(740px, calc(100vh - 1rem));
+    }
+
+    body.add-repuesto-page .repuesto-modal > .bg-white {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    body.add-repuesto-page .repuesto-form {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+    }
+
+    @media (max-width: 640px) {
+        body.add-repuesto-page .repuesto-modal {
+            height: calc(100vh - 1rem);
+        }
+    }
+
+    body.inventory-edit-modal-page .repuesto-modal {
+        height: auto;
+        max-height: calc(100vh - 1rem);
+    }
+
+    body.inventory-edit-modal-page .repuesto-form {
+        height: auto;
+        max-height: calc(100vh - 5rem);
+    }
+
+    body.inventory-edit-modal-page .repuesto-form > .grid {
+        flex: 0 1 auto;
+    }
+
+/* Ajuste final para igualar el modal de edición. */
+body.add-repuesto-page .repuesto-modal {
+    width: min(438px, calc(100vw - 1rem));
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+body.add-repuesto-page .repuesto-modal-header {
+    min-height: 3.6rem;
+    padding: 0.9rem 1rem;
+}
+
+body.add-repuesto-page .repuesto-modal-header h1 {
+    font-size: 0.95rem;
+}
+
+body.add-repuesto-page .repuesto-form {
+    max-height: calc(100vh - 5.6rem);
+    padding: 0.9rem 1rem 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body.add-repuesto-page .repuesto-form > .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.7rem 0.65rem;
+    min-height: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 {
+    min-width: 0;
+}
+
+body.add-repuesto-page .repuesto-form .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.65rem;
+}
+
+body.add-repuesto-page .repuesto-form label {
+    font-size: 0.58rem !important;
+    line-height: 1.1;
+}
+
+body.add-repuesto-page .repuesto-form input,
+body.add-repuesto-page .repuesto-form select {
+    min-height: 2.25rem;
+    width: 100%;
+    font-size: 0.72rem !important;
+}
+
+body.add-repuesto-page .repuesto-form input {
+    width: 100%;
+}
+
+body.add-repuesto-page .repuesto-form select:disabled {
+    background-color: #f1f5f9 !important;
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+body.add-repuesto-page .form-section-title {
+    margin-top: 0.45rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #dbeafe;
+    color: #2563eb;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+}
+
+body.add-repuesto-page .photo-input {
+    min-height: 2rem;
+    padding: 0.35rem !important;
+    font-size: 0.65rem !important;
+}
+
+body.add-repuesto-page .photo-input-hidden {
+    display: none;
+}
+
+body.add-repuesto-page .photo-actions {
+    display: flex;
+    gap: 0.55rem;
+}
+
+body.add-repuesto-page .photo-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.25rem;
+    flex: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.45rem;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+body.add-repuesto-page .photo-action-button:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+body.add-repuesto-page .repuesto-modal {
+    width: min(480px, calc(100vw - 1rem));
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    column-gap: 0.7rem;
+    row-gap: 0.6rem;
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .form-section-title,
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .photo-field,
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .registration-fields {
+    grid-column: 1 / -1;
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0;
+}
+
+@media (max-width: 640px) {
+    body.add-repuesto-page .repuesto-modal {
+        width: calc(100vw - 1rem);
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .form-section-title,
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .photo-field,
+    body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > .registration-fields {
+        grid-column: 1;
+    }
+}
+
+body.add-repuesto-page .photo-preview img {
+    width: 58px;
+    height: 48px;
+}
+
+body.add-repuesto-page .modal-actions {
+    margin: 0 -1rem;
+    padding: 0.75rem 1rem;
+    justify-content: stretch;
+    flex: 0 0 auto;
+    position: relative;
+}
+
+body.add-repuesto-page .primary-action,
+body.add-repuesto-page .secondary-action {
+    min-width: 0;
+    min-height: 2.25rem;
+    flex: 1;
+    font-size: 0.72rem;
 }

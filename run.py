@@ -1,14 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 import os
 import io
+import secrets
 from uuid import uuid4
 from datetime import datetime
 import pyodbc
+from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
+from werkzeug.security import check_password_hash
+from werkzeug.security import generate_password_hash
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, Table, TableStyle
+
+load_dotenv()
 
 # Buscamos la ruta absoluta de run.py
 base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -19,7 +25,9 @@ static_dir = os.path.join(base_dir, 'app', 'static')
 
 # Inicializamos Flask vinculando correctamente la subcarpeta 'app'
 app = Flask('app', template_folder=templates_dir, static_folder=static_dir)
-app.secret_key = 'clave_secreta_umg_2026'
+# En producción defina FLASK_SECRET_KEY con un valor largo y aleatorio.
+# Una clave conocida permitiría fabricar cookies de sesión.
+app.secret_key = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') or secrets.token_urlsafe(48)
 UPLOAD_REPUESTOS_DIR = os.path.join(static_dir, 'uploads', 'repuestos')
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 MAX_IMAGE_SIZE = 3 * 1024 * 1024
@@ -27,13 +35,32 @@ MAX_IMAGE_SIZE = 3 * 1024 * 1024
 
 @app.before_request
 def restringir_modulos_bodeguero():
-    """Limita al bodeguero a los módulos asignados, aun si escribe una URL."""
-    ruta = request.path.rstrip('/') or '/'
-    if session.get('role') == 'Vendedor' and ruta == '/desarme':
-        flash('No tienes permisos para acceder al módulo de desarme.', 'error')
-        return redirect(url_for('dashboard'))
+    # Solo el inicio de sesión y los archivos estáticos son públicos.
+    rutas_publicas = {'login', 'static'}
+    if request.endpoint not in rutas_publicas and (
+        not session.get('user_id') or not session.get('user')
+    ):
+        return redirect(url_for('login'))
 
-    if session.get('role') != 'Bodeguero':
+    ruta = request.path.rstrip('/') or '/'
+    role = session.get('role')
+    admin_only_prefixes = ('/usuario', '/mantenimiento')
+    inventory_admin_prefixes = (
+        '/inventario/agregar',
+        '/inventario/modificar',
+        '/inventario/eliminar',
+        '/inventario/limpiar-duplicados',
+    )
+
+    if role != 'Administrador del Sistema' and ruta.startswith(admin_only_prefixes):
+        flash('No tienes permisos para acceder a este módulo.', 'error')
+        return redirect(url_for('inventario' if role == 'Bodeguero' else 'dashboard'))
+
+    if role != 'Administrador del Sistema' and ruta.startswith(inventory_admin_prefixes):
+        flash('No tienes permisos para modificar el inventario.', 'error')
+        return redirect(url_for('inventario'))
+
+    if role != 'Bodeguero':
         return None
 
     rutas_permitidas = ('/', '/dashboard', '/analytics', '/desarme', '/logout')
@@ -46,10 +73,10 @@ def restringir_modulos_bodeguero():
 # CADENA DE CONEXIÓN A SQL SERVER
 CONN_STR = (
     "Driver={ODBC Driver 17 for SQL Server};"
-    "Server=ARIEL2021\\SQLEXPRESS01;"
-    "Database=Sistema_repuestos;"
-    "UID=sa;"
-    "PWD=Arielmorales;"
+    f"Server={os.getenv('DB_SERVER')};"
+    f"Database={os.getenv('DB_NAME')};"
+    f"UID={os.getenv('DB_USER')};"
+    f"PWD={os.getenv('DB_PASSWORD')};"
 )
 
 
@@ -122,6 +149,19 @@ def choose_numeric_column(columns):
     for c in columns:
         if 'cant' in c.lower() or 'stock' in c.lower() or 'disp' in c.lower():
             return c
+    return None
+
+
+def negative_form_number_label(values):
+    """Devuelve la etiqueta del primer valor numérico negativo recibido."""
+    for label, value in values.items():
+        if value in (None, ''):
+            continue
+        try:
+            if float(str(value).replace(',', '.')) < 0:
+                return label
+        except (TypeError, ValueError):
+            continue
     return None
 
 
@@ -229,21 +269,34 @@ def lookup_foreign_key_display(cursor, fk_column, fk_value, table_candidates=Non
 
 
 def get_cliente_full_name(cursor, id_cliente):
+    """Obtiene el nombre visible del cliente desde su registro real."""
     if id_cliente is None:
         return None
     try:
-        cursor.execute(
-            "SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido "
-            "FROM cliente WHERE id_cliente = ?",
-            (id_cliente,)
+        columns = get_table_columns(cursor, 'cliente')
+        id_column = cliente_field(columns, 'id_cliente') or next(
+            (column for column in columns if str(column).lower().startswith('id')), None
         )
+        if not id_column:
+            return None
+
+        cursor.execute(f"SELECT * FROM cliente WHERE [{id_column}] = ?", (id_cliente,))
         row = cursor.fetchone()
-        if row:
-            parts = [p for p in [row[0], row[1], row[2], row[3]] if p]
-            if parts:
-                return ' '.join(parts)
+        if not row:
+            return None
+
+        data = dict(zip(columns, row))
+        name = cliente_display_from_row(data)
+        if not name.startswith('Cliente #'):
+            return name
+
+        # El registro puede no tener nombres, pero aún puede identificarse
+        # desde un dato que sí existe en la tabla.
+        email = data.get(cliente_field(columns, 'correo', 'email'))
+        nit = data.get(cliente_field(columns, 'nit'))
+        return str(email or nit or name).strip()
     except Exception:
-        pass
+        return None
     return None
 
 
@@ -534,61 +587,61 @@ def parse_int_like(val):
     return 0
 
 def validar_usuario_db(usuario, password):
+    try:
+        conn = pyodbc.connect(CONN_STR)
+        cursor = conn.cursor()
+
+        # 1. Consultamos trayendo el password_hash de la base de datos
+        query = (
+            "SELECT u.username, u.id_rol, u.password_hash, r.nombre "
+            "FROM usuario u LEFT JOIN rol r ON r.id_rol = u.id_rol "
+            "WHERE u.username = ?"
+        )
+        cursor.execute(query, (usuario,))
+        row = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if row:
+            username_db, id_rol, hash_guardado, rol_nombre = row[0], row[1], row[2], row[3]
+
+            # 2. Validamos el texto ingresado contra el hash seguro de la base de datos
+            if check_password_hash(hash_guardado, password):
+                rol_normalizado = str(rol_nombre or '').strip().casefold()
+                if 'admin' in rol_normalizado or id_rol == 1:
+                    rol_texto = "Administrador del Sistema"
+                elif 'vendedor' in rol_normalizado or id_rol == 3:
+                    rol_texto = "Vendedor"
+                elif 'bodeguero' in rol_normalizado or id_rol == 4:
+                    rol_texto = "Bodeguero"
+                elif 'almacen' in rol_normalizado or id_rol == 2:
+                    rol_texto = "Almacenista"
+                else:
+                    rol_texto = "Vendedor"
+
+                return {"user": username_db, "role": rol_texto}
+
+        return None
+
+    except Exception as e:
+        print("\n" + "=" * 50)
+        print(f"⚠️ ERROR DE CONEXIÓN CON SQL SERVER: {e}")
+        print("=" * 50 + "\n")
+        return None
+
+
+def get_user_id_by_username(username):
     conn = None
     cursor = None
     try:
         conn = pyodbc.connect(CONN_STR)
         cursor = conn.cursor()
-
-        query = (
-            "SELECT u.id_usuario, u.username, u.primer_nombre, u.segundo_nombre, "
-            "u.primer_apellido, u.segundo_apellido, u.id_rol, r.nombre, "
-            "u.password_hash, u.id_estado "
-            "FROM usuario u "
-            "LEFT JOIN rol r ON u.id_rol = r.id_rol "
-            "WHERE u.username = ?"
-        )
-        cursor.execute(query, (usuario,))
+        cursor.execute('SELECT id_usuario FROM usuario WHERE username = ?', (username,))
         row = cursor.fetchone()
-        if not row or row[8] != password:
-            return None, 'Usuario o contraseña incorrectos.'
-
-        estado_nombre = get_display_name_by_id(cursor, ['estado_general'], row[9])
-        esta_activo = (
-            str(estado_nombre).strip().casefold() == 'activo'
-            if estado_nombre is not None else row[9] == 1
-        )
-        if not esta_activo:
-            return None, 'El usuario está inactivo. Solicita al administrador que lo habilite.'
-
-        rol_nombre = row[7] or ''
-        rol_upper = rol_nombre.strip().upper()
-        if rol_upper.startswith('ADMIN'):
-            rol_texto = 'Administrador del Sistema'
-        elif rol_upper.startswith('VENDEDOR'):
-            rol_texto = 'Vendedor'
-        elif rol_upper.startswith('BODEGUERO'):
-            rol_texto = 'Bodeguero'
-        elif rol_upper.startswith('ALMACEN'):
-            rol_texto = 'Almacenista'
-        else:
-            rol_texto = rol_nombre.title() if rol_nombre else 'Usuario'
-
-        partes = [row[2], row[3], row[4], row[5]]
-        full_name = " ".join([p for p in partes if p])
-        return {
-            'id': row[0],
-            'user': row[1],
-            'full_name': full_name or row[1],
-            'nombres': f"{row[2]} {row[3]}".strip(),
-            'apellidos': f"{row[4]} {row[5]}".strip(),
-            'role': rol_texto
-        }, None
-    except Exception as e:
-        print("\n" + "="*50)
-        print(f"⚠️ ERROR DE CONEXIÓN CON SQL SERVER: {e}")
-        print("="*50 + "\n")
-        return None, 'No fue posible conectar con la base de datos. Intenta nuevamente o contacta al administrador.'
+        return row[0] if row else None
+    except Exception:
+        return None
     finally:
         if cursor:
             cursor.close()
@@ -769,6 +822,83 @@ def draw_table_pdf(pdf, title, headers, rows, y_start=680):
     usable_height = page_height - 120
     y_position = min(y_start, usable_height - table._height)
     table.drawOn(pdf, margin_left, y_position)
+
+
+def get_ventas_reporte():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'SELECT id_venta, fecha_venta, id_cliente, id_usuario, total, id_metodo_pago '
+            'FROM venta ORDER BY fecha_venta DESC'
+        )
+        sale_rows = cursor.fetchall()
+        sale_cols = [col[0] for col in cursor.description]
+
+        cursor.execute(
+            'SELECT id_venta, id_repuesto, cantidad FROM detalle_venta'
+        )
+        detail_rows = cursor.fetchall()
+        detail_cols = [col[0] for col in cursor.description]
+        details_by_sale = {}
+        for detail_row in detail_rows:
+            detail = dict(zip(detail_cols, detail_row))
+            sale_id = detail.get('id_venta')
+            if sale_id is not None:
+                detail['repuesto'] = get_repuesto_display_name(
+                    cursor, detail.get('id_repuesto')
+                ) or str(detail.get('id_repuesto') or '-')
+                details_by_sale.setdefault(sale_id, []).append(detail)
+
+        report_rows = []
+        for sale_row in sale_rows:
+            sale = dict(zip(sale_cols, sale_row))
+            sale_id = sale.get('id_venta')
+            cliente = get_cliente_full_name(cursor, sale.get('id_cliente')) or 'Sin cliente frecuente'
+            vendedor = get_user_full_name_by_id(sale.get('id_usuario')) or '-'
+            metodo_pago = lookup_foreign_key_display(
+                cursor, 'id_metodo_pago', sale.get('id_metodo_pago'), ['metodo_pago', 'forma_pago']
+            ) or '-'
+            details = details_by_sale.get(sale_id, [])
+            units = sum(int(detail.get('cantidad') or 0) for detail in details)
+            detail_text = ', '.join(
+                f"{detail['repuesto']} (x{int(detail.get('cantidad') or 0)})"
+                for detail in details
+            ) or 'Sin detalle registrado'
+            report_rows.append({
+                'id_venta': sale_id,
+                'numero': f'V-{int(sale_id):06d}' if sale_id is not None else '-',
+                'fecha': str(sale.get('fecha_venta') or ''),
+                'cliente': cliente,
+                'vendedor': vendedor,
+                'metodo_pago': metodo_pago,
+                'repuestos': len(details),
+                'unidades': units,
+                'detalle_repuestos': detail_text,
+                'total': float(sale.get('total') or 0),
+            })
+        return report_rows
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vendedor=None, metodo_pago=None):
+    filtered = []
+    for row in rows:
+        sale_date = str(row.get('fecha') or '').split(' ')[0]
+        if from_date and sale_date and sale_date < from_date:
+            continue
+        if to_date and sale_date and sale_date > to_date:
+            continue
+        if cliente and cliente.casefold() not in str(row.get('cliente') or '').casefold():
+            continue
+        if vendedor and vendedor.casefold() not in str(row.get('vendedor') or '').casefold():
+            continue
+        if metodo_pago and metodo_pago.casefold() != str(row.get('metodo_pago') or '').casefold():
+            continue
+        filtered.append(row)
+    return filtered
 
 
 def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marca=None, estado_repuesto=None, ubicacion=None, stock_bajo_only=False):
@@ -1066,7 +1196,7 @@ def nuevo_usuario():
                 "INSERT INTO usuario (username, password_hash, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, telefono, id_rol, id_estado, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())",
                 (
                     username,
-                    password,
+                    generate_password_hash(password),
                     primer_nombre,
                     segundo_nombre or None,
                     primer_apellido,
@@ -1131,7 +1261,11 @@ def modificar_usuario(id_usuario):
 
         if request.method == 'POST':
             username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip() or usuario.get('password_hash') or ''
+            new_password = request.form.get('password', '').strip()
+            password_hash = (
+                generate_password_hash(new_password)
+                if new_password else usuario.get('password_hash') or ''
+            )
             primer_nombre = request.form.get('primer_nombre', '').strip()
             segundo_nombre = request.form.get('segundo_nombre', '').strip()
             primer_apellido = request.form.get('primer_apellido', '').strip()
@@ -1149,7 +1283,7 @@ def modificar_usuario(id_usuario):
                 "UPDATE usuario SET username = ?, password_hash = ?, primer_nombre = ?, segundo_nombre = ?, primer_apellido = ?, segundo_apellido = ?, correo = ?, telefono = ?, id_rol = ?, id_estado = ? WHERE id_usuario = ?",
                 (
                     username,
-                    password,
+                    password_hash,
                     primer_nombre,
                     segundo_nombre or None,
                     primer_apellido,
@@ -1277,18 +1411,19 @@ def login():
         usuario = request.form.get('username')
         password = request.form.get('password')
         
-        cuenta_valida, error_acceso = validar_usuario_db(usuario, password)
+        cuenta_valida = validar_usuario_db(usuario, password)
         
         if cuenta_valida:
-            session['user_id'] = cuenta_valida['id']
+            user_id = get_user_id_by_username(cuenta_valida['user'])
+            if user_id is None:
+                flash('No se pudo validar la cuenta de usuario.', 'error')
+                return redirect(url_for('login'))
+            session['user_id'] = user_id
             session['user'] = cuenta_valida['user']
-            session['full_name'] = cuenta_valida['full_name']
-            session['nombres'] = cuenta_valida['nombres']
-            session['apellidos'] = cuenta_valida['apellidos']
             session['role'] = cuenta_valida['role']
             return redirect(url_for('dashboard'))
         else:
-            flash(error_acceso, 'error')
+            flash('Usuario o contraseña incorrectos.', 'error')
             return redirect(url_for('login'))
             
     return render_template('login.html')
@@ -1321,6 +1456,7 @@ MANTENIMIENTO_CATALOGOS = [
     ('origenes', 'Origen Vehículo', 'fa-location-dot', ['vehiculo_origen']),
     ('transmisiones', 'Transmisiones', 'fa-gears', ['transmision', 'transmision_vehiculo']),
     ('ubicaciones', 'Ubicaciones', 'fa-map-pin', ['ubicacion', 'bodega', 'ubicacion_bodega']),
+    ('metodos_pago', 'Métodos de Pago', 'fa-credit-card', ['metodo_pago']),
     ('roles', 'Roles', 'fa-book-open', ['rol']),
     ('estado_desarme', 'Estado de Desarme', 'fa-truck-ramp-box', ['estado_desarme']),
     ('estado_pieza_desarme', 'Estado Pieza Desarme', 'fa-boxes-stacked', ['estado_pieza_desarme']),
@@ -1720,6 +1856,9 @@ def inventario():
             except ValueError:
                 params.append(selected_tipo_id)
             base_sql += " WHERE id_tipo_repuesto = ?"
+        # El ID se genera al registrar cada repuesto; ordenarlo de forma descendente
+        # mantiene los registros más recientes al inicio de la paginación.
+        base_sql += " ORDER BY id_repuesto DESC"
         cursor.execute(base_sql, tuple(params))
         rows = cursor.fetchall()
         cols = [c[0] for c in cursor.description]
@@ -2005,6 +2144,16 @@ def agregar_repuesto():
             precio_compra = request.form.get('precio_compra')
             precio_venta = request.form.get('precio_venta')
             stock = request.form.get('stock')
+            negative_field = negative_form_number_label({
+                'Stock mínimo': stock_minimo,
+                'Stock máximo': stock_maximo,
+                'Precio de compra': precio_compra,
+                'Precio de venta': precio_venta,
+                'Stock': stock,
+            })
+            if negative_field:
+                flash(f'{negative_field} no puede ser un número negativo.', 'error')
+                return redirect(url_for('agregar_repuesto'))
             observaciones = request.form.get('observaciones') or None
             fotografia = None
             photo_file = get_uploaded_repuesto_photo()
@@ -2184,6 +2333,16 @@ def modificar_repuesto(id_repuesto):
     cursor = conn.cursor()
     try:
         if request.method == 'POST':
+            negative_field = negative_form_number_label({
+                'Stock mínimo': request.form.get('stock_minimo'),
+                'Stock máximo': request.form.get('stock_maximo'),
+                'Precio de compra': request.form.get('precio_compra'),
+                'Precio de venta': request.form.get('precio_venta'),
+                'Stock': request.form.get('stock'),
+            })
+            if negative_field:
+                flash(f'{negative_field} no puede ser un número negativo.', 'error')
+                return redirect(url_for('modificar_repuesto', id_repuesto=id_repuesto))
             update_data = {
                 'codigo_repuesto': request.form.get('codigo_repuesto'),
                 'id_vehiculo_origen': request.form.get('id_vehiculo_origen'),
@@ -2210,6 +2369,9 @@ def modificar_repuesto(id_repuesto):
             if photo_file and photo_file.filename:
                 ensure_repuesto_photo_column(cursor)
                 update_data['fotografia'] = save_repuesto_photo(photo_file)
+            elif request.form.get('eliminar_fotografia') == '1':
+                ensure_repuesto_photo_column(cursor)
+                update_data['fotografia'] = None
             columns = get_table_columns(cursor, 'repuesto')
             set_cols = [col for col in update_data if col in columns]
             if set_cols:
@@ -2321,6 +2483,154 @@ def eliminar_repuesto(id_repuesto):
 
     return redirect(url_for('inventario'))
 
+def cliente_field(columns, *names):
+    """Encuentra una columna de cliente sin depender de una versión del esquema."""
+    indexed = {column.lower(): column for column in columns}
+    return next((indexed[name] for name in names if name in indexed), None)
+
+
+def cliente_display_from_row(data):
+    parts = [data.get(key) for key in (
+        'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido'
+    ) if data.get(key)]
+    return ' '.join(str(part).strip() for part in parts) or (
+        data.get('nombre_completo') or data.get('nombre_cliente') or data.get('nombre')
+        or f"Cliente #{data.get('id_cliente', '')}"
+    )
+
+
+@app.route('/clientes', methods=['GET', 'POST'])
+def clientes():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        columns = get_table_columns(cursor, 'cliente')
+        id_column = cliente_field(columns, 'id_cliente') or next(
+            (column for column in columns if column.lower().startswith('id')), None
+        )
+        if not id_column:
+            raise ValueError('La tabla cliente no tiene una columna identificadora.')
+
+        editable = [
+            column for column in columns
+            if column.lower() in {
+                'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
+                'nombre_cliente', 'nombre_completo', 'nombre', 'nit', 'telefono',
+                'correo', 'email', 'direccion', 'id_estado'
+            }
+        ]
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+            client_id = request.form.get('id_cliente')
+            if action == 'delete' and client_id:
+                cursor.execute(f"DELETE FROM cliente WHERE [{id_column}] = ?", (client_id,))
+                conn.commit()
+                flash('Cliente eliminado correctamente.', 'success')
+            else:
+                values = {column: request.form.get(column, '').strip() or None for column in editable}
+                # El estado activo se asigna sólo si esa columna existe.
+                if 'id_estado' in values and not values['id_estado']:
+                    values['id_estado'] = 1
+                usable = {key: value for key, value in values.items() if key in columns}
+                if action == 'edit' and client_id:
+                    assignments = ', '.join(f'[{key}] = ?' for key in usable)
+                    cursor.execute(
+                        f"UPDATE cliente SET {assignments} WHERE [{id_column}] = ?",
+                        tuple(usable.values()) + (client_id,)
+                    )
+                    flash('Cliente actualizado correctamente.', 'success')
+                elif action == 'create':
+                    if not usable:
+                        raise ValueError('No se encontraron campos de cliente para registrar.')
+                    cursor.execute(
+                        f"INSERT INTO cliente ({', '.join(f'[{key}]' for key in usable)}) "
+                        f"VALUES ({', '.join('?' for _ in usable)})",
+                        tuple(usable.values())
+                    )
+                    flash('Cliente registrado correctamente.', 'success')
+                conn.commit()
+            return redirect(url_for('clientes'))
+
+        cursor.execute(f"SELECT * FROM cliente ORDER BY [{id_column}] DESC")
+        rows = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        client_data = []
+        for data in rows:
+            client_data.append({
+                'id': data.get(id_column),
+                'nombre': cliente_display_from_row(data),
+                'nit': data.get(cliente_field(columns, 'nit')) or '-',
+                'telefono': data.get(cliente_field(columns, 'telefono', 'celular')) or '-',
+                'correo': data.get(cliente_field(columns, 'correo', 'email')) or '-',
+                'direccion': data.get(cliente_field(columns, 'direccion')) or '-',
+                'fecha': data.get(cliente_field(columns, 'fecha_registro', 'fecha_creacion')),
+                'data': data,
+            })
+        return render_template('clientes.html', clientes=client_data, total_clientes=len(client_data),
+                               editable=editable)
+    except Exception as e:
+        flash(f'No se pudo cargar clientes: {str(e)}', 'error')
+        return render_template('clientes.html', clientes=[], total_clientes=0, editable=[])
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.route('/clientes/reporte-pdf')
+def exportar_pdf_clientes():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        columns = get_table_columns(cursor, 'cliente')
+        id_column = cliente_field(columns, 'id_cliente') or next(
+            (column for column in columns if column.lower().startswith('id')), None
+        )
+        if not id_column:
+            raise ValueError('No se encontró el identificador de clientes.')
+
+        cursor.execute(f"SELECT * FROM cliente ORDER BY [{id_column}]")
+        records = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+        query = request.args.get('q', '').strip().lower()
+        rows = []
+        for data in records:
+            nombre = cliente_display_from_row(data)
+            nit = data.get(cliente_field(columns, 'nit')) or '-'
+            telefono = data.get(cliente_field(columns, 'telefono', 'celular')) or '-'
+            correo = data.get(cliente_field(columns, 'correo', 'email')) or '-'
+            direccion = data.get(cliente_field(columns, 'direccion')) or '-'
+            searchable = f'{nombre} {nit} {telefono} {correo}'.lower()
+            if query and query not in searchable:
+                continue
+            rows.append([nombre, nit, telefono, correo, direccion])
+
+        buffer = io.BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=letter)
+        pdf.setTitle('Reporte de Clientes - Importadora Morales')
+        draw_table_pdf(
+            pdf, 'Reporte de Clientes — Importadora Morales',
+            ['Nombre completo', 'NIT', 'Teléfono', 'Correo', 'Dirección'], rows
+        )
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+        return send_file(
+            buffer, as_attachment=True, download_name='reporte_clientes.pdf',
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        flash(f'No se pudo generar el reporte de clientes: {str(e)}', 'error')
+        return redirect(url_for('clientes'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @app.route('/ventas')
 def ventas():
     if 'user' not in session:
@@ -2342,45 +2652,83 @@ def ventas():
                 repuesto_display_col = detected
 
         cursor.execute(
-            f"SELECT v.id_venta, v.fecha_venta, v.id_cliente, v.id_usuario, v.total, v.observaciones, v.id_estado, v.id_metodo_pago, v.descuento, "
-            f"dv.id_detalle_venta, dv.id_repuesto, dv.precio_unitario, dv.subtotal, dv.cantidad, "
-            f"r.{repuesto_display_col} AS repuesto_nombre "
-            "FROM venta v "
-            "LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta "
-            "LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto "
-            "ORDER BY v.fecha_venta DESC"
+            "SELECT id_venta, fecha_venta, id_cliente, id_usuario, total, "
+            "observaciones, id_metodo_pago, descuento "
+            "FROM venta ORDER BY fecha_venta DESC"
         )
-        rows = cursor.fetchall()
-        cols = [c[0] for c in cursor.description]
+        sale_rows = cursor.fetchall()
+        sale_cols = [c[0] for c in cursor.description]
 
-        for row in rows:
-            data = dict(zip(cols, row))
+        cursor.execute(
+            f"SELECT dv.id_venta, dv.id_repuesto, dv.precio_unitario, "
+            f"dv.subtotal, dv.cantidad, r.{repuesto_display_col} AS repuesto_nombre "
+            "FROM detalle_venta dv "
+            "LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto"
+        )
+        detail_rows = cursor.fetchall()
+        detail_cols = [c[0] for c in cursor.description]
+        detalles_por_venta = {}
+        for detail_row in detail_rows:
+            detail = dict(zip(detail_cols, detail_row))
+            id_venta_detalle = detail.get('id_venta')
+            id_repuesto = detail.get('id_repuesto')
+            if id_venta_detalle is None or id_repuesto is None:
+                continue
+            detalles_por_venta.setdefault(id_venta_detalle, []).append({
+                'codigo': id_repuesto,
+                'repuesto': get_repuesto_display_name(cursor, id_repuesto) or detail.get('repuesto_nombre') or str(id_repuesto),
+                'precio_unitario': detail.get('precio_unitario') or 0.0,
+                'subtotal': detail.get('subtotal') or 0.0,
+                'cantidad': detail.get('cantidad') or 0,
+            })
+
+        ventas_por_id = {}
+        for row in sale_rows:
+            data = dict(zip(sale_cols, row))
             fecha_venta = data.get('fecha_venta') or data.get('fecha') or data.get('fecha_registro') or '-'
             raw_cliente = data.get('id_cliente') or data.get('cliente')
             raw_usuario = data.get('id_usuario') or data.get('usuario')
-            raw_estado = data.get('id_estado')
             raw_metodo_pago = data.get('id_metodo_pago')
             cliente = get_cliente_full_name(cursor, data.get('id_cliente')) or raw_cliente or '-'
             usuario = lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or raw_usuario or '-'
-            estado = lookup_foreign_key_display(cursor, 'id_estado', raw_estado, ['estado']) or raw_estado or '-'
             metodo_pago = lookup_foreign_key_display(cursor, 'id_metodo_pago', raw_metodo_pago, ['metodo_pago', 'forma_pago']) or raw_metodo_pago or '-'
-            repuesto = get_repuesto_display_name(cursor, data.get('id_repuesto')) or data.get('repuesto_nombre') or data.get('id_repuesto') or '-'
+            id_venta = data.get('id_venta')
+            if id_venta not in ventas_por_id:
+                ventas_por_id[id_venta] = {
+                    'id_venta': id_venta,
+                    'fecha_venta': fecha_venta,
+                    'cliente': cliente,
+                    'usuario': usuario,
+                    'total': data.get('total') or 0.0,
+                    'descuento': data.get('descuento') or 0.0,
+                    'observaciones': data.get('observaciones') or '-',
+                    'metodo_pago': metodo_pago,
+                    'items': detalles_por_venta.get(id_venta, []),
+                }
 
-            ventas.append({
-                'id_venta': data.get('id_venta'),
-                'fecha_venta': fecha_venta,
-                'cliente': cliente,
-                'usuario': usuario,
-                'repuesto': repuesto,
-                'precio_unitario': data.get('precio_unitario') or 0.0,
-                'subtotal': data.get('subtotal') or 0.0,
-                'cantidad': data.get('cantidad') or 0,
-                'descuento': data.get('descuento') or 0.0,
-                'total': data.get('total') or 0.0,
-                'observaciones': data.get('observaciones') or '-',
-                'estado': estado,
-                'metodo_pago': metodo_pago,
-            })
+            # Una venta puede tener varios repuestos. Se agrupan para mostrar una
+            # sola fila principal y sus artículos en el detalle desplegable.
+            # id_repuesto es la relación que confirma que hay un artículo en
+            # detalle_venta; no dependemos de que el ID autoincremental llegue
+            # con un nombre específico desde SQL Server.
+            if False:  # El detalle ya se cargó directamente en detalles_por_venta.
+                ventas_por_id[id_venta]['items'].append({
+                    'codigo': data.get('id_repuesto') or '-',
+                    'repuesto': repuesto,
+                    'precio_unitario': data.get('precio_unitario') or 0.0,
+                    'subtotal': data.get('subtotal') or 0.0,
+                    'cantidad': data.get('cantidad') or 0,
+                })
+
+        ventas = list(ventas_por_id.values())
+        ingresos_totales = sum(float(venta['total'] or 0) for venta in ventas)
+        hoy = datetime.now().date()
+        ventas_hoy = sum(
+            1 for venta in ventas
+            if getattr(venta['fecha_venta'], 'date', lambda: venta['fecha_venta'])() == hoy
+        )
+        total_transacciones = len(ventas)
+        report_ventas = get_ventas_reporte()
 
         total_items = len(ventas)
         try:
@@ -2398,6 +2746,89 @@ def ventas():
         end_index = start_index + page_size
         ventas = ventas[start_index:end_index]
 
+        clientes = []
+        metodos_pago = []
+        repuestos = []
+        show_edit_sale = request.args.get('modal') == 'editar'
+        edit_sale = None
+        if request.args.get('modal') in ('nueva', 'editar'):
+            cursor.execute('SELECT id_cliente, nit, correo, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido FROM cliente ORDER BY id_cliente')
+            for row in cursor.fetchall():
+                data = dict(zip([column[0] for column in cursor.description], row))
+                clientes.append({
+                    'id': data['id_cliente'],
+                    'nombre': cliente_display_from_row(data),
+                    'nit': data.get('nit') or '',
+                    'correo': data.get('correo') or '',
+                })
+            cursor.execute('SELECT id_metodo_pago, metodo FROM metodo_pago ORDER BY id_metodo_pago')
+            metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
+            cursor.execute('SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto WHERE stock > 0 ORDER BY codigo_repuesto')
+            product_rows = cursor.fetchall()
+            for row in product_rows:
+                repuestos.append({
+                    'id': row[0],
+                    'codigo': row[1] or str(row[0]),
+                    'nombre': get_repuesto_display_name(cursor, row[0]) or row[1] or str(row[0]),
+                    'precio': float(row[2] or 0),
+                    'stock': row[3] or 0,
+                })
+
+        if show_edit_sale:
+            id_venta_editar = request.args.get('id_venta')
+            if id_venta_editar:
+                cursor.execute(
+                    'SELECT v.id_venta, v.fecha_venta, v.id_cliente, v.id_usuario, v.total, v.observaciones, v.id_metodo_pago, '
+                    'u.username, u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido '
+                    'FROM venta v LEFT JOIN usuario u ON u.id_usuario = v.id_usuario WHERE v.id_venta = ?',
+                    (id_venta_editar,)
+                )
+                sale_row = cursor.fetchone()
+                if sale_row:
+                    sale_data = dict(zip([col[0] for col in cursor.description], sale_row))
+                    cursor.execute(
+                        'SELECT dv.id_repuesto, dv.cantidad, dv.precio_unitario, dv.subtotal, r.codigo_repuesto, r.precio_venta, r.stock '
+                        'FROM detalle_venta dv LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto WHERE dv.id_venta = ?',
+                        (id_venta_editar,)
+                    )
+                    detail_rows = cursor.fetchall()
+                    detail_cols = [col[0] for col in cursor.description]
+                    items = []
+                    for item_row in detail_rows:
+                        item_data = dict(zip(detail_cols, item_row))
+                        items.append({
+                            'id_repuesto': item_data.get('id_repuesto'),
+                            'cantidad': item_data.get('cantidad') or 0,
+                            'precio_unitario': float(item_data.get('precio_unitario') or 0),
+                            'subtotal': float(item_data.get('subtotal') or 0),
+                            'codigo': item_data.get('codigo_repuesto') or str(item_data.get('id_repuesto')),
+                            'nombre': get_repuesto_display_name(cursor, item_data.get('id_repuesto')) or (item_data.get('codigo_repuesto') or str(item_data.get('id_repuesto'))),
+                            'stock': item_data.get('stock') or 0,
+                        })
+                    usuario_nombre = (
+                        lookup_foreign_key_display(cursor, 'id_usuario', sale_data.get('id_usuario'), ['usuario'])
+                        or ' '.join(
+                            part for part in [
+                                sale_data.get('primer_nombre'),
+                                sale_data.get('segundo_nombre'),
+                                sale_data.get('primer_apellido'),
+                                sale_data.get('segundo_apellido'),
+                            ] if part
+                        )
+                        or sale_data.get('username')
+                        or session.get('full_name', session.get('user', 'Usuario'))
+                    )
+                    edit_sale = {
+                        'id_venta': sale_data.get('id_venta'),
+                        'cliente_id': sale_data.get('id_cliente'),
+                        'cliente_nombre': get_cliente_full_name(cursor, sale_data.get('id_cliente')) or 'Sin cliente frecuente',
+                        'usuario': usuario_nombre,
+                        'metodo_pago_id': sale_data.get('id_metodo_pago'),
+                        'observaciones': sale_data.get('observaciones') or '',
+                        'total': float(sale_data.get('total') or 0),
+                        'items': items,
+                    }
+
     except Exception as e:
         print(f"\n⚠️ ERROR EN CONSULTA DE VENTAS: {e}\n")
         flash(f'Error al cargar ventas: {str(e)}', 'error')
@@ -2405,15 +2836,238 @@ def ventas():
         cursor.close()
         conn.close()
 
-    return render_template('ventas.html', ventas=ventas, total_items=total_items, current_page=current_page, total_pages=total_pages)
+    return render_template(
+        'ventas.html',
+        ventas=ventas,
+        total_items=total_items,
+        current_page=current_page,
+        total_pages=total_pages,
+        ingresos_totales=ingresos_totales if 'ingresos_totales' in locals() else 0,
+        ventas_hoy=ventas_hoy if 'ventas_hoy' in locals() else 0,
+        total_transacciones=total_transacciones if 'total_transacciones' in locals() else 0,
+        show_new_sale=request.args.get('modal') == 'nueva',
+        show_edit_sale=show_edit_sale,
+        edit_sale=edit_sale if 'edit_sale' in locals() else None,
+        clientes=clientes if 'clientes' in locals() else [],
+        metodos_pago=metodos_pago if 'metodos_pago' in locals() else [],
+        repuestos=repuestos if 'repuestos' in locals() else [],
+        report_ventas=report_ventas if 'report_ventas' in locals() else [],
+    )
 
-@app.route('/ventas/modificar/<int:id_venta>')
+
+@app.route('/ventas/reporte-pdf')
+def exportar_pdf_ventas():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    from_date = request.args.get('from_date', '').strip()
+    to_date = request.args.get('to_date', '').strip()
+    cliente = request.args.get('cliente', '').strip()
+    vendedor = request.args.get('vendedor', '').strip()
+    metodo_pago = request.args.get('metodo_pago', '').strip()
+    rows = filter_ventas_reporte(
+        get_ventas_reporte(),
+        from_date=from_date or None,
+        to_date=to_date or None,
+        cliente=cliente or None,
+        vendedor=vendedor or None,
+        metodo_pago=metodo_pago or None,
+    )
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    pdf.setTitle('Reporte de Ventas - Importadora Morales')
+    headers = ['N° Venta', 'Fecha', 'Cliente', 'Vendedor', 'Pago', 'Repuestos vendidos', 'Unidades', 'Total']
+    pdf_rows = [
+        [
+            row['numero'],
+            row['fecha'].split(' ')[0] if row['fecha'] else '-',
+            row['cliente'],
+            row['vendedor'],
+            row['metodo_pago'],
+            row['detalle_repuestos'],
+            str(row['unidades']),
+            f"Q {row['total']:,.2f}",
+        ]
+        for row in rows
+    ]
+    draw_table_pdf(pdf, 'Reporte de Ventas — Importadora Morales', headers, pdf_rows)
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name='reporte_ventas.pdf',
+        mimetype='application/pdf',
+    )
+
+
+@app.route('/ventas/nueva', methods=['GET', 'POST'])
+def nueva_venta():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'POST':
+            id_cliente = request.form.get('id_cliente') or None
+            id_metodo_pago = request.form.get('id_metodo_pago') or None
+            observaciones = request.form.get('observaciones', '').strip() or None
+            repuesto_ids = request.form.getlist('id_repuesto[]')
+            quantities = request.form.getlist('cantidad[]')
+            discounts = request.form.getlist('descuento[]')
+
+            if not id_metodo_pago:
+                raise ValueError('Selecciona un metodo de pago.')
+
+            items = []
+            total = 0.0
+            for index, repuesto_id in enumerate(repuesto_ids):
+                if not repuesto_id:
+                    continue
+                try:
+                    quantity = int(quantities[index])
+                    discount = float(discounts[index] or 0)
+                except (IndexError, TypeError, ValueError):
+                    raise ValueError('Revisa las cantidades y descuentos de los repuestos.')
+                if quantity < 1 or discount < 0:
+                    raise ValueError('Las cantidades deben ser mayores que cero y el descuento no puede ser negativo.')
+
+                cursor.execute(
+                    'SELECT id_repuesto, precio_venta, stock FROM repuesto WHERE id_repuesto = ?',
+                    (repuesto_id,)
+                )
+                repuesto = cursor.fetchone()
+                if not repuesto:
+                    raise ValueError('Uno de los repuestos seleccionados ya no existe.')
+                if repuesto.stock < quantity:
+                    raise ValueError(f'El repuesto {repuesto_id} no tiene stock suficiente.')
+
+                price = float(repuesto.precio_venta or 0)
+                subtotal = max(0, price * quantity - discount)
+                total += subtotal
+                items.append((repuesto.id_repuesto, quantity, price, subtotal))
+
+            if not items:
+                raise ValueError('Agrega al menos un repuesto a la venta.')
+
+            cursor.execute(
+                'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
+                'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, ?)',
+                (id_cliente, session.get('user_id'), total, observaciones, id_metodo_pago, 0)
+            )
+            id_venta = cursor.fetchone()[0]
+            for id_repuesto, quantity, price, subtotal in items:
+                cursor.execute(
+                    'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
+                    'VALUES (?, ?, ?, ?, ?)',
+                    (id_venta, id_repuesto, price, subtotal, quantity)
+                )
+            conn.commit()
+            flash('Venta registrada correctamente.', 'success')
+            return redirect(url_for('ventas'))
+
+        cursor.execute('SELECT id_cliente, nit, correo, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido FROM cliente ORDER BY id_cliente')
+        clientes = []
+        for row in cursor.fetchall():
+            data = dict(zip([column[0] for column in cursor.description], row))
+            clientes.append({
+                'id': data['id_cliente'],
+                'nombre': cliente_display_from_row(data),
+                'nit': data.get('nit') or '',
+                'correo': data.get('correo') or '',
+            })
+
+        cursor.execute('SELECT id_metodo_pago, metodo FROM metodo_pago ORDER BY id_metodo_pago')
+        metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
+        cursor.execute('SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto WHERE stock > 0 ORDER BY codigo_repuesto')
+        repuestos = []
+        for row in cursor.fetchall():
+            repuestos.append({
+                'id': row[0],
+                'codigo': row[1] or str(row[0]),
+                'nombre': get_repuesto_display_name(cursor, row[0]) or row[1] or str(row[0]),
+                'precio': float(row[2] or 0),
+                'stock': row[3] or 0,
+            })
+        return redirect(url_for('ventas', modal='nueva'))
+    except Exception as error:
+        conn.rollback()
+        flash(str(error), 'error')
+        return redirect(url_for('nueva_venta'))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/ventas/modificar/<int:id_venta>', methods=['GET', 'POST'])
 def modificar_venta(id_venta):
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    flash('Funcionalidad de modificación de venta aún no implementada.', 'info')
-    return redirect(url_for('ventas'))
+    if request.method == 'POST':
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            id_cliente = request.form.get('id_cliente') or None
+            id_metodo_pago = request.form.get('id_metodo_pago') or None
+            observaciones = request.form.get('observaciones', '').strip() or None
+            repuesto_ids = request.form.getlist('id_repuesto[]')
+            quantities = request.form.getlist('cantidad[]')
+            discounts = request.form.getlist('descuento[]')
+
+            if not id_metodo_pago:
+                raise ValueError('Selecciona un método de pago.')
+
+            items = []
+            total = 0.0
+            for index, repuesto_id in enumerate(repuesto_ids):
+                if not repuesto_id:
+                    continue
+                try:
+                    quantity = int(quantities[index])
+                    discount = float(discounts[index] or 0)
+                except (IndexError, TypeError, ValueError):
+                    raise ValueError('Revisa las cantidades y descuentos de los repuestos.')
+                if quantity < 1 or discount < 0:
+                    raise ValueError('Las cantidades deben ser mayores que cero y el descuento no puede ser negativo.')
+
+                cursor.execute('SELECT id_repuesto, precio_venta, stock FROM repuesto WHERE id_repuesto = ?', (repuesto_id,))
+                repuesto = cursor.fetchone()
+                if not repuesto:
+                    raise ValueError('Uno de los repuestos seleccionados ya no existe.')
+                if repuesto.stock < quantity:
+                    raise ValueError(f'El repuesto {repuesto_id} no tiene stock suficiente.')
+                price = float(repuesto.precio_venta or 0)
+                subtotal = max(0, price * quantity - discount)
+                total += subtotal
+                items.append((repuesto.id_repuesto, quantity, price, subtotal))
+
+            if not items:
+                raise ValueError('Agrega al menos un repuesto a la venta.')
+
+            cursor.execute('DELETE FROM detalle_venta WHERE id_venta = ?', (id_venta,))
+            cursor.execute(
+                'UPDATE venta SET id_cliente = ?, id_metodo_pago = ?, observaciones = ?, total = ?, id_usuario = ? WHERE id_venta = ?',
+                (id_cliente, id_metodo_pago, observaciones, total, session.get('user_id'), id_venta)
+            )
+            for repuesto_id, quantity, price, subtotal in items:
+                cursor.execute(
+                    'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) VALUES (?, ?, ?, ?, ?)',
+                    (id_venta, repuesto_id, price, subtotal, quantity)
+                )
+            conn.commit()
+            flash('Venta actualizada correctamente.', 'success')
+            return redirect(url_for('ventas'))
+        except Exception as e:
+            conn.rollback()
+            flash(str(e), 'error')
+            return redirect(url_for('ventas', modal='editar', id_venta=id_venta))
+        finally:
+            cursor.close(); conn.close()
+
+    return redirect(url_for('ventas', modal='editar', id_venta=id_venta))
 
 @app.route('/ventas/eliminar/<int:id_venta>', methods=['POST'])
 def eliminar_venta(id_venta):
@@ -2423,6 +3077,12 @@ def eliminar_venta(id_venta):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM detalle_devolucion '
+            'WHERE id_devolucion IN (SELECT id_devolucion FROM devolucion WHERE id_venta = ?)',
+            (id_venta,)
+        )
+        cursor.execute('DELETE FROM devolucion WHERE id_venta = ?', (id_venta,))
         cursor.execute('DELETE FROM detalle_venta WHERE id_venta = ?', (id_venta,))
         cursor.execute('DELETE FROM venta WHERE id_venta = ?', (id_venta,))
         deleted_rows = cursor.rowcount

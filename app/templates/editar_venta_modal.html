@@ -1,0 +1,71 @@
+<div class="sale-modal-backdrop" id="edit-sale-modal">
+<form method="post" action="{{ url_for('modificar_venta', id_venta=edit_sale.id_venta) }}" class="sale-form sale-modal-box" id="edit-sale-form">
+<header class="sale-form-header"><h1>Editar V-{{ '%06d'|format(edit_sale.id_venta|int) }}</h1><a href="{{ url_for('ventas') }}" class="close-form" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a></header>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="form-flash {{ category }}"><i class="fa-solid fa-circle-exclamation"></i>{{ message }}</div>{% endfor %}{% endwith %}
+<section class="sale-fields">
+<label class="client-field"><span>Cliente <em>*</em></span><div class="autocomplete" id="edit-client-picker"><input id="edit-client-input" type="search" placeholder="Buscar cliente..." autocomplete="off" value="{{ edit_sale.cliente_nombre if edit_sale.cliente_nombre and edit_sale.cliente_nombre != 'Sin cliente frecuente' else '' }}"><input type="hidden" name="id_cliente" id="edit-client-id" value="{{ edit_sale.cliente_id or '' }}"><div class="suggestions" id="edit-client-suggestions"></div></div><div class="client-choice" id="edit-client-choice" {% if not edit_sale.cliente_id %}hidden{% endif %}><i class="fa-regular fa-user"></i><span>{{ edit_sale.cliente_nombre or 'Sin cliente frecuente' }}</span><button type="button" id="edit-restore-client" aria-label="Buscar cliente"><i class="fa-solid fa-xmark"></i></button></div><button type="button" class="frequent-client" id="edit-clear-client">Sin cliente frecuente</button></label>
+<label>Método de Pago<select name="id_metodo_pago" required>{% for metodo in metodos_pago %}<option value="{{ metodo.id }}" {% if edit_sale.metodo_pago_id == metodo.id %}selected{% endif %}>{{ metodo.nombre }}</option>{% endfor %}</select></label>
+<label>Registrado por<input value="{{ edit_sale.usuario or session.get('full_name', session.get('user', 'Usuario')) }}" disabled></label>
+<label class="observation-field">Observación<textarea name="observaciones" placeholder="Notas adicionales (opcional)...">{{ edit_sale.observaciones or '' }}</textarea></label>
+</section>
+<section class="items-section"><div class="items-heading"><span>Repuestos</span><button type="button" id="edit-add-item"><i class="fa-solid fa-plus"></i> Agregar repuesto</button></div><div class="items-head"><span>REPUESTO</span><span>CANTIDAD</span><span>PRECIO</span><span>DESC. Q</span><span>SUBTOTAL</span><span></span></div><div id="edit-items-list">
+{% for item in edit_sale['items'] %}
+<div class="item-row">
+<div class="product-picker autocomplete">
+<input class="product-input" type="search" placeholder="Buscar repuesto..." autocomplete="off" value="{{ item.codigo }} — {{ item.nombre }}">
+<input class="product-id" name="id_repuesto[]" type="hidden" value="{{ item.id_repuesto }}">
+<div class="suggestions"></div>
+</div>
+<input class="quantity" name="cantidad[]" type="number" min="1" value="{{ item.cantidad }}">
+<span class="price">Q {{ '%.2f'|format(item.precio_unitario or 0) }}</span>
+<input class="discount" name="descuento[]" type="number" min="0" step="0.01" value="0">
+<span class="subtotal">Q {{ '%.2f'|format(item.subtotal or 0) }}</span>
+<button type="button" class="remove-item" title="Quitar repuesto"><i class="fa-solid fa-trash-can"></i></button>
+</div>
+{% endfor %}
+</div></section>
+<section class="sale-total"><span>TOTAL DE LA VENTA</span><strong id="edit-total">Q {{ '%.2f'|format(edit_sale.total or 0) }}</strong></section>
+<footer class="sale-form-actions"><a href="{{ url_for('ventas') }}">Cancelar</a><button type="submit">Guardar Cambios</button></footer>
+</form></div>
+<script>
+const editSaleClients={{ clientes|tojson }}, editSaleProducts={{ repuestos|tojson }};
+const editClientInput=document.getElementById('edit-client-input'), editClientId=document.getElementById('edit-client-id'), editClientSuggestions=document.getElementById('edit-client-suggestions');
+function saleSearch(input, box, list, text, choose){
+  const query=input.value.trim().toLowerCase(); box.innerHTML=''; if(!query){ box.classList.remove('open'); return; }
+  list.filter(item=>text(item).toLowerCase().includes(query)).slice(0,8).forEach(item=>{ const button=document.createElement('button'); button.type='button'; button.innerHTML=text(item); button.onclick=()=>choose(item); box.appendChild(button); }); box.classList.toggle('open', box.children.length>0);
+}
+const editClientPicker=document.getElementById('edit-client-picker'), editClientChoice=document.getElementById('edit-client-choice');
+function restoreEditClient(){
+  editClientChoice.hidden=true; editClientPicker.hidden=false; editClientInput.value=''; editClientId.value=''; editClientInput.focus();
+}
+editClientInput.oninput=()=>saleSearch(editClientInput, editClientSuggestions, editSaleClients, c=>`${c.nombre}<small>${c.nit||c.correo||'Sin datos adicionales'}</small>`, c=>{ editClientInput.value=c.nombre; editClientId.value=c.id; editClientSuggestions.classList.remove('open'); editClientInput.classList.add('selected'); });
+document.getElementById('edit-clear-client').onclick=()=>{ editClientInput.value=''; editClientId.value=''; editClientPicker.hidden=true; editClientChoice.hidden=false; editClientSuggestions.classList.remove('open'); };
+document.getElementById('edit-restore-client').onclick=restoreEditClient;
+const editSaleItems=document.getElementById('edit-items-list');
+const saleMoney=value=>`Q ${Number(value||0).toFixed(2)}`;
+function updateEditTotal(){
+  let total=0; editSaleItems.querySelectorAll('.item-row').forEach(row=>{
+    const product=editSaleProducts.find(p=>String(p.id)===row.querySelector('.product-id').value), quantity=Number(row.querySelector('.quantity').value)||0, discount=Number(row.querySelector('.discount').value)||0, subtotal=product?Math.max(0,product.precio*quantity-discount):0;
+    row.querySelector('.price').textContent=product?saleMoney(product.precio):'—'; row.querySelector('.subtotal').textContent=saleMoney(subtotal); total+=subtotal;
+  }); document.getElementById('edit-total').textContent=saleMoney(total);
+}
+function bindEditItemRow(row){
+  const input=row.querySelector('.product-input'), id=row.querySelector('.product-id'), box=row.querySelector('.suggestions');
+  input.oninput=()=>saleSearch(input, box, editSaleProducts, p=>`${p.codigo} — ${p.nombre}<small>Stock: ${p.stock}</small>`, p=>{ input.value=`${p.codigo} — ${p.nombre}`; id.value=p.id; input.classList.add('selected'); box.classList.remove('open'); updateEditTotal(); });
+  row.querySelector('.quantity').oninput=updateEditTotal;
+  row.querySelector('.discount').oninput=updateEditTotal;
+  row.querySelector('.remove-item').onclick=()=>{ row.remove(); updateEditTotal(); };
+}
+function addEditItem(preselected = null){
+  const row=document.createElement('div'); row.className='item-row';
+  row.innerHTML=`<div class="product-picker autocomplete"><input class="product-input" type="search" placeholder="Buscar repuesto..." autocomplete="off" ${preselected ? 'value="'+preselected.codigo+' — '+preselected.nombre+'"' : ''}><input class="product-id" name="id_repuesto[]" type="hidden" value="${preselected ? preselected.id : ''}"><div class="suggestions"></div></div><input class="quantity" name="cantidad[]" type="number" min="1" value="${preselected ? preselected.cantidad : 1}"><span class="price">${preselected ? saleMoney(preselected.precio) : '—'}</span><input class="discount" name="descuento[]" type="number" min="0" step="0.01" value="0"><span class="subtotal">Q 0.00</span><button type="button" class="remove-item" title="Quitar repuesto"><i class="fa-solid fa-trash-can"></i></button>`;
+  bindEditItemRow(row);
+  editSaleItems.appendChild(row); if(preselected){ updateEditTotal(); }
+}
+document.getElementById('edit-add-item').onclick=()=>addEditItem();
+editSaleItems.querySelectorAll('.item-row').forEach(bindEditItemRow);
+if(editSaleItems.children.length===0){ addEditItem(); }
+updateEditTotal();
+document.addEventListener('click',event=>{ if(!event.target.closest('.autocomplete')) document.querySelectorAll('.suggestions').forEach(box=>box.classList.remove('open')); });
+document.getElementById('edit-sale-form').onsubmit=event=>{ if(!editClientId.value||!editSaleItems.querySelector('.product-id[value]')){ event.preventDefault(); alert('Selecciona un cliente y al menos un repuesto.'); }};
+</script>

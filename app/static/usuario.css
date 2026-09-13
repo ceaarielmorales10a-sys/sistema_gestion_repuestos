@@ -118,6 +118,9 @@ a {
     color: #334155;
 }
 
+/* Ajustes visuales alineados con Mantenimiento. */
+body{background:#f1f5f9}.user-page{background:#f1f5f9}.users-hero,.users-panel{border-radius:11px;box-shadow:0 1px 1px rgba(15,23,42,.02)}.role-info-card{border-radius:9px}.report-tab{border-radius:7px}.report-tab.active{background:linear-gradient(110deg,#2573ff,#1559e7);box-shadow:0 8px 16px rgba(37,99,235,.16)}.report-card{border-radius:11px;background:rgba(255,255,255,.9);box-shadow:0 1px 1px rgba(15,23,42,.02)}.metric-card{border-radius:9px}.role-pill,.status-pill{border-radius:7px}.password-toggle{border-radius:7px}
+
 .metric-card {
     display: flex;
     align-items: center;

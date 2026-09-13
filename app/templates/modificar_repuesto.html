@@ -9,10 +9,8 @@
     <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='modificar_repuesto.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='agregar_repuesto.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='flash-notifications.css') }}">
 </head>
-<body class="add-repuesto-page bg-gray-100 min-h-screen flex flex-col md:flex-row md:items-stretch font-sans antialiased select-none">
+<body class="add-repuesto-page inventory-edit-modal-page bg-gray-100 min-h-screen flex flex-col md:flex-row md:items-stretch font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
         <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
             <i class="fa-solid fa-bars text-lg"></i>
@@ -29,39 +27,33 @@
             </div>
             <nav class="p-4 space-y-1">
                 <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                    <i class="fa-solid fa-chart-pie text-base w-5"></i> Menú Principal
                 </a>
                 <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
                 </a>
-                {% if session.get('role') != 'Bodeguero' %}
-                <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
-                </a>
-                {% endif %}
                 <a href="/inventario" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
                     <i class="fa-solid fa-box text-base w-5"></i> Inventario
                 </a>
-                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                
+                {% if session.get('role') != 'Almacenista' %}
                 <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
                 </a>
                 {% endif %}
+                
                 {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
-                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl flex justify-between items-center hover:bg-slate-800/60 hover:text-white transition-all">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                    </div>
                 </a>
                 {% endif %}
-                {% if session.get('role') != 'Bodeguero' %}
+
                 <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
                 </a>
-                {% endif %}
-                {% if session.get('role') != 'Vendedor' %}
-                <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
-                </a>
-                {% endif %}
+                
                 {% if session.get('role') == 'Administrador del Sistema' %}
                 <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-users text-base w-5"></i> Usuarios
@@ -99,10 +91,9 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div {% if category == 'success' %}data-success-flash{% endif %} class="{% if category == 'success' %}success-flash{% endif %} mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm">
+                    <div class="mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm">
                         <i class="fa-solid {% if category == 'success' %} fa-circle-check {% else %} fa-circle-exclamation {% endif %} text-base"></i>
                         <span>{{ message }}</span>
-                        {% if category == 'success' %}<button type="button" class="success-flash-close" aria-label="Cerrar mensaje">&times;</button>{% endif %}
                     </div>
                 {% endfor %}
             {% endif %}
@@ -140,12 +131,12 @@
                 </div>
             </div>
 
-            <div class="relative z-10">
-                <div class="repuesto-modal">
-            <div class="repuesto-modal-header">
-                <h1>Editar Repuesto</h1>
-                <a href="{{ url_for('inventario') }}" class="modal-close" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
-            </div>
+            <div class="relative z-10 repuesto-modal">
+                <div class="repuesto-modal-header">
+                    <h1>Editar Repuesto</h1>
+                    <a href="/inventario" class="modal-close" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+                </div>
+                <div class="bg-white/90 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden p-6 w-full">
             <form action="/inventario/modificar/{{ repuesto.id_repuesto }}" method="POST" enctype="multipart/form-data" class="repuesto-form space-y-6">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -174,7 +165,7 @@
                                     class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-gray-700 shadow-sm cursor-pointer">
                                 <option value="" disabled {% if not repuesto.id_tipo_repuesto %}selected{% endif %}>Seleccione...</option>
                                 {% for tipo in tipos %}
-                                    <option value="{{ tipo.id }}" data-ubicacion="{{ tipo.id_ubicacion or '' }}" {% if repuesto.id_tipo_repuesto == tipo.id %}selected{% endif %}>{{ tipo.nombre }}</option>
+                                    <option value="{{ tipo.id }}" data-ubicacion-id="{{ tipo.id_ubicacion or '' }}" {% if repuesto.id_tipo_repuesto == tipo.id %}selected{% endif %}>{{ tipo.nombre }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -303,14 +294,13 @@
 
                         <div>
                             <label for="id_ubicacion" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Ubicación</label>
-                            <select id="id_ubicacion" disabled
-                                    class="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-sm text-gray-600 shadow-sm cursor-not-allowed">
+                            <select id="id_ubicacion" name="id_ubicacion" required disabled
+                                    class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-gray-700 shadow-sm cursor-pointer">
                                 <option value="" disabled {% if not repuesto.id_bodega and not repuesto.id_ubicacion %}selected{% endif %}>Seleccione una ubicación</option>
                                 {% for bodega in bodegas %}
                                     <option value="{{ bodega.id }}" {% if repuesto.id_bodega == bodega.id or repuesto.id_ubicacion == bodega.id %}selected{% endif %}>{{ bodega.nombre }}</option>
                                 {% endfor %}
                             </select>
-                            <input type="hidden" id="id_ubicacion_input" name="id_ubicacion" value="{{ repuesto.id_ubicacion or repuesto.id_bodega or '' }}">
                         </div>
 
                         <div>
@@ -318,32 +308,24 @@
                             <input type="text" id="observaciones" name="observaciones" placeholder="Detalles o comentarios..." value="{{ repuesto.observaciones }}"
                                    class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-400 text-gray-700 shadow-sm">
                         </div>
+
+                        <div class="photo-field">
+                            <label for="fotografia" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Fotografía del repuesto</label>
+                            {% if repuesto.fotografia %}<div class="current-photo"><img src="{{ url_for('static', filename=repuesto.fotografia) }}" alt="Fotografía actual del repuesto"><label><input type="checkbox" name="eliminar_fotografia" value="1"> Eliminar fotografía actual</label></div>{% endif %}
+                            <input type="file" id="fotografia-camera" name="fotografia" accept="image/*" capture="environment" class="photo-input-hidden">
+                            <input type="file" id="fotografia-gallery" name="fotografia" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="photo-input-hidden">
+                            <div class="photo-actions"><button type="button" class="photo-action-button" id="take-photo"><i class="fa-solid fa-camera"></i> Cambiar foto</button></div>
+                            <div class="photo-preview" id="photo-preview" hidden><img id="photo-preview-image" alt="Vista previa del repuesto"><span id="photo-preview-name"></span></div>
+                            <small class="photo-help">JPG, PNG o WEBP. Máximo 3 MB.</small>
+                        </div>
                     </div>
 
                 </div>
 
-                <div class="border-t border-blue-100 pt-5">
-                    <span class="block text-xs font-semibold text-blue-600 uppercase tracking-wider mb-2">Fotografía</span>
-                    <div class="flex flex-col sm:flex-row items-start gap-4">
-                        <div id="foto-preview-wrap" class="{% if not repuesto.fotografia %}hidden {% endif %}w-24 h-24 shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                            <img id="foto-preview" src="{% if repuesto.fotografia %}{{ url_for('static', filename=repuesto.fotografia) }}{% endif %}" alt="Fotografía del repuesto" class="w-full h-full object-cover rounded-lg">
-                        </div>
-                        <div class="flex-1 w-full">
-                            <input type="file" id="fotografia-camara" name="fotografia" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden">
-                            <input type="file" id="fotografia-galeria" name="fotografia" accept="image/jpeg,image/png,image/webp" class="hidden">
-                            <div class="flex flex-wrap gap-2">
-                                <label for="fotografia-camara" class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><i class="fa-solid fa-camera"></i> Tomar fotografía</label>
-                                <label for="fotografia-galeria" class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200"><i class="fa-solid fa-image"></i> Subir desde galería</label>
-                            </div>
-                            <p class="mt-2 text-xs text-slate-400">{% if repuesto.fotografia %}La imagen elegida reemplazará la actual.{% else %}JPG, PNG o WEBP; máximo 3 MB.{% endif %}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="modal-actions">
-                    <a href="{{ url_for('inventario') }}" class="secondary-action">Cancelar</a>
+                <div class="modal-actions flex justify-end gap-3 pt-4 border-t border-gray-150">
+                    <a href="/inventario" class="secondary-action">Cancelar</a>
                     <button type="submit" class="primary-action">
-                        Guardar Cambios
+                        <i class="fa-solid fa-floppy-disk text-xs"></i> Guardar Cambios
                     </button>
                 </div>
             </form>
@@ -352,7 +334,6 @@
         </div>
     </main>
 
-    <script src="{{ url_for('static', filename='flash-notifications.js') }}"></script>
     <script>
         const sidebar = document.getElementById('sidebar');
         const mobileToggle = document.getElementById('mobile-menu-button');
@@ -395,30 +376,42 @@
         window.addEventListener('resize', normalizeSidebarOnResize);
         window.addEventListener('DOMContentLoaded', normalizeSidebarOnResize);
 
-        const tipoRepuestoSelect = document.getElementById('id_tipo_repuesto');
+        const tipoSelect = document.getElementById('id_tipo_repuesto');
         const ubicacionSelect = document.getElementById('id_ubicacion');
-        const ubicacionInput = document.getElementById('id_ubicacion_input');
+        const updateLocation = () => {
+            const selectedOption = tipoSelect?.options[tipoSelect.selectedIndex];
+            if (selectedOption && selectedOption.dataset.ubicacionId) {
+                ubicacionSelect.value = selectedOption.dataset.ubicacionId;
+            }
+        };
+        tipoSelect?.addEventListener('change', updateLocation);
+        updateLocation();
 
-        function sincronizarUbicacionPorTipo() {
-            const ubicacionId = tipoRepuestoSelect?.selectedOptions[0]?.dataset.ubicacion || '';
-            if (!ubicacionSelect || !ubicacionInput) return;
-            ubicacionSelect.value = ubicacionId;
-            ubicacionInput.value = ubicacionId;
-        }
-
-        tipoRepuestoSelect?.addEventListener('change', sincronizarUbicacionPorTipo);
-        sincronizarUbicacionPorTipo();
-
-        const photoPreview = document.getElementById('foto-preview');
-        const photoPreviewWrap = document.getElementById('foto-preview-wrap');
-        document.querySelectorAll('#fotografia-camara, #fotografia-galeria').forEach((photoInput) => {
-            photoInput.addEventListener('change', () => {
-            const file = photoInput.files?.[0];
-            if (!file) return;
-            photoPreview.src = URL.createObjectURL(file);
-            photoPreviewWrap?.classList.remove('hidden');
-            });
-        });
+        const cameraInput = document.getElementById('fotografia-camera');
+        const galleryInput = document.getElementById('fotografia-gallery');
+        const photoPreview = document.getElementById('photo-preview');
+        const photoPreviewImage = document.getElementById('photo-preview-image');
+        const photoPreviewName = document.getElementById('photo-preview-name');
+        const showPhotoPreview = (file) => {
+            if (!file) {
+                photoPreview.hidden = true;
+                return;
+            }
+            if (file.size > 3 * 1024 * 1024) {
+                cameraInput.value = '';
+                galleryInput.value = '';
+                photoPreview.hidden = true;
+                alert('La fotografía no puede superar 3 MB.');
+                return;
+            }
+            photoPreviewImage.src = URL.createObjectURL(file);
+            photoPreviewName.textContent = file.name;
+            photoPreview.hidden = false;
+        };
+        document.getElementById('take-photo')?.addEventListener('click', () => cameraInput.click());
+        document.getElementById('choose-photo')?.addEventListener('click', () => galleryInput.click());
+        cameraInput?.addEventListener('change', () => { galleryInput.value = ''; showPhotoPreview(cameraInput.files?.[0]); });
+        galleryInput?.addEventListener('change', () => { cameraInput.value = ''; showPhotoPreview(galleryInput.files?.[0]); });
     </script>
 </body>
 </html>

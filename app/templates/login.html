@@ -36,12 +36,12 @@
                 {% endif %}
             {% endwith %}
 
-            <form action="/" method="POST" class="login-form">
+            <form action="/" method="POST" class="login-form" autocomplete="off">
                 <div class="field-group">
                     <label for="username">Usuario</label>
                     <div class="input-wrap">
                         <span class="input-icon"><i class="fa-regular fa-user"></i></span>
-                        <input type="text" name="username" id="username" required placeholder="Ingrese su usuario">
+                        <input type="text" name="username" id="username" required placeholder="Ingrese su usuario" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-autocomplete="none">
                     </div>
                 </div>
 
