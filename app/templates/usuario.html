@@ -10,8 +10,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='usuario.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='flash-notifications.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+<body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
         <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
             <i class="fa-solid fa-bars text-lg"></i>
@@ -30,45 +32,49 @@
                 <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
                 </a>
+                {% if has_permission('analytics', 'read') %}
                 <a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
                 </a>
-                {% if session.get('role') != 'Bodeguero' %}
+                {% endif %}
+                {% if has_permission('clientes', 'read') %}
                 <a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-users text-base w-5"></i> Clientes
                 </a>
                 {% endif %}
+                {% if has_permission('inventario', 'read') %}
                 <a href="/inventario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-box text-base w-5"></i> Inventario
                 </a>
-                {% if session.get('role') not in ['Almacenista', 'Bodeguero'] %}
+                {% endif %}
+                {% if has_permission('ventas', 'read') %}
                 <a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
                 </a>
                 {% endif %}
-                {% if session.get('role') == 'Administrador del Sistema' or session.get('role') == 'Almacenista' or session.get('role') == 'Vendedor' %}
+                {% if has_permission('prestamos', 'read') %}
                 <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
                 </a>
                 {% endif %}
-                {% if session.get('role') != 'Bodeguero' %}
+                {% if has_permission('devoluciones', 'read') %}
                 <a href="/devoluciones" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
                 </a>
                 {% endif %}
-                {% if session.get('role') != 'Vendedor' %}
+                {% if has_permission('desarme', 'read') %}
                 <a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
                 </a>
                 {% endif %}
-                {% if session.get('role') == 'Administrador del Sistema' %}
+                {% if has_permission('usuarios', 'read') %}
                 <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
                     <i class="fa-solid fa-users text-base w-5"></i> Usuarios
                 </a>
-                <a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
-                </a>
                 {% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>{% endif %}
             </nav>
         </div>
 
@@ -105,10 +111,22 @@
                     <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Administración de Usuarios</h1>
                     <p class="text-sm text-slate-500 mt-1">Gestiona los usuarios y sus permisos del sistema</p>
                 </div>
-                <a href="/usuario/nuevo" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
-                    <i class="fa-solid fa-plus"></i> Nuevo Usuario
-                </a>
+                <div class="flex items-center gap-3">
+                    <button type="button" id="open-role-modal" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
+                        <i class="fa-solid fa-plus"></i> Nuevo Rol
+                    </button>
+                    <a href="/usuario/nuevo" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
+                        <i class="fa-solid fa-plus"></i> Nuevo Usuario
+                    </a>
+                </div>
             </div>
+
+            {% if not permission_tables_available %}
+            <div class="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                <p class="font-semibold">Los permisos de roles todavía no están habilitados en la base de datos.</p>
+                <p class="mt-1">Ejecute <strong>database/roles_permisos.sql</strong> con un usuario administrador de SQL Server. Hasta hacerlo, los cambios no se pueden guardar.</p>
+            </div>
+            {% endif %}
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <div class="rounded-3xl bg-violet-50 border border-violet-100 p-6">
@@ -130,8 +148,47 @@
             <div class="report-header-row">
                 <div class="report-tabs">
                     <button type="button" class="report-tab active" data-view="list"><i class="fa-regular fa-rectangle-list"></i> Lista</button>
+                    <button type="button" class="report-tab" data-view="roles"><i class="fa-solid fa-user-shield"></i> Roles</button>
                     <button type="button" class="report-tab" data-view="report"><i class="fa-solid fa-chart-column"></i> Reportes</button>
                 </div>
+            </div>
+
+            <div id="roles-view" class="view-panel hidden-panel mt-6">
+                {% if roles %}
+                    {% for role in roles %}
+                        <div class="role-card bg-white border border-slate-200 rounded-3xl shadow-sm p-5 mb-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center"><i class="fa-solid fa-user-shield"></i></div>
+                                    <div>
+                                        <h3 class="text-xl font-bold text-slate-900">{{ role.nombre }}</h3>
+                                        <p class="text-sm text-slate-500">{{ role.descripcion or 'Sin descripción' }}</p>
+                                    </div>
+                                </div>
+                                <button type="button" class="open-role-editor text-blue-600 hover:text-blue-800" data-role-id="{{ role.id }}" data-role-name="{{ role.nombre }}" data-role-description="{{ role.descripcion or '' }}" data-permissions='{{ role.permisos|tojson|safe }}'>
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-slate-200">
+                                <p class="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Permisos por módulo</p>
+                                <div class="flex flex-wrap gap-2">
+                                    {% for module_key, module_name in modulos %}
+                                        {% set access = role.permisos.get(module_key, 'none') %}
+                                        {% if access == 'write' %}
+                                            <span class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-xs font-medium">{{ module_name }} — Lectura y escritura</span>
+                                        {% elif access == 'read' %}
+                                            <span class="inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">{{ module_name }} — Solo lectura</span>
+                                        {% else %}
+                                            <span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-3 py-1 text-xs font-medium">{{ module_name }} — Sin acceso</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="bg-white border border-slate-200 rounded-3xl p-6 text-sm text-slate-500">No hay roles creados todavía.</div>
+                {% endif %}
             </div>
 
             <div id="list-view" class="view-panel">
@@ -155,7 +212,6 @@
                             <thead>
                                 <tr class="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
                                     <th class="px-4 py-3">Usuario</th>
-                                    <th class="px-4 py-3">Contraseña</th>
                                     <th class="px-4 py-3">Nombre Completo</th>
                                     <th class="px-4 py-3">Rol</th>
                                     <th class="px-4 py-3">Email</th>
@@ -166,13 +222,8 @@
                             </thead>
                             <tbody>
                                 {% for user in usuarios %}
-                                <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.rol }}">
+                                <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-role-id="{{ user.id_rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.telefono }} {{ user.rol }} {{ user.estado }}">
                                     <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-600">
-                                        <div class="password-cell">
-                                            <span class="password-text">Protegida</span>
-                                        </div>
-                                    </td>
                                     <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-600">
                                         <span class="role-pill">{{ user.rol }}</span>
@@ -188,11 +239,15 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="8" class="px-4 py-8 text-center text-sm text-slate-500">No se encontraron usuarios.</td>
+                                    <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">No se encontraron usuarios.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
+                    </div>
+                    <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-600">
+                        <span>Mostrando {{ usuarios|length }} de {{ total_usuarios }} usuarios. Página {{ current_page }} de {{ total_pages }}.</span>
+                        <div class="flex items-center gap-2">{% if current_page > 1 %}<a class="px-3 py-2 rounded-lg border" href="{{ url_for('usuarios', page=current_page - 1) }}">‹</a>{% endif %}{% for page in range(1, total_pages + 1) %}<a class="px-3 py-2 rounded-lg border {% if page == current_page %}bg-blue-600 text-white{% endif %}" href="{{ url_for('usuarios', page=page) }}">{{ page }}</a>{% endfor %}{% if current_page < total_pages %}<a class="px-3 py-2 rounded-lg border" href="{{ url_for('usuarios', page=current_page + 1) }}">›</a>{% endif %}</div>
                     </div>
                 </div>
             </div>
@@ -216,7 +271,7 @@
                             <input id="date-to" type="date" class="report-input" placeholder="dd/mm/aaaa">
                         </div>
                         <button id="clear-report" type="button" class="secondary-btn">Limpiar</button>
-                        <button id="print-report" type="button" class="primary-btn"><i class="fa-solid fa-print"></i> Imprimir PDF</button>
+                        <button id="print-report" type="button" class="primary-btn"><i class="fa-solid fa-download"></i> Descargar reporte</button>
                     </div>
                 </div>
 
@@ -254,7 +309,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for user in usuarios %}
+                            {% for user in report_usuarios %}
                             <tr class="user-row" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-status="{{ user.estado or '' }}">
                                 <td>{{ user.username }}</td>
                                 <td>{{ user.full_name }}</td>
@@ -275,6 +330,65 @@
             </div>
         </div>
     </main>
+
+    <div id="role-modal" class="fixed inset-0 bg-slate-900/45 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 mx-4">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="role-modal-title" class="text-2xl font-bold text-slate-900">Nuevo Rol</h2>
+                <button type="button" id="close-role-modal" class="text-slate-500 hover:text-slate-700 text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form method="post" action="{{ url_for('guardar_rol_usuario') }}">
+                <input type="hidden" id="role_id" name="role_id" value="">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Nombre del rol <span class="text-red-500">*</span></label>
+                        <input id="role_name" name="role_name" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Descripción</label>
+                        <input id="role_description" name="role_description" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="mb-5">
+                    <h3 class="text-lg font-semibold text-slate-800 mb-3">Permisos por módulo</h3>
+                    <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-semibold text-slate-700">MÓDULO</th>
+                                    <th class="px-4 py-3 text-center font-semibold text-slate-700">SIN ACCESO</th>
+                                    <th class="px-4 py-3 text-center font-semibold text-slate-700">SOLO LECTURA</th>
+                                    <th class="px-4 py-3 text-center font-semibold text-slate-700">LECT. Y ESCRITURA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for module_key, module_name in modulos %}
+                                <tr class="border-t border-slate-200">
+                                    <td class="px-4 py-3 font-medium text-slate-800">{{ module_name }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="radio" name="perm_{{ module_key }}" value="none" checked class="h-4 w-4 text-slate-400">
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="radio" name="perm_{{ module_key }}" value="read" class="h-4 w-4 text-amber-500">
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="radio" name="perm_{{ module_key }}" value="write" class="h-4 w-4 text-emerald-500">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" id="cancel-role-modal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Guardar rol</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='flash-notifications.js') }}"></script>
     <script>
@@ -325,8 +439,7 @@
             });
 
             panels.forEach((panel) => {
-                const isList = panel.id === 'list-view';
-                panel.classList.toggle('hidden-panel', viewName === 'list' ? !isList : isList);
+                panel.classList.toggle('hidden-panel', panel.id !== `${viewName}-view`);
             });
         }
 
@@ -335,13 +448,14 @@
             const roleFilter = document.getElementById('role-filter');
             const rows = document.querySelectorAll('.user-row');
             const query = (searchInput?.value || '').toLowerCase().trim();
-            const roleValue = (roleFilter?.value || '').toString();
+            const roleValue = (roleFilter?.value || '').toString().trim();
 
             rows.forEach((row) => {
                 const searchable = (row.dataset.search || '').toLowerCase();
                 const rowRole = (row.dataset.role || '').toLowerCase();
+                const rowRoleId = (row.dataset.roleId || '').toString();
                 const matchesSearch = !query || searchable.includes(query);
-                const matchesRole = !roleValue || rowRole === roleValue.toLowerCase();
+                const matchesRole = !roleValue || rowRole === roleValue.toLowerCase() || rowRoleId === roleValue;
                 row.style.display = matchesSearch && matchesRole ? '' : 'none';
             });
         }
@@ -353,20 +467,62 @@
         document.getElementById('user-search-input')?.addEventListener('input', applyUserFilters);
         document.getElementById('role-filter')?.addEventListener('change', applyUserFilters);
 
-        document.querySelectorAll('.password-toggle').forEach((button) => {
+        const roleModal = document.getElementById('role-modal');
+        const roleModalTitle = document.getElementById('role-modal-title');
+        const roleIdInput = document.getElementById('role_id');
+        const roleNameInput = document.getElementById('role_name');
+        const roleDescriptionInput = document.getElementById('role_description');
+
+        function openRoleModal(role = null) {
+            if (!roleModal) return;
+            if (role) {
+                roleModalTitle.textContent = 'Editar Rol';
+                roleIdInput.value = role.id || '';
+                roleNameInput.value = role.nombre || '';
+                roleDescriptionInput.value = role.descripcion || '';
+                const checks = document.querySelectorAll('input[name^="perm_"]');
+                checks.forEach((input) => {
+                    input.checked = false;
+                });
+                Object.entries(role.permisos || {}).forEach(([moduleKey, value]) => {
+                    const radio = document.querySelector(`input[name="perm_${moduleKey}"][value="${value}"]`);
+                    if (radio) radio.checked = true;
+                });
+            } else {
+                roleModalTitle.textContent = 'Nuevo Rol';
+                roleIdInput.value = '';
+                roleNameInput.value = '';
+                roleDescriptionInput.value = '';
+                const checks = document.querySelectorAll('input[name^="perm_"]');
+                checks.forEach((input) => {
+                    if (input.value === 'none') input.checked = true;
+                });
+            }
+            roleModal.classList.remove('hidden');
+            roleModal.classList.add('flex');
+        }
+
+        function closeRoleModal() {
+            if (!roleModal) return;
+            roleModal.classList.add('hidden');
+            roleModal.classList.remove('flex');
+        }
+
+        document.getElementById('open-role-modal')?.addEventListener('click', () => openRoleModal());
+        document.getElementById('close-role-modal')?.addEventListener('click', closeRoleModal);
+        document.getElementById('cancel-role-modal')?.addEventListener('click', closeRoleModal);
+        document.querySelectorAll('.open-role-editor').forEach((button) => {
             button.addEventListener('click', () => {
-                const wrapper = button.closest('.password-cell');
-                const text = wrapper.querySelector('.password-text');
-                const passwordValue = text.dataset.password || '';
-                const isHidden = text.textContent.includes('•') || text.textContent === '••••••••';
-
-                text.textContent = isHidden ? passwordValue : '••••••••';
-                button.innerHTML = isHidden ? '<i class="fa-regular fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
-                button.setAttribute('aria-label', isHidden ? 'Ocultar contraseña' : 'Mostrar contraseña');
-                button.setAttribute('title', isHidden ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                const permissions = JSON.parse(button.dataset.permissions || '{}');
+                openRoleModal({
+                    id: button.dataset.roleId,
+                    nombre: button.dataset.roleName,
+                    descripcion: button.dataset.roleDescription,
+                    permisos: permissions
+                });
             });
-        });
-
+});
+        
         function getDateFromValue(value) {
             if (!value) return null;
             const trimmed = String(value).trim();
@@ -470,7 +626,9 @@
         window.addEventListener('resize', normalizeSidebarOnResize);
         window.addEventListener('DOMContentLoaded', () => {
             normalizeSidebarOnResize();
-            setView('list');
+            const hash = window.location.hash.replace('#', '');
+            const initialView = ['list', 'roles', 'report'].includes(hash) ? hash : 'list';
+            setView(initialView);
         });
     </script>
 </body>

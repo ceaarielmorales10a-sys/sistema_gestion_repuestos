@@ -49,11 +49,59 @@ BEGIN
 END;
 GO
 
+/* El trigger antiguo apuntaba a columnas que pertenecían a un diseño anterior.
+    El contrato vigente separa encabezado y detalle de la devolución. */
+IF OBJECT_ID(N'dbo.TR_actualizar_stock_devolucion', N'TR') IS NOT NULL
+     DROP TRIGGER dbo.TR_actualizar_stock_devolucion;
+GO
+CREATE TRIGGER dbo.TR_actualizar_stock_devolucion
+ON dbo.detalle_devolucion
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE r
+    SET r.stock = r.stock + i.cantidad
+    FROM dbo.repuesto r
+    INNER JOIN inserted i ON r.id_repuesto = i.id_repuesto;
+
+    UPDATE dv
+    SET dv.cantidad = dv.cantidad - i.cantidad,
+        dv.subtotal = (dv.cantidad - i.cantidad) * dv.precio_unitario
+    FROM dbo.detalle_venta dv
+    INNER JOIN inserted i ON dv.id_repuesto = i.id_repuesto
+    INNER JOIN dbo.devolucion d ON d.id_devolucion = i.id_devolucion AND dv.id_venta = d.id_venta;
+END;
+GO
+
 IF OBJECT_ID(N'dbo.estado_prestamo', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.estado_prestamo (
         id_estado_prestamo INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
         estado NVARCHAR(100) NOT NULL
     );
+END;
+GO
+
+/* Registrar en inventario la cantidad real entregada en cada préstamo. */
+IF OBJECT_ID(N'dbo.TR_prestamo_repuesto', N'TR') IS NOT NULL
+    DROP TRIGGER dbo.TR_prestamo_repuesto;
+GO
+CREATE TRIGGER dbo.TR_prestamo_repuesto
+ON dbo.detalle_prestamo
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE r
+    SET id_estado_repuesto = CASE WHEN COALESCE(r.stock, 0) > 0 THEN 1 ELSE 3 END
+    FROM dbo.repuesto r
+    INNER JOIN inserted i ON r.id_repuesto = i.id_repuesto;
+
+    INSERT INTO dbo.movimiento_inventario (id_repuesto, id_tipo_movimiento, fecha_movimiento, cantidad, detalle, id_usuario, id_estado)
+    SELECT i.id_repuesto, 3, GETDATE(), i.cantidad, 'Salida por préstamo', p.id_usuario, 1
+    FROM inserted i
+    INNER JOIN dbo.prestamo p ON i.id_prestamo = p.id_prestamo;
 END;
 GO

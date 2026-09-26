@@ -168,6 +168,68 @@ select:focus {
     color: #4067b2;
 }
 
+.permisos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.permiso-badge {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: #fff;
+    border: 1px solid #e0e7ef;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.permiso-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.permiso-modulo {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 2px;
+}
+
+.permiso-nivel {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.perm-write {
+    border-left: 3px solid #10b981;
+}
+
+.perm-write .permiso-nivel {
+    color: #10b981;
+}
+
+.perm-read {
+    border-left: 3px solid #f59e0b;
+}
+
+.perm-read .permiso-nivel {
+    color: #f59e0b;
+}
+
+.perm-none {
+    border-left: 3px solid #9ca3af;
+}
+
+.perm-none .permiso-nivel {
+    color: #9ca3af;
+}
+
 .actions {
     display: flex;
     justify-content: flex-end;

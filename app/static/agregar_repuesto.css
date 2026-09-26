@@ -712,10 +712,147 @@ body.add-repuesto-page .secondary-action {
 
 /* Ajuste final para igualar el modal de edición. */
 body.add-repuesto-page .repuesto-modal {
-    width: min(438px, calc(100vw - 1rem));
+    width: min(720px, calc(100vw - 2rem));
+    height: min(760px, calc(100vh - 2rem));
     max-height: calc(100vh - 2rem);
     display: flex;
     flex-direction: column;
+}
+
+body.add-repuesto-page {
+    overflow: hidden;
+}
+
+body.add-repuesto-page .repuesto-modal-header {
+    flex: 0 0 auto;
+    min-height: 3.9rem;
+    padding: 1rem 1.35rem;
+}
+
+body.add-repuesto-page .repuesto-modal-header h1 {
+    font-size: 1rem;
+}
+
+body.add-repuesto-page .repuesto-modal > .bg-white,
+body.add-repuesto-page .relative.z-10 {
+    min-height: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+body.add-repuesto-page .repuesto-modal > .bg-white {
+    overflow: hidden;
+}
+
+body.add-repuesto-page .relative.z-10 > .bg-white\/90 {
+    min-height: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body.add-repuesto-page .repuesto-form {
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    padding: 1rem 1.35rem 0;
+    gap: 0.75rem;
+    overflow: hidden;
+}
+
+body.add-repuesto-page .repuesto-form > .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    gap: 1rem 1.25rem;
+    padding-right: 0.25rem;
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 {
+    display: block;
+    min-width: 0;
+}
+
+body.add-repuesto-page .repuesto-form > .grid > .space-y-4 > div {
+    margin: 0 0 0.75rem;
+}
+
+body.add-repuesto-page .repuesto-form .form-section-title {
+    margin: 0 0 0.55rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.62rem;
+}
+
+body.add-repuesto-page .repuesto-form label {
+    font-size: 0.62rem !important;
+    line-height: 1.2;
+}
+
+body.add-repuesto-page .repuesto-form input,
+body.add-repuesto-page .repuesto-form select {
+    width: 100%;
+    min-height: 2.35rem;
+    margin-top: 0.3rem;
+    padding: 0.5rem 0.65rem !important;
+    border-radius: 0.45rem !important;
+    font-size: 0.78rem !important;
+}
+
+body.add-repuesto-page .repuesto-form .photo-field {
+    padding-bottom: 0.25rem;
+}
+
+body.add-repuesto-page .modal-actions {
+    flex: 0 0 auto;
+    position: relative;
+    bottom: auto;
+    margin: 0 -1.35rem;
+    padding: 0.85rem 1.35rem;
+    min-height: 4.1rem;
+    background: rgba(255, 255, 255, 0.98);
+}
+
+body.add-repuesto-page .primary-action,
+body.add-repuesto-page .secondary-action {
+    min-width: 10rem;
+    min-height: 2.45rem;
+    border-radius: 0.45rem;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 640px) {
+    body.add-repuesto-page .repuesto-modal {
+        width: calc(100vw - 1rem);
+        height: calc(100vh - 1rem);
+    }
+
+    body.add-repuesto-page .repuesto-form > .grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.add-repuesto-page .repuesto-modal-header,
+    body.add-repuesto-page .repuesto-form {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    body.add-repuesto-page .modal-actions {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    body.add-repuesto-page .primary-action,
+    body.add-repuesto-page .secondary-action {
+        min-width: 0;
+        flex: 1;
+    }
 }
 
 body.add-repuesto-page .repuesto-modal-header {

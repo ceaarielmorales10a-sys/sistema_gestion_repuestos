@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Devoluciones - Importadora Morales</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='devoluciones.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
+  <nav>
+    <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>
+    {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
+    {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
+    {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
+    {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
+    {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake"></i> Préstamos</a>{% endif %}
+    {% if has_permission('devoluciones', 'read') %}<a class="active" href="{{ url_for('devoluciones') }}"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
+    {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
+    {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}
+    {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
+  </nav>
+  <div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div>
+</aside>
+<main>
+<header><div><h1>Devoluciones</h1><p>Gestión de devoluciones por venta</p></div>{% if has_permission('devoluciones', 'write') %}<button class="new-return" type="button" id="open-return"><i class="fa-solid fa-plus"></i> Nueva Devolución</button>{% endif %}</header>
+<div class="tabs"><button class="active" type="button" data-tab="list"><i class="fa-solid fa-rotate-left"></i> Lista</button><button type="button" data-tab="report"><i class="fa-regular fa-file-lines"></i> Reportes</button></div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>{{ message }}</div>{% endfor %}{% endwith %}
+<section id="list-view">
+<div class="summary"><article class="count"><span>Total Devoluciones</span><b>{{ total_devoluciones }}</b><i class="fa-solid fa-rotate-left"></i></article><article class="amount"><span>Monto Total</span><b>Q {{ '{:,.2f}'.format(monto_total or 0) }}</b><i class="fa-solid fa-dollar-sign"></i></article></div>
+<div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="return-search" type="search" placeholder="Buscar por producto, cliente, código o # venta..."></div>
+<section class="card"><div class="table-wrap"><table><thead><tr><th>FECHA</th><th># VENTA</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>TOTAL</th><th>MOTIVO</th><th>ACCIONES</th></tr></thead><tbody>
+{% for item in devoluciones %}{% for detail in item.get('items', []) %}
+<tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones">{% if has_permission('devoluciones', 'write') %}<form action="{{ url_for('eliminar_devolucion', id_devolucion=item.id_devolucion) }}" method="post" onsubmit="return confirm('¿Eliminar esta devolución y ajustar el stock?');"><button title="Eliminar" type="submit"><i class="fa-regular fa-trash-can"></i></button></form>{% else %}<span>-</span>{% endif %}</td></tr>
+{% endfor %}{% else %}<tr><td class="empty" colspan="9">No hay devoluciones registradas.</td></tr>{% endfor %}
+</tbody></table></div><footer><span>Mostrando {{ devoluciones|length }} devoluciones</span></footer></section>
+</section>
+<section id="report-view" hidden>
+  <div class="report-card report-card-panel">
+    <div class="report-title-row">
+      <div class="report-title-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span>Filtros del Reporte</span>
+      </div>
+    </div>
+
+    <form class="report-filters" id="return-report-form" autocomplete="off">
+      <label class="report-field">
+        <span>Fecha Desde</span>
+        <input type="date" name="from_date" placeholder="dd/mm/aaaa">
+      </label>
+      <label class="report-field">
+        <span>Fecha Hasta</span>
+        <input type="date" name="to_date" placeholder="dd/mm/aaaa">
+      </label>
+      <label class="report-field">
+        <span>Cliente</span>
+        <input type="search" name="cliente" placeholder="Buscar cliente...">
+      </label>
+      <label class="report-field report-field-wide">
+        <span>Repuesto (nombre o código)</span>
+        <input type="search" name="repuesto" placeholder="Buscar repuesto...">
+      </label>
+<div class="report-actions">
+        <button type="button" class="secondary-btn" id="clear-return-report">Limpiar filtros</button>
+        <a class="primary-btn" id="return-report-download" href="{{ url_for('exportar_pdf_devoluciones') }}">
+          <i class="fa-solid fa-file-pdf"></i> Descargar PDF
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <div class="report-summary">
+    <article class="report-summary-card report-summary-count">
+      <span>Devoluciones en Período</span>
+      <b id="return-report-count">{{ total_devoluciones }}</b>
+    </article>
+    <article class="report-summary-card report-summary-amount">
+      <span>Monto Total (Q)</span>
+      <b id="return-report-total">Q {{ '{:,.2f}'.format(monto_total or 0) }}</b>
+    </article>
+  </div>
+
+  <div class="report-preview-header">
+    <span>Vista previa del reporte</span>
+    <small><b id="return-report-preview-count">{{ devoluciones|length }}</b> registros</small>
+  </div>
+
+  <div class="report-preview-table-wrap">
+    <table class="report-preview-table">
+      <thead>
+        <tr>
+          <th># VENTA</th>
+          <th>FECHA</th>
+          <th>REPUESTO</th>
+          <th>CÓDIGO</th>
+          <th>CLIENTE</th>
+          <th>CANTIDAD</th>
+          <th>TOTAL (Q)</th>
+          <th>MOTIVO</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in devoluciones %}
+          {% for detail in item.get('items', []) %}
+            <tr class="return-report-row" data-date="{{ item.fecha_devolucion }}" data-client="{{ item.cliente|lower }}" data-repuesto="{{ (detail.nombre ~ ' ' ~ detail.codigo)|lower }}" data-total="{{ detail.subtotal or 0 }}">
+              <td>V-{{ '%06d'|format(item.id_venta|int) }}</td>
+              <td>{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td>
+              <td>{{ detail.nombre }}</td>
+              <td>{{ detail.codigo }}</td>
+              <td>{{ item.cliente }}</td>
+              <td>{{ detail.cantidad }}</td>
+              <td class="money">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td>
+              <td>{{ detail.motivo }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="8" class="empty">No hay devoluciones para mostrar.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+</main>
+{% if has_permission('devoluciones', 'write') %}
+<div class="modal-backdrop" id="return-modal" hidden>
+  <div class="modal return-modal" role="dialog" aria-modal="true" aria-labelledby="return-title">
+    <div class="modal-head">
+      <h2 id="return-title">Nueva Devolución</h2>
+      <button type="button" class="close" id="close-return"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <form action="{{ url_for('nueva_devolucion') }}" method="post" id="return-form">
+      <div class="return-form-step">
+        <label class="return-step-title">1. Buscar venta <span>*</span></label>
+        <div class="sale-search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="return-sale-search" type="text" placeholder="Escribe # de venta o nombre del cliente..." autocomplete="off">
+        </div>
+        <div id="sale-search-list" class="sale-search-list" hidden></div>
+        <input type="hidden" name="id_venta" id="selected-sale-id" required>
+
+        <div class="selected-sale-box" id="selected-sale-box" hidden>
+          <div class="selected-sale-pill">
+            <div class="selected-sale-info">
+              <strong id="selected-sale-code">V-000000</strong>
+              <small id="selected-sale-meta">00/00/0000 • Q 0.00 • Efectivo</small>
+            </div>
+            <button type="button" class="remove-selected-sale" id="remove-selected-sale" aria-label="Quitar venta">×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="return-form-step" id="return-details-panel" hidden>
+        <label class="return-step-title">2. Selecciona los repuestos a devolver <span>*</span></label>
+        <div class="return-items-head">
+          <span>Repuesto</span>
+          <span>Vendido</span>
+          <span>A devolver</span>
+          <span>Subtotal</span>
+        </div>
+        <div id="return-items-list" class="return-items-list"></div>
+      </div>
+
+      <div class="return-form-step" id="return-motive-panel" hidden>
+        <label class="return-step-title">3. Motivo de devolución <span>*</span></label>
+        <select id="return-motive-master" class="return-motive-master">
+          {% for motivo in motivos %}
+            <option value="{{ motivo.id }}">{{ motivo.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="return-submit-panel" hidden>
+      <div class="field-observaciones">
+        <span>Observaciones (opcional)</span>
+        <textarea id="return-observaciones" placeholder="Detalles adicionales sobre la devolución..."></textarea>
+      </div>
+
+      <div class="modal-actions compact-actions">
+        <button type="button" class="secondary" id="cancel-return">Cancelar</button>
+        <button class="primary" type="submit"><i class="fa-solid fa-check"></i> Registrar Devolución</button>
+      </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+<script>
+const sales = {{ ventas_disponibles|tojson }};
+const modal = document.getElementById('return-modal');
+const saleSearch = document.getElementById('return-sale-search');
+const saleSearchList = document.getElementById('sale-search-list');
+const selectedSaleId = document.getElementById('selected-sale-id');
+
+const selectedSaleBox = document.getElementById('selected-sale-box');
+const selectedSaleCode = document.getElementById('selected-sale-code');
+const selectedSaleMeta = document.getElementById('selected-sale-meta');
+const returnDetailsPanel = document.getElementById('return-details-panel');
+const returnItemsList = document.getElementById('return-items-list');
+const returnMotivePanel = document.getElementById('return-motive-panel');
+const returnSubmitPanel = document.getElementById('return-submit-panel');
+const returnMotiveMaster = document.getElementById('return-motive-master');
+const returnForm = document.getElementById('return-form');
+
+function syncSelectedMotives() {
+  if (!returnMotiveMaster) return;
+  const values = returnForm ? returnForm.querySelectorAll('input[name="id_motivo[]"]') : [];
+  values.forEach(input => {
+    input.value = returnMotiveMaster.value;
+  });
+}
+
+function renderSelectedSaleDetails(sale) {
+  if (!sale || !returnItemsList) return;
+
+  const ventaCode = `V-${String(sale.id).padStart(6, '0')}`;
+  const ventaDate = sale.fecha ? new Date(sale.fecha).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Sin fecha';
+  const payment = sale.metodo_pago || 'Efectivo';
+  const total = Number(sale.total || 0);
+
+  if (selectedSaleCode) selectedSaleCode.textContent = ventaCode;
+  if (selectedSaleMeta) selectedSaleMeta.textContent = `${ventaDate} • Q ${Number(total || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • ${payment}`;
+  if (selectedSaleBox) selectedSaleBox.hidden = false;
+  if (!(sale.items || []).length) {
+    if (returnDetailsPanel) returnDetailsPanel.hidden = false;
+    if (returnItemsList) {
+      returnItemsList.innerHTML = '<div class="hint">Esta venta no tiene repuestos disponibles para devolver.</div>';
+    }
+    if (returnMotivePanel) returnMotivePanel.hidden = true;
+    if (returnSubmitPanel) returnSubmitPanel.hidden = true;
+    return;
+  }
+  if (returnDetailsPanel) returnDetailsPanel.hidden = false;
+  if (returnMotivePanel) returnMotivePanel.hidden = false;
+  if (returnSubmitPanel) returnSubmitPanel.hidden = false;
+
+returnItemsList.innerHTML = (sale.items || []).map(item => {
+    const itemCode = item.codigo || item.nombre || `Repuesto ${item.id}`;
+    const itemQty = Number(item.cantidad || 0);
+    const soldQty = Number(item.cantidad_vendida ?? itemQty);
+    const isAvailable = itemQty > 0;
+    const unitPrice = Number(item.precio || 0);
+    const subtotal = itemQty * unitPrice;
+    const soldSubtotal = soldQty * unitPrice;
+    const motiveValue = returnMotiveMaster ? returnMotiveMaster.value : '';
+    return `
+      <div class="return-row${isAvailable ? '' : ' unavailable'}">
+        <label class="check-cell">
+          <input type="checkbox" class="return-item-check" ${isAvailable ? '' : 'disabled'}>
+        </label>
+        <div class="product-cell">
+          <span class="product-name">${item.nombre || itemCode}</span>
+          <small>${itemCode}${isAvailable ? '' : ' · Ya devuelto'}</small>
+        </div>
+        <div class="sold-cell">${soldQty}</div>
+        <div class="qty-cell">
+          <input type="number" class="return-qty-input" min="1" max="${itemQty}" value="0" data-item-id="${item.id}" ${isAvailable ? '' : 'disabled'}>
+          <input type="hidden" name="id_repuesto[]" value="${item.id}" ${isAvailable ? '' : 'disabled'}>
+          <input type="hidden" name="cantidad[]" value="0" ${isAvailable ? '' : 'disabled'}>
+          <input type="hidden" name="id_motivo[]" value="${motiveValue}" ${isAvailable ? '' : 'disabled'}>
+        </div>
+        <div class="subtotal-cell${isAvailable ? '' : ' historic-subtotal'}">Q ${(isAvailable ? subtotal : soldSubtotal).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+      </div>
+    `;
+  }).join('');
+
+  returnItemsList.querySelectorAll('.return-item-check').forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      const row = checkbox.closest('.return-row');
+      if (!row) return;
+      const qtyInput = row.querySelector('.return-qty-input');
+      const repuestoInput = row.querySelector('input[name="id_repuesto[]"]');
+      const cantidadInput = row.querySelector('input[name="cantidad[]"]');
+      const motivoInput = row.querySelector('input[name="id_motivo[]"]');
+      if (!checkbox.checked) {
+        if (qtyInput) qtyInput.value = '0';
+        if (cantidadInput) cantidadInput.value = '0';
+        if (repuestoInput) repuestoInput.disabled = true;
+        if (cantidadInput) cantidadInput.disabled = true;
+        if (motivoInput) motivoInput.disabled = true;
+        return;
+      }
+      if (qtyInput) qtyInput.value = qtyInput.min || '1';
+      if (cantidadInput) cantidadInput.value = qtyInput ? qtyInput.value : '1';
+      if (repuestoInput) repuestoInput.disabled = false;
+      if (cantidadInput) cantidadInput.disabled = false;
+      if (motivoInput) motivoInput.disabled = false;
+    });
+  });
+
+  returnItemsList.querySelectorAll('.return-qty-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const row = input.closest('.return-row');
+      const cantidadInput = row ? row.querySelector('input[name="cantidad[]"]') : null;
+      if (cantidadInput) cantidadInput.value = input.value || '0';
+    });
+  });
+
+  syncSelectedMotives();
+}
+
+function resetSelection() {
+  selectedSaleId.value = '';
+  if (saleSearch) saleSearch.value = '';
+  if (selectedSaleBox) selectedSaleBox.hidden = true;
+  if (returnDetailsPanel) returnDetailsPanel.hidden = true;
+  if (returnMotivePanel) returnMotivePanel.hidden = true;
+  if (returnSubmitPanel) returnSubmitPanel.hidden = true;
+  if (returnItemsList) returnItemsList.innerHTML = '';
+  if (saleSearchList) {
+    saleSearchList.innerHTML = '';
+    saleSearchList.hidden = true;
+  }
+}
+
+function renderSaleList(filter = '') {
+  if (!saleSearchList) return;
+
+  const normalizeSearch = value => String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const query = normalizeSearch(filter);
+
+  if (!query) {
+    saleSearchList.innerHTML = '';
+    saleSearchList.hidden = true;
+    return;
+  }
+
+  const matches = sales.filter(sale => {
+    const text = normalizeSearch(`${sale.id} ${sale.cliente} ${sale.fecha || ''}`);
+    return text.includes(query);
+  });
+
+  if (!matches.length) {
+    saleSearchList.innerHTML = '<div class="sale-option empty-option">No se encontraron ventas.</div>';
+    saleSearchList.hidden = false;
+    return;
+  }
+
+  saleSearchList.innerHTML = matches.map(sale => {
+    const ventaCode = `V-${String(sale.id).padStart(6, '0')}`;
+    const ventaDate = sale.fecha ? new Date(sale.fecha).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const repos = Array.isArray(sale.items) ? sale.items.length : 0;
+    const payment = sale.metodo_pago || 'Efectivo';
+    const total = Number(sale.total || 0);
+    return `
+      <button type="button" class="sale-option" data-sale-id="${sale.id}">
+        <div class="sale-option-main">
+          <span class="sale-code">${ventaCode}</span>
+          <span class="sale-client">${sale.cliente}</span>
+        </div>
+        <div class="sale-option-meta">
+          <span>${ventaDate}</span>
+          <span>• ${repos} repuesto(s)</span>
+          <span>• Q ${total.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span>• ${payment}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  saleSearchList.querySelectorAll('.sale-option').forEach(button => {
+    button.addEventListener('click', () => {
+      const sale = sales.find(item => String(item.id) === button.dataset.saleId);
+      if (!sale) return;
+      selectedSaleId.value = String(sale.id);
+      if (saleSearch) saleSearch.value = `V-${String(sale.id).padStart(6, '0')} - ${sale.cliente}`;
+      if (returnMotiveMaster && !returnMotiveMaster.value) {
+        const firstOption = returnMotiveMaster.options[0];
+        if (firstOption) returnMotiveMaster.value = firstOption.value;
+      }
+      renderSelectedSaleDetails(sale);
+      saleSearchList.innerHTML = '';
+      saleSearchList.hidden = true;
+    });
+  });
+
+  saleSearchList.hidden = false;
+}
+
+if (saleSearch) {
+  saleSearch.addEventListener('input', (event) => {
+    renderSaleList(event.target.value);
+  });
+}
+
+if (returnMotiveMaster) {
+  returnMotiveMaster.addEventListener('change', syncSelectedMotives);
+}
+
+if (document.getElementById('remove-selected-sale')) {
+  document.getElementById('remove-selected-sale').addEventListener('click', () => {
+    resetSelection();
+  });
+}
+
+if (returnForm) {
+  returnForm.addEventListener('submit', (event) => {
+    const selectedRows = [...returnForm.querySelectorAll('.return-row')];
+    const checkedRows = selectedRows.filter(row => row.querySelector('.return-item-check')?.checked);
+    if (!selectedSaleId.value || !checkedRows.length) {
+      event.preventDefault();
+      alert('Debes seleccionar la venta y al menos un repuesto para devolver.');
+      return;
+    }
+
+    [...returnForm.querySelectorAll('.return-row')].forEach(row => {
+      const check = row.querySelector('.return-item-check');
+      if (!check || !check.checked) {
+        row.querySelectorAll('input[name="id_repuesto[]"], input[name="cantidad[]"], input[name="id_motivo[]"]').forEach(input => input.remove());
+      }
+    });
+
+    syncSelectedMotives();
+  });
+}
+
+document.getElementById('open-return')?.addEventListener('click', () => {
+  modal.hidden = false;
+  resetSelection();
+});
+
+document.getElementById('close-return')?.addEventListener('click', () => {
+  modal.hidden = true;
+  resetSelection();
+});
+
+document.getElementById('cancel-return')?.addEventListener('click', () => {
+  modal.hidden = true;
+  resetSelection();
+});
+
+const returnReportForm = document.getElementById('return-report-form');
+const returnReportDownload = document.getElementById('return-report-download');
+if (returnReportForm && returnReportDownload) {
+  returnReportForm.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', () => {
+      const params = new URLSearchParams(new FormData(returnReportForm));
+      returnReportDownload.href = '{{ url_for('exportar_pdf_devoluciones') }}' + (params.toString() ? '?' + params.toString() : '');
+    });
+  });
+  document.getElementById('clear-return-report')?.addEventListener('click', () => {
+    returnReportForm.reset();
+    returnReportDownload.href = '{{ url_for('exportar_pdf_devoluciones') }}';
+  });
+});
+
+resetSelection();
+</script>
+</body></html>

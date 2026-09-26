@@ -10,8 +10,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento-modelos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col md:flex-row font-sans antialiased">
+<body class="module-theme bg-slate-100 min-h-screen flex flex-col md:flex-row font-sans antialiased">
     <div class="md:hidden fixed top-4 left-4 z-40"><button id="mobile-menu-button" class="bg-white text-slate-900 p-3 rounded-xl shadow border"><i class="fa-solid fa-bars"></i></button></div>
     <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
     <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-72 max-w-[18rem] -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:w-64 bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen">
@@ -19,15 +21,15 @@
             <div class="p-6 flex justify-center border-b border-slate-800"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales" class="h-26 w-auto object-contain"></div>
             <nav class="p-4 space-y-1">
                 <a href="{{ url_for('dashboard') }}" class="side-link"><i class="fa-solid fa-house"></i> Menú Principal</a>
-                <a href="/analytics" class="side-link"><i class="fa-solid fa-brain"></i> Analytics IA</a>
-                <a href="/clientes" class="side-link"><i class="fa-solid fa-users"></i> Clientes</a>
-                <a href="{{ url_for('inventario') }}" class="side-link"><i class="fa-solid fa-box"></i> Inventario</a>
-                <a href="/ventas" class="side-link"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>
-                <a href="/prestamos" class="side-link"><i class="fa-solid fa-handshake"></i> Préstamos</a>
-                <a href="/devoluciones" class="side-link"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>
-                <a href="/desarme" class="side-link"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>
-                <a href="/usuario" class="side-link"><i class="fa-solid fa-users-gear"></i> Usuarios</a>
-                <a href="{{ url_for('mantenimiento') }}" class="side-link active"><i class="fa-solid fa-gears"></i> Mantenimiento</a>
+                {% if has_permission('analytics', 'read') %}<a href="/analytics" class="side-link"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('clientes', 'read') %}<a href="/clientes" class="side-link"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
+                {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}" class="side-link"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
+                {% if has_permission('ventas', 'read') %}<a href="/ventas" class="side-link"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos" class="side-link"><i class="fa-solid fa-handshake"></i> Préstamos</a>{% endif %}
+                {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones" class="side-link"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
+                {% if has_permission('desarme', 'read') %}<a href="/desarme" class="side-link"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
+                {% if has_permission('usuarios', 'read') %}<a href="/usuario" class="side-link"><i class="fa-solid fa-users-gear"></i> Usuarios</a>{% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="{{ url_for('mantenimiento') }}" class="side-link active"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
             </nav>
         </div>
         <div class="p-4 border-t border-slate-800 bg-slate-950/40"><div class="mb-3 px-2"><p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p><p class="text-xs font-bold text-slate-200 mt-1 capitalize">{{ user_name }}</p><p class="text-[11px] text-slate-400 capitalize">{{ user_role }}</p></div><a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div>
@@ -60,6 +62,7 @@
                         <div class="table-scroll"><table><thead>{% if catalogo.key == 'modelos' %}<tr><th>#</th><th>MARCA</th><th>NOMBRE</th><th>DESCRIPCIÓN</th><th>ACCIONES</th></tr>{% else %}<tr><th>{{ 'ID_MOTIVO' if catalogo.key == 'motivo_devolucion' else '#' }}</th><th>{{ 'AÑO' if catalogo.key == 'anios' else catalogo.name_label|upper }}</th>{% for field in catalogo.fields %}<th>{{ field.label|upper }}</th>{% endfor %}<th>ACCIONES</th></tr>{% endif %}</thead><tbody>
                             {% for row in catalogo.rows %}<tr data-search="{{ (row.nombre ~ ' ' ~ row.marca ~ ' ' ~ row.descripcion)|lower if catalogo.key == 'modelos' else row.search }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}"{% endif %}><td>{{ row.id if catalogo.key == 'motivo_devolucion' else loop.index }}</td>{% if catalogo.key == 'modelos' %}<td><span class="brand-badge"><i class="fa-solid fa-car"></i>{{ row.marca }}</span></td>{% endif %}<td>{{ row.nombre }}</td>{% if catalogo.key == 'modelos' %}<td>{{ row.descripcion or '—' }}</td>{% else %}{% for field in catalogo.fields %}<td>{{ row.extra_display[field.name] or '—' }}</td>{% endfor %}{% endif %}<td class="actions"><button type="button" class="edit-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}" data-description="{{ row.descripcion or '' }}"{% else %}data-extra='{{ row.extra|tojson }}'{% endif %} title="Editar"><i class="fa-solid fa-pen"></i></button><button type="button" class="delete-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" title="Eliminar"><i class="fa-solid fa-trash"></i></button></td></tr>{% else %}<tr class="empty"><td colspan="{{ 5 if catalogo.key == 'modelos' else 3 + catalogo.fields|length }}">No hay registros en este catálogo.</td></tr>{% endfor %}
                         </tbody></table></div>
+                        <div class="catalog-pagination"><span>Mostrando {{ catalogo.rows|length }} de {{ catalogo.count }} registros. Página {{ catalogo.page }} de {{ catalogo.total_pages }}.</span><div>{% if catalogo.page > 1 %}<a href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page - 1 }}">‹</a>{% endif %}{% for page in range(1, catalogo.total_pages + 1) %}<a class="{% if page == catalogo.page %}active{% endif %}" href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ page }}">{{ page }}</a>{% endfor %}{% if catalogo.page < catalogo.total_pages %}<a href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page + 1 }}">›</a>{% endif %}</div></div>
                     </section>
                     {% endfor %}
                 </div>

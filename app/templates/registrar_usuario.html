@@ -6,8 +6,10 @@
     <title>Nuevo Usuario</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='registrar_usuario.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
 </head>
-<body>
+<body class="module-theme">
     <div class="page-shell">
         <div class="form-card">
             <h2>Nuevo Usuario</h2>
@@ -39,24 +41,24 @@
                 <div class="field-row two-col">
                     <div class="field-group">
                         <label for="field_primer_nombre">Primer Nombre <span>*</span></label>
-                        <input id="field_primer_nombre" name="primer_nombre" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                        <input id="field_primer_nombre" name="primer_nombre" type="text" required autocomplete="chrome-off" autocapitalize="words" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
                     </div>
 
                     <div class="field-group">
                         <label for="field_segundo_nombre">Segundo Nombre</label>
-                        <input id="field_segundo_nombre" name="segundo_nombre" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                        <input id="field_segundo_nombre" name="segundo_nombre" type="text" autocomplete="chrome-off" autocapitalize="words" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
                     </div>
                 </div>
 
                 <div class="field-row two-col">
                     <div class="field-group">
                         <label for="field_primer_apellido">Primer Apellido <span>*</span></label>
-                        <input id="field_primer_apellido" name="primer_apellido" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                        <input id="field_primer_apellido" name="primer_apellido" type="text" required autocomplete="chrome-off" autocapitalize="words" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
                     </div>
 
                     <div class="field-group">
                         <label for="field_segundo_apellido">Segundo Apellido</label>
-                        <input id="field_segundo_apellido" name="segundo_apellido" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                        <input id="field_segundo_apellido" name="segundo_apellido" type="text" autocomplete="chrome-off" autocapitalize="words" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
                     </div>
                 </div>
 
@@ -66,7 +68,7 @@
                         <select id="field_rol_id" name="rol_id" required autocomplete="off" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
                             <option value="">Selecciona un rol</option>
                             {% for role in roles %}
-                            <option value="{{ role[0] }}">{{ role[1] }}</option>
+                            <option value="{{ role.id }}" data-permisos='{{ role.permisos|tojson|safe }}' data-descripcion="{{ role.descripcion }}">{{ role.nombre }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -79,8 +81,8 @@
 
                 <div class="field-row one-col">
                     <div class="field-group">
-                        <label for="field_telefono">Teléfono</label>
-                        <input id="field_telefono" name="telefono" type="text" autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
+                        <label for="field_telefono">Teléfono <span>*</span></label>
+                        <input id="field_telefono" name="telefono" type="text" required autocomplete="chrome-off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none">
                     </div>
                 </div>
 
@@ -94,8 +96,10 @@
                 </div>
 
                 <div id="permissions-box" class="permissions-box" aria-live="polite">
-                    <strong>Permisos del rol:</strong>
-                    <span>Selecciona un rol para ver sus permisos.</span>
+                    <div id="permissions-content">
+                        <strong>Permisos del rol:</strong>
+                        <span>Selecciona un rol para ver sus permisos.</span>
+                    </div>
                 </div>
 
                 <div class="actions">
@@ -108,11 +112,66 @@
 
     <script src="{{ url_for('static', filename='registrar_usuario.js') }}"></script>
     <script>
+        const MODULOS = [
+            ['analytics', 'Analytics IA'],
+            ['clientes', 'Clientes'],
+            ['inventario', 'Inventario'],
+            ['ventas', 'Ventas'],
+            ['prestamos', 'Préstamos'],
+            ['devoluciones', 'Devoluciones'],
+            ['desarme', 'Desarme de Vehículos'],
+            ['usuarios', 'Usuarios'],
+            ['mantenimiento', 'Mantenimiento'],
+        ];
+
+        function getPermissionLabel(value) {
+            switch (value) {
+                case 'write': return { text: 'Lectura y escritura', class: 'perm-write' };
+                case 'read': return { text: 'Solo lectura', class: 'perm-read' };
+                default: return { text: 'Sin acceso', class: 'perm-none' };
+            }
+        }
+
+        function renderPermissions(permisos) {
+            const container = document.getElementById('permissions-content');
+            if (!permisos) {
+                container.innerHTML = '<strong>Permisos del rol:</strong><span>Selecciona un rol para ver sus permisos.</span>';
+                return;
+            }
+            let html = '<strong>Permisos del rol:</strong><div class="permisos-grid">';
+            MODULOS.forEach(([key, name]) => {
+                const perm = getPermissionLabel(permisos[key] || 'none');
+                html += `<span class="permiso-badge ${perm.class}"><span class="permiso-modulo">${name}</span><span class="permiso-nivel">${perm.text}</span></span>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function restrictTextInput(input) {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[0-9]/g, '');
+            });
+        }
+
         // Neutraliza el foco inicial y remueve atributos persistentes de autocompletado
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('form input').forEach(input => {
                 input.setAttribute('autocomplete', 'chrome-off');
             });
+
+            ['field_primer_nombre', 'field_segundo_nombre', 'field_primer_apellido', 'field_segundo_apellido'].forEach((id) => {
+                const input = document.getElementById(id);
+                if (input) restrictTextInput(input);
+            });
+
+            const rolSelect = document.getElementById('field_rol_id');
+            if (rolSelect) {
+                rolSelect.addEventListener('change', (e) => {
+                    const selectedOption = e.target.selectedOptions[0];
+                    const permisos = selectedOption.dataset.permisos ? JSON.parse(selectedOption.dataset.permisos) : null;
+                    renderPermissions(permisos);
+                });
+            }
         });
     </script>
 </body>

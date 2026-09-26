@@ -1,0 +1,969 @@
+/* =========================================================
+   PÁGINA DE PRÉSTAMOS
+   ========================================================= */
+
+.prestamos-page .loan-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 18px;
+}
+
+.prestamos-page .loan-summary article {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 88px;
+  padding: 16px 52px 16px 18px;
+  border: 1px solid #dfe6f0;
+  border-left-width: 4px;
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+  overflow: hidden;
+}
+
+.prestamos-page .loan-summary article span {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.prestamos-page .loan-summary article b {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+  line-height: 1.2;
+  color: #172b4d;
+}
+
+.prestamos-page .loan-summary article i {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.prestamos-page .loan-active {
+  background: #edf5ff;
+  border-left-color: #2c7efc !important;
+  color: #1f5ec9;
+}
+
+.prestamos-page .loan-active i {
+  background: #dbeafe;
+  color: #2878ed;
+}
+
+.prestamos-page .loan-overdue {
+  background: #fff2f2;
+  border-left-color: #ff5d64 !important;
+  color: #cf2830;
+}
+
+.prestamos-page .loan-overdue i {
+  background: #ffdfe0;
+  color: #ff3b46;
+}
+
+.prestamos-page .loan-value {
+  background: #fff;
+  border-left-color: #b37df5 !important;
+  color: #1a2236;
+}
+
+.prestamos-page .loan-value i {
+  background: #f1e7ff;
+  color: #9a4ff0;
+}
+
+
+/* =========================================================
+   NAVEGACIÓN
+   ========================================================= */
+
+.prestamos-page .loan-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prestamos-page .loan-nav-link .loan-overdue-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ef1d2f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+
+/* =========================================================
+   FILTROS
+   ========================================================= */
+
+.prestamos-page .loan-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: transparent;
+  margin: 0 0 14px;
+  border: 0;
+  padding: 0;
+}
+
+.prestamos-page .loan-filters .search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.prestamos-page .loan-filters i {
+  font-size: 15px;
+  color: #7e8da3;
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.prestamos-page .loan-filters input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #cfd9e7;
+  border-radius: 10px;
+  background: #fff;
+  color: #29466c;
+  font-size: 13px;
+  min-width: 0;
+  outline: none;
+  padding: 0 14px 0 42px;
+  box-sizing: border-box;
+}
+
+.prestamos-page .loan-filters input::placeholder {
+  color: #7d8da4;
+}
+
+.prestamos-page .loan-filters select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #cfd9e7;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #334b6e;
+  background: #fff;
+  font-size: 12px;
+  appearance: none;
+
+  background-image:
+    linear-gradient(45deg, transparent 50%, #617796 50%),
+    linear-gradient(135deg, #617796 50%, transparent 50%);
+
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 30px;
+  box-sizing: border-box;
+}
+
+
+/* =========================================================
+   REPORTES
+   ========================================================= */
+
+.prestamos-page .loan-report-card,
+.prestamos-page .loan-report-preview {
+  border: 1px solid #dfe5ee;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.prestamos-page .loan-report-card {
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.prestamos-page .loan-report-heading {
+  color: #19365d;
+  margin-bottom: 16px;
+}
+
+.prestamos-page .loan-report-heading div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+}
+
+.prestamos-page .loan-report-heading i {
+  color: #2563eb;
+}
+
+.prestamos-page .loan-report-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.prestamos-page .loan-report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #19365d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.prestamos-page .loan-report-filters input,
+.prestamos-page .loan-report-filters select {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid #cfd9e7;
+  border-radius: 9px;
+  background: #fff;
+  color: #29466c;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.prestamos-page .loan-report-filters input:focus,
+.prestamos-page .loan-report-filters select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+
+.prestamos-page .loan-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prestamos-page .loan-report-actions .download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.prestamos-page .loan-report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.prestamos-page .loan-report-summary article {
+  min-height: 82px;
+  padding: 16px 18px;
+  border: 1px solid #dfe6f0;
+  border-left: 4px solid #2563eb;
+  border-radius: 12px;
+  background: #edf5ff;
+}
+
+.prestamos-page .loan-report-summary article:nth-child(2) {
+  border-left-color: #2c7efc;
+  background: #edf5ff;
+}
+
+.prestamos-page .loan-report-summary article:nth-child(3) {
+  border-left-color: #a855f7;
+  background: #fbf5ff;
+}
+
+.prestamos-page .loan-report-summary span {
+  display: block;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.prestamos-page .loan-report-summary article:nth-child(3) span {
+  color: #7e22ce;
+}
+
+.prestamos-page .loan-report-summary b {
+  display: block;
+  margin-top: 8px;
+  color: #19365d;
+  font-size: 21px;
+}
+
+.prestamos-page .loan-report-preview {
+  overflow: hidden;
+}
+
+.prestamos-page .loan-report-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px;
+  color: #19365d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prestamos-page .loan-report-preview-heading small {
+  color: #7e8da3;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.prestamos-page .loan-report-preview table {
+  min-width: 1050px;
+}
+
+
+/* =========================================================
+   TARJETA Y CONTENEDOR DE TABLA
+   ========================================================= */
+
+.prestamos-page .card {
+  border: 1px solid #dfe5ee;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.prestamos-page .table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+
+/* =========================================================
+   TABLA PRINCIPAL
+   ========================================================= */
+
+/*
+   IMPORTANTE:
+   Se usa AUTO en lugar de FIXED para que el navegador
+   respete los anchos mínimos de las columnas.
+*/
+
+.prestamos-page table {
+  width: 100%;
+  min-width: 1500px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+}
+
+
+/* =========================================================
+   ENCABEZADOS
+   ========================================================= */
+
+.prestamos-page thead th {
+  height: 58px;
+  min-height: 58px;
+
+  padding: 10px 14px;
+
+  border-bottom: 1px solid #e4eaf2;
+  border-right: 1px solid #edf1f5;
+
+  color: #5d6d83;
+
+  font-size: 11px;
+  font-weight: 800;
+
+  letter-spacing: 0.04em;
+
+  text-align: left;
+
+  background: #f7f9fc;
+
+  vertical-align: middle;
+
+  text-transform: uppercase;
+
+  line-height: 1.25;
+
+  /*
+     Permite que:
+     F. DEVOLUCIÓN ESTIMADA
+     se divida en dos líneas.
+  */
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+
+  box-sizing: border-box;
+}
+
+.prestamos-page thead th:last-child {
+  border-right: none;
+}
+
+
+/* =========================================================
+   CELDAS
+   ========================================================= */
+
+.prestamos-page tbody td {
+  padding: 12px 10px;
+
+  border-bottom: 1px solid #edf1f5;
+
+  font-size: 12px;
+
+  color: #234160;
+
+  white-space: nowrap;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  vertical-align: middle;
+
+  box-sizing: border-box;
+}
+
+.prestamos-page tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.prestamos-page .loan-row {
+  background: #fff;
+}
+
+.prestamos-page .loan-row-continuation td:nth-child(1),
+.prestamos-page .loan-row-continuation td:nth-child(2),
+.prestamos-page .loan-row-continuation td:nth-child(3),
+.prestamos-page .loan-row-continuation td:nth-child(6),
+.prestamos-page .loan-row-continuation td:nth-child(7),
+.prestamos-page .loan-row-continuation td:nth-child(8),
+.prestamos-page .loan-row-continuation td:nth-child(9),
+.prestamos-page .loan-row-continuation td:nth-child(10) {
+  display: none;
+}
+
+.prestamos-page .loan-report-row-continuation td:nth-child(1),
+.prestamos-page .loan-report-row-continuation td:nth-child(2),
+.prestamos-page .loan-report-row-continuation td:nth-child(3),
+.prestamos-page .loan-report-row-continuation td:nth-child(6),
+.prestamos-page .loan-report-row-continuation td:nth-child(7),
+.prestamos-page .loan-report-row-continuation td:nth-child(8) {
+  display: none;
+}
+
+.prestamos-page .loan-row .product {
+  font-weight: 700;
+  color: #19365d;
+
+  white-space: normal;
+
+  overflow: visible;
+
+  text-overflow: unset;
+
+  line-height: 1.35;
+}
+
+
+/* =========================================================
+   ANCHOS DE LAS COLUMNAS
+   ========================================================= */
+
+/* 1. CÓDIGO */
+.prestamos-page thead th:nth-child(1),
+.prestamos-page tbody td:nth-child(1) {
+  width: 120px !important;
+  min-width: 120px !important;
+}
+
+
+/* 2. REPUESTO */
+.prestamos-page thead th:nth-child(2),
+.prestamos-page tbody td:nth-child(2) {
+  width: 300px !important;
+  min-width: 300px !important;
+}
+
+
+/* 3. CLIENTE */
+.prestamos-page thead th:nth-child(3),
+.prestamos-page tbody td:nth-child(3) {
+  width: 250px !important;
+  min-width: 250px !important;
+}
+
+
+/* 4. CANTIDAD */
+.prestamos-page thead th:nth-child(4),
+.prestamos-page tbody td:nth-child(4) {
+  width: 90px !important;
+  min-width: 90px !important;
+}
+
+
+/* 5. PRECIO UNITARIO */
+.prestamos-page thead th:nth-child(5),
+.prestamos-page tbody td:nth-child(5) {
+  width: 150px !important;
+  min-width: 150px !important;
+}
+
+
+/* =========================================================
+   6. F. PRÉSTAMO
+   ========================================================= */
+
+.prestamos-page thead th:nth-child(6),
+.prestamos-page tbody td:nth-child(6) {
+  width: 180px !important;
+  min-width: 180px !important;
+  max-width: 180px !important;
+
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+
+  box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   7. F. DEVOLUCIÓN ESTIMADA
+   ========================================================= */
+
+.prestamos-page thead th:nth-child(7),
+.prestamos-page tbody td:nth-child(7) {
+  width: 240px !important;
+  min-width: 240px !important;
+  max-width: 240px !important;
+
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+
+  box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   8. REGISTRADO POR
+   ========================================================= */
+
+.prestamos-page thead th:nth-child(8),
+.prestamos-page tbody td:nth-child(8) {
+  width: 160px !important;
+  min-width: 160px !important;
+}
+
+
+/* =========================================================
+   CORRECCIÓN EXTRA PARA LOS ENCABEZADOS DE FECHA
+   ========================================================= */
+
+.prestamos-page thead th:nth-child(6) {
+  white-space: nowrap !important;
+  text-align: left !important;
+}
+
+.prestamos-page thead th:nth-child(7) {
+  white-space: normal !important;
+  text-align: left !important;
+  line-height: 1.2 !important;
+}
+
+
+/* =========================================================
+   SEPARACIÓN VISUAL ENTRE LAS FECHAS
+   ========================================================= */
+
+.prestamos-page thead th:nth-child(6) {
+  border-right: 1px solid #d8e0ea !important;
+}
+
+.prestamos-page thead th:nth-child(7) {
+  border-right: 1px solid #d8e0ea !important;
+}
+
+
+/* =========================================================
+   ESTADOS
+   ========================================================= */
+
+.prestamos-page .status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 74px;
+
+  padding: 6px 10px;
+
+  border-radius: 999px;
+
+  font-size: 10px;
+  font-weight: 700;
+
+  line-height: 1;
+
+  border: 1px solid transparent;
+}
+
+.prestamos-page .status-activo {
+  background: #eaf3ff;
+  color: #1f6fe5;
+  border-color: rgba(31, 111, 229, 0.2);
+}
+
+.prestamos-page .status-vencido {
+  background: #ffefef;
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.18);
+}
+
+.prestamos-page .status-pagado {
+  background: #f3eefe;
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.16);
+}
+
+
+/* =========================================================
+   ACCIONES
+   ========================================================= */
+
+.prestamos-page .actions {
+  min-width: 150px;
+}
+
+.prestamos-page .actions form {
+  display: inline-block;
+  margin: 0 5px 0 0;
+}
+
+.prestamos-page .actions button {
+  border: 1px solid;
+  border-radius: 6px;
+  background: #fff;
+
+  padding: 5px 8px;
+
+  font-size: 10px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  line-height: 1.2;
+}
+
+.prestamos-page .action-return {
+  border-color: #2ecf7d !important;
+  color: #19a65a;
+}
+
+.prestamos-page .action-paid {
+  border-color: #b071f8 !important;
+  color: #8b42eb;
+}
+
+.prestamos-page .done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  color: #1ba866;
+
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.prestamos-page .done i {
+  font-size: 10px;
+}
+
+
+/* =========================================================
+   FORMULARIO
+   ========================================================= */
+
+.prestamos-page .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.prestamos-page .loan-notes {
+  margin-top: 13px;
+}
+
+.prestamos-page .loan-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 110px 32px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.prestamos-page .loan-item select,
+.prestamos-page .loan-item input,
+.prestamos-page .field input,
+.prestamos-page .field select,
+.prestamos-page .loan-notes textarea {
+  width: 100%;
+  height: 38px;
+
+  border: 1px solid #ccd5e2;
+  border-radius: 8px;
+
+  background: #fff;
+
+  color: #2d4467;
+
+  padding: 0 10px;
+
+  font-size: 12px;
+
+  box-sizing: border-box;
+}
+
+.prestamos-page .loan-notes textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.prestamos-page .remove-item {
+  border: none;
+  background: transparent;
+  color: #e36f72;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+
+/* =========================================================
+   MODAL
+   ========================================================= */
+
+.prestamos-page .modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prestamos-page .modal-head h2 {
+  margin: 0 0 4px;
+  color: #20395f;
+  font-size: 18px;
+}
+
+.prestamos-page .modal-head p {
+  margin: 0;
+  color: #62748d;
+  font-size: 12px;
+}
+
+.prestamos-page .close {
+  border: none;
+  background: #f1f5f9;
+
+  width: 34px;
+  height: 34px;
+
+  border-radius: 8px;
+
+  color: #49627f;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   RESPONSIVE - 980px
+   ========================================================= */
+
+@media (max-width: 980px) {
+
+  .prestamos-page .loan-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .prestamos-page .loan-filters {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 10px 12px;
+  }
+
+  .prestamos-page .loan-filters select {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   RESPONSIVE - 900px
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .prestamos-page .loan-report-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* =========================================================
+   RESPONSIVE - 800px
+   ========================================================= */
+
+@media (max-width: 800px) {
+
+  .prestamos-page main {
+    padding: 20px 12px;
+  }
+
+  .prestamos-page header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .prestamos-page .new-return {
+    font-size: 11px;
+    padding: 9px 12px;
+  }
+
+  .prestamos-page .summary article {
+    min-height: 70px;
+    padding: 13px 46px 13px 14px;
+  }
+
+  .prestamos-page .summary article b {
+    font-size: 17px;
+  }
+
+  .prestamos-page .table-wrap {
+    overflow: visible;
+  }
+
+  .prestamos-page table {
+    min-width: 0;
+    display: block;
+  }
+
+  .prestamos-page thead {
+    display: none;
+  }
+
+  .prestamos-page tbody,
+  .prestamos-page tbody tr {
+    display: block;
+  }
+
+  .prestamos-page .loan-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid #edf1f5;
+  }
+
+  .prestamos-page .loan-row td {
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 12px;
+
+    padding: 7px 0;
+
+    border: none;
+
+    white-space: normal;
+
+    text-align: right;
+
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .prestamos-page .loan-row td::before {
+    content: attr(data-label);
+
+    font-size: 9px;
+    font-weight: 700;
+
+    letter-spacing: 0.04em;
+
+    color: #7587a0;
+
+    text-align: left;
+
+    text-transform: uppercase;
+  }
+
+  .prestamos-page .loan-row td.product {
+    display: block;
+    text-align: left;
+  }
+
+  .prestamos-page .loan-row td.product::before {
+    display: none;
+  }
+
+  .prestamos-page .loan-row .actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .prestamos-page .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================================================
+   RESPONSIVE - 600px
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .prestamos-page .loan-report-filters,
+  .prestamos-page .loan-report-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .prestamos-page .loan-report-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Préstamos - Importadora Morales</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='devoluciones.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='prestamos.css') }}">
+</head>
+<body class="module-theme prestamos-page">
+<aside class="sidebar"><div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div><nav>
+<a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}{% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}{% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}{% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}{% if has_permission('prestamos', 'read') %}<a class="active loan-nav-link" href="{{ url_for('prestamos') }}"><i class="fa-solid fa-handshake"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}{% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}{% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}{% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
+</nav><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
+<main>
+<header><div><h1>Préstamos de Repuestos</h1><p>Control de repuestos entregados en préstamo</p></div>{% if has_permission('prestamos', 'write') %}<button class="new-return" type="button" id="open-loan"><i class="fa-solid fa-plus"></i> Nuevo Préstamo</button>{% endif %}</header>
+<div class="tabs"><button class="active" type="button" data-tab="list"><i class="fa-solid fa-handshake"></i> Lista</button><button type="button" data-tab="report"><i class="fa-regular fa-file-lines"></i> Reportes</button></div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>{{ message }}</div>{% endfor %}{% endwith %}
+<section id="list-view">
+<div class="summary loan-summary"><article class="loan-active"><span>Préstamos Activos</span><b>{{ activos }}</b><i class="fa-solid fa-handshake"></i></article><article class="loan-overdue"><span>Vencidos</span><b>{{ vencidos }}</b><i class="fa-solid fa-circle-exclamation"></i></article><article class="loan-value"><span>Valor en Préstamo</span><b>Q {{ '{:,.2f}'.format(valor_prestamo or 0) }}</b><i class="fa-solid fa-dollar-sign"></i></article></div>
+<div class="search loan-filters">
+  <div class="search-wrap">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input id="loan-search" type="search" placeholder="Buscar por repuesto, código o cliente...">
+  </div>
+  <select id="state-filter">
+    <option value="">Todos los estados</option>
+    {% for estado in estados %}<option value="{{ estado.nombre|lower }}">{{ estado.nombre }}</option>{% endfor %}
+  </select>
+</div>
+<section class="card"><div class="table-wrap"><table><thead><tr><th>#</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>PRECIO UNIT.</th><th>F. PRÉSTAMO</th><th>F. DEVOLUCIÓN<br>ESTIMADA</th><th>REGISTRADO<br>POR</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>
+{% set loan_counter = 1 %}
+{% for loan in prestamos %}
+  {% set item_count = loan['items']|length %}
+  {% for item in loan['items'] %}
+  <tr class="loan-row{% if not loop.first %} loan-row-continuation{% endif %}" data-state="{{ loan.estado|lower }}" data-search="{{ item.codigo }} {{ item.nombre }} {{ loan.cliente }} {{ loan.usuario }}" data-loan-id="{{ loan.id_prestamo }}">
+    {% if loop.first %}
+    <td data-label="#" rowspan="{{ item_count }}">{{ loan_counter }}</td>
+    <td data-label="Código" rowspan="{{ item_count }}">{{ item.codigo }}</td>
+    <td class="product" data-label="Repuesto" rowspan="{{ item_count }}">{{ item.nombre }}</td>
+    <td data-label="Cliente" rowspan="{{ item_count }}">{{ loan.cliente }}</td>
+    <td data-label="Cant.">{{ item.cantidad }}</td>
+    <td data-label="Precio unit.">Q {{ '{:,.2f}'.format(item.precio or 0) }}</td>
+    <td data-label="F. Préstamo" rowspan="{{ item_count }}">{{ loan.fecha_prestamo.strftime('%d/%m/%Y') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo }}</td>
+    <td data-label="F. Devolución est." rowspan="{{ item_count }}">{{ loan.fecha_devolucion_estimada.strftime('%d/%m/%Y') if loan.fecha_devolucion_estimada and loan.fecha_devolucion_estimada.strftime else loan.fecha_devolucion_estimada }}</td>
+    <td data-label="Registrado por" rowspan="{{ item_count }}">{{ loan.usuario }}</td>
+    <td data-label="Estado" rowspan="{{ item_count }}"><span class="status status-{{ loan.estado|lower|replace(' ','-') }}">{{ loan.estado }}</span></td>
+    <td class="actions" data-label="Acciones" rowspan="{{ item_count }}">{% if has_permission('prestamos', 'write') and loan.estado|lower != 'pagado' %}<form method="post" action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}"><input type="hidden" name="estado" value="devuelto"><button class="action-return" title="Marcar devuelto"><i class="fa-solid fa-rotate-left"></i> Devuelto</button></form><form method="post" action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}"><input type="hidden" name="estado" value="pagado"><button class="action-paid" title="Marcar pagado"><i class="fa-solid fa-dollar-sign"></i> Pagado</button></form>{% else %}<span class="done"><i class="fa-solid fa-circle-check"></i> {{ 'Devuelto' if loan.estado|lower == 'pagado' else loan.estado }}</span>{% endif %}</td>
+    {% else %}
+    <td data-label="Cant.">{{ item.cantidad }}</td>
+    <td data-label="Precio unit.">Q {{ '{:,.2f}'.format(item.precio or 0) }}</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  {% set loan_counter = loan_counter + 1 %}
+{% else %}<tr><td colspan="11" class="empty">No hay préstamos registrados.</td></tr>{% endfor %}
+</tbody></table></div><footer><span>Mostrando {{ prestamos|length }} préstamos</span></footer></section>
+</section>
+<section id="report-view" hidden>
+<div class="loan-report-card">
+  <div class="loan-report-heading"><div><i class="fa-solid fa-filter"></i><strong>Filtros del Reporte</strong></div></div>
+  <form id="loan-report-form" class="loan-report-filters" autocomplete="off">
+    <label>Fecha Préstamo Desde<input type="date" name="from_date"></label>
+    <label>Fecha Préstamo Hasta<input type="date" name="to_date"></label>
+    <label>Estado<select name="estado"><option value="">Todos los estados</option>{% for estado in estados %}<option value="{{ estado.nombre|lower }}">{{ estado.nombre }}</option>{% endfor %}</select></label>
+    <label>Cliente<input type="search" name="cliente" placeholder="Buscar cliente..."></label>
+    <label>Repuesto (nombre o código)<input type="search" name="repuesto" placeholder="Buscar repuesto..."></label>
+    <div class="loan-report-actions"><button type="button" class="secondary" id="clear-loan-report">Limpiar filtros</button><a class="download" id="loan-report-download" href="{{ url_for('exportar_pdf_prestamos') }}"><i class="fa-solid fa-print"></i> Imprimir PDF (<span id="loan-report-count">0</span>)</a></div>
+  </form>
+</div>
+<div class="loan-report-summary"><article><span>Préstamos en Período</span><b id="loan-report-total">0</b></article><article><span>Activos</span><b id="loan-report-active">0</b></article><article><span>Valor Total (Q)</span><b id="loan-report-value">Q 0.00</b></article></div>
+<section class="loan-report-preview"><div class="loan-report-preview-heading"><span>Vista previa del reporte</span><small><b id="loan-report-preview-count">0</b> registros</small></div><div class="table-wrap"><table><thead><tr><th>PRÉSTAMO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANTIDAD</th><th>TOTAL (Q)</th><th>F. PRÉSTAMO</th><th>F. DEVOLUCIÓN</th><th>ESTADO</th></tr></thead><tbody id="loan-report-body">{% for loan in prestamos %}{% set item_count = loan['items']|length %}{% for item in loan['items'] %}<tr class="loan-report-row{% if not loop.first %} loan-report-row-continuation{% endif %}" data-date="{{ loan.fecha_prestamo }}" data-state="{{ loan.estado|lower }}" data-client="{{ loan.cliente|lower }}" data-repuesto="{{ (item.nombre ~ ' ' ~ item.codigo)|lower }}" data-total="{{ (item.precio or 0) * (item.cantidad or 0) }}">
+    {% if loop.first %}
+    <td rowspan="{{ item_count }}">P-{{ '%06d'|format(loan.id_prestamo) }}</td>
+    <td rowspan="{{ item_count }}">{{ item.nombre }} · {{ item.codigo }}</td>
+    <td rowspan="{{ item_count }}">{{ loan.cliente }}</td>
+    <td>{{ item.cantidad }}</td>
+    <td>Q {{ '{:,.2f}'.format((item.precio or 0) * (item.cantidad or 0)) }}</td>
+    <td rowspan="{{ item_count }}">{{ loan.fecha_prestamo.strftime('%d/%m/%Y') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo }}</td>
+    <td rowspan="{{ item_count }}">{{ loan.fecha_devolucion_estimada.strftime('%d/%m/%Y') if loan.fecha_devolucion_estimada and loan.fecha_devolucion_estimada.strftime else loan.fecha_devolucion_estimada }}</td>
+    <td rowspan="{{ item_count }}"><span class="status status-{{ loan.estado|lower|replace(' ','-') }}">{{ loan.estado }}</span></td>
+    {% else %}
+    <td>{{ item.cantidad }}</td>
+    <td>Q {{ '{:,.2f}'.format((item.precio or 0) * (item.cantidad or 0)) }}</td>
+    {% endif %}
+  </tr>{% endfor %}{% endfor %}</tbody></table></div></section>
+</section>
+</main>
+{% if has_permission('prestamos', 'write') %}<div class="modal-backdrop" id="loan-modal" hidden><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Nuevo préstamo</h2><p>Selecciona el cliente y los repuestos que serán entregados.</p></div><button type="button" class="close" id="close-loan"><i class="fa-solid fa-xmark"></i></button></div><form method="post" action="{{ url_for('nuevo_prestamo') }}"><div class="form-grid"><label class="field">Cliente<select name="id_cliente" required><option value="">Selecciona un cliente...</option>{% for cliente in clientes %}<option value="{{ cliente.id }}">{{ cliente.nombre }}</option>{% endfor %}</select></label><label class="field">Devolución estimada<input type="date" name="fecha_devolucion" required></label></div><label class="field loan-notes">Observaciones<textarea name="observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea></label><div class="loan-items-head"><strong>Repuestos</strong><button type="button" class="secondary" id="add-loan-item"><i class="fa-solid fa-plus"></i> Agregar repuesto</button></div><div id="loan-items"><div class="loan-item"><select name="id_repuesto[]" required><option value="">Selecciona un repuesto...</option>{% for repuesto in repuestos %}<option value="{{ repuesto.id }}" data-price="{{ repuesto.precio }}">{{ repuesto.codigo }} · {{ repuesto.nombre }} · Stock {{ repuesto.stock }}</option>{% endfor %}</select><input name="cantidad[]" type="number" min="1" value="1" required><input name="precio[]" type="number" min="0" step="0.01" placeholder="Precio" required><button type="button" class="remove-item" title="Quitar"><i class="fa-solid fa-trash"></i></button></div></div><div class="modal-actions"><button type="button" class="secondary" id="cancel-loan">Cancelar</button><button class="primary" type="submit"><i class="fa-solid fa-check"></i> Registrar préstamo</button></div></form></div></div>{% endif %}
+<script>
+const modal=document.getElementById('loan-modal'),items=document.getElementById('loan-items');
+function bindItem(row){row.querySelector('select').addEventListener('change',e=>{const price=e.target.selectedOptions[0]?.dataset.price;if(price)row.querySelector('[name="precio[]"]').value=price});row.querySelector('.remove-item').addEventListener('click',()=>{if(items.children.length>1)row.remove()})}
+bindItem(items?.firstElementChild);document.getElementById('add-loan-item')?.addEventListener('click',()=>{const row=items.firstElementChild.cloneNode(true);row.querySelectorAll('input').forEach(input=>input.value=input.name==='cantidad[]'?'1':'');row.querySelector('select').value='';items.appendChild(row);bindItem(row)});document.getElementById('open-loan')?.addEventListener('click',()=>modal.hidden=false);document.getElementById('close-loan')?.addEventListener('click',()=>modal.hidden=true);document.getElementById('cancel-loan')?.addEventListener('click',()=>modal.hidden=true);
+function filterLoans(){const query=document.getElementById('loan-search').value.toLowerCase(),state=document.getElementById('state-filter').value;const loanGroups={};document.querySelectorAll('.loan-row').forEach(row=>{const loanId=row.dataset.loanId;if(!loanGroups[loanId])loanGroups[loanId]=[];loanGroups[loanId].push(row)});Object.values(loanGroups).forEach(rows=>{const firstRow=rows[0];const match=firstRow.dataset.search.toLowerCase().includes(query)&&(!Boolean(state)||firstRow.dataset.state===state);rows.forEach(r=>r.hidden=!match);})}document.getElementById('loan-search').addEventListener('input',filterLoans);document.getElementById('state-filter').addEventListener('change',filterLoans);document.querySelectorAll('[data-tab]').forEach(tab=>tab.addEventListener('click',()=>{const report=tab.dataset.tab==='report';document.getElementById('list-view').hidden=report;document.getElementById('report-view').hidden=!report;document.querySelectorAll('[data-tab]').forEach(button=>button.classList.toggle('active',button===tab));if(report)filterLoanReport()}));
+const loanReportForm=document.getElementById('loan-report-form'),loanReportRows=[...document.querySelectorAll('.loan-report-row')],loanReportDownload=document.getElementById('loan-report-download');
+function filterLoanReport(){if(!loanReportForm)return;const values=Object.fromEntries(new FormData(loanReportForm).entries()),from=values.from_date||'',to=values.to_date||'',state=(values.estado||'').toLowerCase(),client=(values.cliente||'').toLowerCase().trim(),part=(values.repuesto||'').toLowerCase().trim();let visible=0,active=0,total=0;loanReportRows.forEach(row=>{const date=String(row.dataset.date||'').slice(0,10),matches=(!from||date>=from)&&(!to||date<=to)&&(!state||row.dataset.state===state)&&(!client||row.dataset.client.includes(client))&&(!part||row.dataset.repuesto.includes(part));row.hidden=!matches;if(matches){visible++;total+=Number(row.dataset.total||0);if(row.dataset.state==='activo')active}});document.getElementById('loan-report-total').textContent=visible;document.getElementById('loan-report-count').textContent=visible;document.getElementById('loan-report-preview-count').textContent=visible;document.getElementById('loan-report-active').textContent=active;document.getElementById('loan-report-value').textContent='Q '+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});const params=new URLSearchParams();Object.entries(values).forEach(([key,value])=>{if(value)params.set(key,value)});loanReportDownload.href='{{ url_for('exportar_pdf_prestamos') }}'+(params.toString()?'?'+params.toString():'')}
+loanReportForm?.querySelectorAll('input,select').forEach(input=>input.addEventListener('input',filterLoanReport));document.getElementById('clear-loan-report')?.addEventListener('click',()=>{loanReportForm.reset();filterLoanReport()});filterLoanReport();
+</script></body></html>

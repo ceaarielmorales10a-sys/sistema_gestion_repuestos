@@ -50,6 +50,11 @@
     display: none;
 }
 
+.inventory-stock-low {
+    color: #dc2626 !important;
+    font-weight: 700 !important;
+}
+
 .report-card {
     background: rgba(255, 255, 255, 0.75);
     border: 1px solid #dfe7ef;

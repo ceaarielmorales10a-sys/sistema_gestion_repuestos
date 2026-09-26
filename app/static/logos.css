@@ -1,0 +1,10 @@
+body.module-theme .sidebar img[src*="logo.png"],
+body.module-theme #sidebar img[src*="logo.png"],
+body:not(.module-theme) .sidebar img[src*="logo.png"] {
+    width: 165px !important;
+    height: 112px !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    display: block;
+}

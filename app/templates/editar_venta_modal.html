@@ -16,7 +16,7 @@
 <input class="product-id" name="id_repuesto[]" type="hidden" value="{{ item.id_repuesto }}">
 <div class="suggestions"></div>
 </div>
-<input class="quantity" name="cantidad[]" type="number" min="1" value="{{ item.cantidad }}">
+<input class="quantity" name="cantidad[]" type="number" min="1" value="{{ item.cantidad }}" max="{{ repuestos | selectattr('id', 'equalto', item.id_repuesto) | first | map(attribute='stock') | first or item.cantidad }}">
 <span class="price">Q {{ '%.2f'|format(item.precio_unitario or 0) }}</span>
 <input class="discount" name="descuento[]" type="number" min="0" step="0.01" value="0">
 <span class="subtotal">Q {{ '%.2f'|format(item.subtotal or 0) }}</span>
@@ -50,15 +50,15 @@ function updateEditTotal(){
   }); document.getElementById('edit-total').textContent=saleMoney(total);
 }
 function bindEditItemRow(row){
-  const input=row.querySelector('.product-input'), id=row.querySelector('.product-id'), box=row.querySelector('.suggestions');
-  input.oninput=()=>saleSearch(input, box, editSaleProducts, p=>`${p.codigo} — ${p.nombre}<small>Stock: ${p.stock}</small>`, p=>{ input.value=`${p.codigo} — ${p.nombre}`; id.value=p.id; input.classList.add('selected'); box.classList.remove('open'); updateEditTotal(); });
+  const input=row.querySelector('.product-input'), id=row.querySelector('.product-id'), box=row.querySelector('.suggestions'), qty=row.querySelector('.quantity');
+  input.oninput=()=>saleSearch(input, box, editSaleProducts, p=>`${p.codigo} — ${p.nombre}<small>Stock: ${p.stock}</small>`, p=>{ input.value=`${p.codigo} — ${p.nombre}`; id.value=p.id; input.classList.add('selected'); box.classList.remove('open'); qty.max=p.stock; qty.value=Math.min(qty.value||1,p.stock); qty.disabled=false; qty.readOnly=false; updateEditTotal(); });
   row.querySelector('.quantity').oninput=updateEditTotal;
   row.querySelector('.discount').oninput=updateEditTotal;
   row.querySelector('.remove-item').onclick=()=>{ row.remove(); updateEditTotal(); };
 }
 function addEditItem(preselected = null){
   const row=document.createElement('div'); row.className='item-row';
-  row.innerHTML=`<div class="product-picker autocomplete"><input class="product-input" type="search" placeholder="Buscar repuesto..." autocomplete="off" ${preselected ? 'value="'+preselected.codigo+' — '+preselected.nombre+'"' : ''}><input class="product-id" name="id_repuesto[]" type="hidden" value="${preselected ? preselected.id : ''}"><div class="suggestions"></div></div><input class="quantity" name="cantidad[]" type="number" min="1" value="${preselected ? preselected.cantidad : 1}"><span class="price">${preselected ? saleMoney(preselected.precio) : '—'}</span><input class="discount" name="descuento[]" type="number" min="0" step="0.01" value="0"><span class="subtotal">Q 0.00</span><button type="button" class="remove-item" title="Quitar repuesto"><i class="fa-solid fa-trash-can"></i></button>`;
+  row.innerHTML=`<div class="product-picker autocomplete"><input class="product-input" type="search" placeholder="Buscar repuesto..." autocomplete="off" ${preselected ? 'value="'+preselected.codigo+' — '+preselected.nombre+'"' : ''}><input class="product-id" name="id_repuesto[]" type="hidden" value="${preselected ? preselected.id : ''}"><div class="suggestions"></div></div><input class="quantity" name="cantidad[]" type="number" min="1" value="${preselected ? preselected.cantidad : ''}" ${preselected ? 'max="'+(editSaleProducts.find(p=>p.id==preselected.id)?.stock||preselected.cantidad)+'"' : 'disabled readonly'}> <span class="price">${preselected ? saleMoney(preselected.precio) : '—'}</span><input class="discount" name="descuento[]" type="number" min="0" step="0.01" value="0"><span class="subtotal">Q 0.00</span><button type="button" class="remove-item" title="Quitar repuesto"><i class="fa-solid fa-trash-can"></i></button>`;
   bindEditItemRow(row);
   editSaleItems.appendChild(row); if(preselected){ updateEditTotal(); }
 }
