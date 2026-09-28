@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -53,8 +53,11 @@
                 </a>
                 {% endif %}
                 {% if has_permission('prestamos', 'read') %}
-                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl flex justify-between items-center hover:bg-slate-800/60 hover:text-white transition-all">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                    </div>
+                    {% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}
                 </a>
                 {% endif %}
                 {% if has_permission('devoluciones', 'read') %}
@@ -67,8 +70,8 @@
                     <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
                 </a>
                 {% endif %}
-                {% if has_permission('usuarios', 'read') %}
-                <a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
+                {% if has_permission('usuarios', 'read') or request.path.startswith('/usuario') %}
+                <a href="/usuario" aria-current="page" class="active flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
                     <i class="fa-solid fa-users text-base w-5"></i> Usuarios
                 </a>
                 {% endif %}

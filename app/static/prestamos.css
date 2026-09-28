@@ -967,3 +967,286 @@
     flex-wrap: wrap;
   }
 }
+
+/* Préstamos: acabado compacto alineado con la referencia visual. */
+.prestamos-page {
+  --loan-accent: #5535f7;
+  --loan-blue: #2563eb;
+  --loan-red: #dc2626;
+  --loan-green: #16a34a;
+  --loan-purple: #9333ea;
+  --loan-ink: #19365d;
+  --loan-muted: #74839a;
+  --loan-line: #e2e7ee;
+  --loan-surface: #ffffff;
+  --loan-page: #f3f4f6;
+  background: var(--loan-page);
+}
+
+.prestamos-page main { min-width: 0; }
+.module-theme.prestamos-page .new-return {
+  background: var(--loan-accent);
+  box-shadow: 0 5px 12px rgb(85 53 247 / 14%);
+}
+.module-theme.prestamos-page .new-return:hover { background: #4526e6; }
+.module-theme.prestamos-page .tabs button.active {
+  color: var(--loan-accent);
+  border-bottom-color: var(--loan-accent);
+}
+.prestamos-page .loan-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.prestamos-page .loan-summary article {
+  min-height: 94px;
+  padding: 16px 64px 16px 20px;
+  border: 1px solid var(--loan-line);
+  border-left-width: 1px;
+  border-radius: 10px;
+  background: var(--loan-surface);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+}
+.prestamos-page .loan-summary article span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+}
+.prestamos-page .loan-summary article b { margin-top: 5px; font-size: 22px; }
+.prestamos-page .loan-summary article i {
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 17px;
+}
+.prestamos-page .loan-active { border-left: 4px solid var(--loan-blue); background: #fff; color: var(--loan-blue); }
+.prestamos-page .loan-active i { color: var(--loan-blue); background: #dbeafe; }
+.prestamos-page .loan-overdue { border-left: 4px solid #ef4444; background: #fff; color: var(--loan-red); }
+.prestamos-page .loan-overdue b { color: var(--loan-red); }
+.prestamos-page .loan-overdue i { color: var(--loan-red); background: #fee2e2; }
+.prestamos-page .loan-value { border-left: 4px solid var(--loan-purple); background: #fff; color: var(--loan-purple); }
+.prestamos-page .loan-value i { color: var(--loan-purple); background: #f3e8ff; }
+
+.prestamos-page .loan-filters {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+  gap: 14px;
+  margin: 0 0 20px;
+  padding: 14px;
+  border: 1px solid var(--loan-line);
+  border-radius: 10px;
+  background: var(--loan-surface);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+}
+.prestamos-page .loan-filters .search-wrap { display: block; }
+.prestamos-page .loan-filters input,
+.prestamos-page .loan-filters select {
+  height: 38px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.prestamos-page .loan-filters select { appearance: auto; background-image: none; }
+.prestamos-page .card { border-radius: 10px; }
+.prestamos-page #list-view .table-wrap { overflow-x: auto; }
+.prestamos-page #list-view table { width: 100%; min-width: 1200px; table-layout: fixed; }
+.prestamos-page #list-view thead th {
+  height: 40px;
+  min-height: 40px;
+  padding: 9px 10px;
+  color: #53647d;
+  background: #f8fafc;
+  font-size: 10px;
+  letter-spacing: .035em;
+}
+.prestamos-page #list-view tbody td {
+  padding: 11px 10px;
+  color: #334b6e;
+  font-size: 12px;
+}
+.prestamos-page #list-view thead th:nth-child(1),
+.prestamos-page #list-view tbody td:nth-child(1) { width: 85px !important; min-width: 85px !important; max-width: 85px !important; }
+.prestamos-page #list-view thead th:nth-child(2),
+.prestamos-page #list-view tbody td:nth-child(2) { width: 220px !important; min-width: 190px !important; max-width: 240px !important; }
+.prestamos-page #list-view thead th:nth-child(3),
+.prestamos-page #list-view tbody td:nth-child(3) { width: 175px !important; min-width: 150px !important; max-width: 190px !important; }
+.prestamos-page #list-view thead th:nth-child(4),
+.prestamos-page #list-view tbody td:nth-child(4) { width: 60px !important; min-width: 55px !important; max-width: 70px !important; text-align: center; }
+.prestamos-page #list-view thead th:nth-child(5),
+.prestamos-page #list-view tbody td:nth-child(5) { width: 110px !important; min-width: 100px !important; max-width: 120px !important; }
+.prestamos-page #list-view thead th:nth-child(6),
+.prestamos-page #list-view tbody td:nth-child(6) { width: 105px !important; min-width: 95px !important; max-width: 115px !important; padding-inline: 10px !important; }
+.prestamos-page #list-view thead th:nth-child(7),
+.prestamos-page #list-view tbody td:nth-child(7) { width: 125px !important; min-width: 115px !important; max-width: 135px !important; padding-inline: 10px !important; }
+.prestamos-page #list-view thead th:nth-child(8),
+.prestamos-page #list-view tbody td:nth-child(8) { width: 130px !important; min-width: 115px !important; max-width: 145px !important; }
+.prestamos-page #list-view thead th:nth-child(9),
+.prestamos-page #list-view tbody td:nth-child(9) { width: 90px !important; min-width: 85px !important; max-width: 100px !important; }
+.prestamos-page #list-view thead th:nth-child(10),
+.prestamos-page #list-view tbody td:nth-child(10) { width: 125px !important; min-width: 115px !important; max-width: 135px !important; }
+.prestamos-page #list-view tbody tr:hover td { background: #fbfcff; }
+.prestamos-page #list-view .loan-row-continuation td:nth-child(1),
+.prestamos-page #list-view .loan-row-continuation td:nth-child(2) { display: table-cell !important; }
+.prestamos-page #list-view .actions {
+  display: table-cell;
+  min-width: 115px;
+  white-space: normal;
+}
+.prestamos-page #list-view .actions form {
+  display: block;
+  width: max-content;
+  margin: 0 0 4px;
+}
+.prestamos-page #list-view .actions button {
+  min-width: 81px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 10px;
+}
+.prestamos-page #list-view .action-return { border-color: var(--loan-green) !important; color: var(--loan-green); }
+.prestamos-page #list-view .action-return:hover { background: #f0fdf4; }
+.prestamos-page #list-view .action-paid { border-color: var(--loan-purple) !important; color: var(--loan-purple); }
+.prestamos-page #list-view .action-paid:hover { background: #faf5ff; }
+.prestamos-page .status-devuelto { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.prestamos-page .status-pagado { background: #f3e8ff; color: #7e22ce; border-color: #e9d5ff; }
+.prestamos-page .done { padding: 5px 8px; border-radius: 999px; background: #dcfce7; }
+.prestamos-page .status-done-pagado { background: #f3e8ff; color: #7e22ce; }
+.prestamos-page footer { color: var(--loan-muted); font-size: 12px; }
+
+.prestamos-page .loan-payment-modal { width: min(480px, 100%); }
+.prestamos-page .loan-payment-modal .modal-head { align-items: flex-start; padding: 20px 22px 15px; }
+.prestamos-page .loan-payment-modal .modal-head h2 { margin: 0 0 6px; font-size: 18px; }
+.prestamos-page .loan-payment-modal .modal-head p { font-size: 13px; line-height: 1.5; }
+.prestamos-page .loan-payment-modal form { padding: 18px 22px 22px; }
+.prestamos-page .payment-loan-reference {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 17px;
+  color: var(--loan-muted);
+  font-size: 13px;
+}
+.prestamos-page .payment-loan-reference strong { color: var(--loan-ink); font-size: 16px; }
+.prestamos-page .loan-payment-modal .field { gap: 7px; font-size: 13px; }
+.prestamos-page .loan-payment-modal .field select { height: 40px; padding: 0 10px; background: #fff; }
+.prestamos-page .payment-inventory-note {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: var(--loan-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.prestamos-page .payment-inventory-note i { color: var(--loan-blue); margin-top: 2px; }
+.prestamos-page .loan-payment-modal .modal-actions { justify-content: flex-end; margin-top: 20px; }
+.prestamos-page .loan-payment-modal .primary { background: var(--loan-accent); }
+.prestamos-page button:focus-visible,
+.prestamos-page a:focus-visible,
+.prestamos-page input:focus-visible,
+.prestamos-page select:focus-visible { outline: 3px solid rgb(85 53 247 / 30%); outline-offset: 2px; }
+.prestamos-page .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 980px) {
+  .prestamos-page .loan-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .prestamos-page .loan-filters { grid-template-columns: minmax(0, 1fr) minmax(200px, .9fr); }
+}
+@media (max-width: 800px) {
+  .prestamos-page .loan-summary { grid-template-columns: 1fr; }
+  .prestamos-page .loan-filters { grid-template-columns: 1fr; padding: 12px; }
+  .prestamos-page #list-view .table-wrap { overflow: visible; }
+  .prestamos-page #list-view table { min-width: 0; display: block; table-layout: auto; }
+  .prestamos-page #list-view thead { display: none; }
+  .prestamos-page #list-view tbody,
+  .prestamos-page #list-view .loan-row { display: block; }
+  .prestamos-page #list-view .loan-row { padding: 10px 12px; border-bottom: 1px solid var(--loan-line); }
+  .prestamos-page #list-view .loan-row td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 7px 0;
+    border: 0;
+    white-space: normal;
+    text-align: right;
+  }
+  .prestamos-page #list-view .loan-row td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: var(--loan-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  .prestamos-page #list-view .loan-row td.product { display: block; text-align: left; }
+  .prestamos-page #list-view .loan-row td.product::before { display: none; }
+  .prestamos-page #list-view .actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+  .prestamos-page #list-view .actions form { margin: 0 5px 4px 0; }
+  .prestamos-page #list-view .loan-row-continuation td:nth-child(1),
+  .prestamos-page #list-view .loan-row-continuation td:nth-child(2) { display: flex !important; }
+}
+@media (max-width: 600px) {
+  .prestamos-page .loan-report-filters,
+  .prestamos-page .loan-report-summary { grid-template-columns: 1fr; }
+  .prestamos-page .loan-report-actions { flex-wrap: wrap; }
+  .prestamos-page .loan-payment-modal .modal-head,
+  .prestamos-page .loan-payment-modal form { padding-left: 17px; padding-right: 17px; }
+  .prestamos-page .loan-payment-modal .modal-actions { flex-direction: column-reverse; }
+  .prestamos-page .loan-payment-modal .modal-actions button { width: 100%; }
+}
+
+/* Layout base: esta plantilla no utiliza el layout Flex de Tailwind. */
+body.prestamos-page {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+body.prestamos-page > .sidebar {
+  display: flex;
+  flex: 0 0 228px;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 228px;
+  min-height: 100vh;
+}
+body.prestamos-page > .sidebar nav { flex: 1 1 auto; }
+body.prestamos-page > main { flex: 1 1 auto; width: calc(100% - 228px); }
+.prestamos-page #list-view .actions > [data-open-payment] { display: block; margin-top: 4px; }
+
+@media (max-width: 800px) {
+  body.prestamos-page { display: block; }
+  body.prestamos-page > .sidebar {
+    display: block;
+    width: 100%;
+    min-height: 0;
+  }
+  body.prestamos-page > .sidebar .brand { height: 92px; padding: 8px; }
+  body.prestamos-page > .sidebar .brand img { width: 110px !important; height: 76px !important; }
+  body.prestamos-page > .sidebar nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 8px;
+    white-space: nowrap;
+  }
+  body.prestamos-page > .sidebar nav a { flex: 0 0 auto; }
+  body.prestamos-page > .sidebar .session-panel {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    margin: 0;
+    padding: 10px 14px;
+  }
+  body.prestamos-page > .sidebar .session-panel small { grid-column: 1 / -1; }
+  body.prestamos-page > .sidebar .session-panel a { grid-column: 2; grid-row: 2 / span 2; margin: 0; }
+  body.prestamos-page > main { width: 100%; }
+}

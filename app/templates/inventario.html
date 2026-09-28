@@ -60,6 +60,7 @@
                     <div class="flex items-center gap-3">
                         <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
                     </div>
+                    {% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}
                 </a>
                 {% endif %}
 

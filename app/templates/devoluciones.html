@@ -1,40 +1,95 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Devoluciones - Importadora Morales</title>
-<link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link rel="stylesheet" href="{{ url_for('static', filename='devoluciones.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Devoluciones - Importadora Morales</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome para los iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <!-- Archivo CSS personalizado para Devoluciones -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='devoluciones.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
 </head>
-<body>
-<aside class="sidebar">
-  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
-  <nav>
-    <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>
-    {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
-    {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
-    {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
-    {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
-    {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake"></i> Préstamos</a>{% endif %}
-    {% if has_permission('devoluciones', 'read') %}<a class="active" href="{{ url_for('devoluciones') }}"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
-    {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
-    {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}
-    {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
-  </nav>
-  <div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div>
-</aside>
-<main>
+<body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <!-- 1. BARRA LATERAL IZQUIERDA (Sidebar) -->
+    <aside id="sidebar" class="fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:h-auto md:max-h-none md:min-h-screen md:self-stretch bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <!-- Contenedor del Logo -->
+            <div class="p-6 flex flex-col items-center border-b border-slate-800 bg-slate-950/20">
+                <img src="{{ url_for('static', filename='logo.png') }}"
+                     alt="Logo Importadora Morales"
+                     class="h-26 w-auto object-contain mb-3 filter drop-shadow-md transition-transform duration-300 hover:scale-105">
+            </div>
+            <!-- Menú de Navegación Lateral -->
+            <nav class="p-4 space-y-1">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
+                </a>
+                {% if has_permission('analytics', 'read') %}<a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                </a>{% endif %}
+                {% if has_permission('clientes', 'read') %}<a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Clientes
+                </a>{% endif %}
+                {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-box text-base w-5"></i> Inventario
+                </a>{% endif %}
+                {% if has_permission('ventas', 'read') %}<a href="/ventas" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
+                </a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl flex justify-between items-center hover:bg-slate-800/60 hover:text-white transition-all"><div class="flex items-center gap-3"><i class="fa-solid fa-handshake text-base w-5"></i> Préstamos</div>{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
+                <!-- Estado Activo en Devoluciones -->
+                {% if has_permission('devoluciones', 'read') %}<a href="{{ url_for('devoluciones') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-orange-600 text-white transition-all shadow-md shadow-orange-600/10">
+                    <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
+                </a>{% endif %}
+                {% if has_permission('desarme', 'read') %}<a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-car-side text-base w-5"></i> Desarme de Vehículos
+                </a>{% endif %}
+                {% if has_permission('usuarios', 'read') %}<a href="/usuario" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-users text-base w-5"></i> Usuarios
+                </a>{% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
+                    <i class="fa-solid fa-gears text-base w-5"></i> Mantenimiento
+                </a>{% endif %}
+            </nav>
+        </div>
+
+        <!-- Información de Sesión en la parte inferior -->
+        <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+            <div class="mb-3 px-2">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sesión activa</p>
+                <p class="text-xs font-bold text-slate-200 mt-0.5 capitalize">{{ session.get('full_name', session.get('user', 'Admin')) }}</p>
+                <p class="text-[11px] text-slate-400 capitalize">{{ session.get('role', 'Administrador del Sistema') }}</p>
+            </div>
+            <a href="/logout" class="w-full flex justify-center items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition-all duration-200">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </a>
+        </div>
+    </aside>
+
+    <!-- 2. ÁREA DE CONTENIDO DE DEVOLUCIONES -->
+    <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto md:min-h-screen">
 <header><div><h1>Devoluciones</h1><p>Gestión de devoluciones por venta</p></div>{% if has_permission('devoluciones', 'write') %}<button class="new-return" type="button" id="open-return"><i class="fa-solid fa-plus"></i> Nueva Devolución</button>{% endif %}</header>
-<div class="tabs"><button class="active" type="button" data-tab="list"><i class="fa-solid fa-rotate-left"></i> Lista</button><button type="button" data-tab="report"><i class="fa-regular fa-file-lines"></i> Reportes</button></div>
+<div class="tabs"><button class="active" type="button" data-tab="list" aria-pressed="true"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Lista</button><button type="button" data-tab="report" aria-pressed="false"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Reportes</button></div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>{{ message }}</div>{% endfor %}{% endwith %}
 <section id="list-view">
 <div class="summary"><article class="count"><span>Total Devoluciones</span><b>{{ total_devoluciones }}</b><i class="fa-solid fa-rotate-left"></i></article><article class="amount"><span>Monto Total</span><b>Q {{ '{:,.2f}'.format(monto_total or 0) }}</b><i class="fa-solid fa-dollar-sign"></i></article></div>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="return-search" type="search" placeholder="Buscar por producto, cliente, código o # venta..."></div>
 <section class="card"><div class="table-wrap"><table><thead><tr><th>FECHA</th><th># VENTA</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>TOTAL</th><th>MOTIVO</th><th>ACCIONES</th></tr></thead><tbody>
 {% for item in devoluciones %}{% for detail in item.get('items', []) %}
-<tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones">{% if has_permission('devoluciones', 'write') %}<form action="{{ url_for('eliminar_devolucion', id_devolucion=item.id_devolucion) }}" method="post" onsubmit="return confirm('¿Eliminar esta devolución y ajustar el stock?');"><button title="Eliminar" type="submit"><i class="fa-regular fa-trash-can"></i></button></form>{% else %}<span>-</span>{% endif %}</td></tr>
+<tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones"><div class="action-buttons"><button class="view-return" type="button" title="Ver detalle" aria-label="Ver detalle devolución V-{{ '%06d'|format(item.id_venta|int) }}" data-return="{{ {'id_devolucion': item.id_devolucion, 'id_venta': item.id_venta, 'cliente': item.cliente, 'fecha_devolucion': item.fecha_devolucion|string, 'total_devuelto': item.total_devuelto, 'items': item.get('items', [])}|tojson|forceescape }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button></div></td></tr>
 {% endfor %}{% else %}<tr><td class="empty" colspan="9">No hay devoluciones registradas.</td></tr>{% endfor %}
 </tbody></table></div><footer><span>Mostrando {{ devoluciones|length }} devoluciones</span></footer></section>
 </section>
@@ -64,10 +119,10 @@
         <span>Repuesto (nombre o código)</span>
         <input type="search" name="repuesto" placeholder="Buscar repuesto...">
       </label>
-<div class="report-actions">
+      <div class="report-actions">
         <button type="button" class="secondary-btn" id="clear-return-report">Limpiar filtros</button>
         <a class="primary-btn" id="return-report-download" href="{{ url_for('exportar_pdf_devoluciones') }}">
-          <i class="fa-solid fa-file-pdf"></i> Descargar PDF
+          <i class="fa-solid fa-print" aria-hidden="true"></i><span>Imprimir PDF (<span id="return-report-download-count">{{ devoluciones|length }}</span>)</span>
         </a>
       </div>
     </form>
@@ -114,17 +169,46 @@
               <td>{{ item.cliente }}</td>
               <td>{{ detail.cantidad }}</td>
               <td class="money">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td>
-              <td>{{ detail.motivo }}</td>
-            </tr>
-          {% endfor %}
+          <td>{{ detail.motivo }}</td>
+        </tr>
+      {% endfor %}
         {% else %}
-          <tr><td colspan="8" class="empty">No hay devoluciones para mostrar.</td></tr>
         {% endfor %}
+        <tr id="return-report-empty" hidden><td colspan="8" class="empty">No hay devoluciones que coincidan con los filtros.</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 </main>
+<div class="modal-backdrop detail-modal-backdrop" id="return-detail-modal" hidden>
+  <section class="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="return-detail-title" aria-describedby="return-detail-date">
+    <header class="detail-modal-head">
+      <div class="detail-modal-heading">
+        <span class="detail-modal-icon"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></span>
+        <div><h2 id="return-detail-title">Detalle de Devolución</h2><small id="return-detail-number"></small></div>
+      </div>
+      <button class="detail-modal-close" type="button" data-close-return-detail aria-label="Cerrar detalle"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="detail-modal-content">
+      <div class="detail-modal-date" id="return-detail-date"><i class="fa-regular fa-clock" aria-hidden="true"></i><span></span></div>
+      <section class="detail-info-card detail-sale-card" aria-labelledby="return-detail-sale-heading">
+        <h3 id="return-detail-sale-heading"><i class="fa-solid fa-tag" aria-hidden="true"></i> Venta de origen</h3>
+        <dl><div><dt>Venta</dt><dd id="return-detail-sale"></dd></div><div><dt>Cliente</dt><dd id="return-detail-client"></dd></div></dl>
+      </section>
+      <section class="detail-info-card detail-items-card" aria-labelledby="return-detail-items-heading">
+        <h3 id="return-detail-items-heading"><i class="fa-solid fa-cube" aria-hidden="true"></i> Repuestos devueltos</h3>
+        <div class="detail-return-items-head" aria-hidden="true"><span>Repuesto</span><span>Cantidad</span><span>Precio unitario</span><span>Subtotal</span></div>
+        <div class="detail-return-items" id="return-detail-items"></div>
+        <div class="detail-refund-total"><span>Total a reembolsar</span><strong id="return-detail-total"></strong></div>
+      </section>
+      <section class="detail-info-card detail-reason-card" aria-labelledby="return-detail-reason-heading">
+        <h3 id="return-detail-reason-heading"><i class="fa-regular fa-message" aria-hidden="true"></i> Motivo y observaciones</h3>
+        <dl><div><dt>Motivo</dt><dd id="return-detail-reason"></dd></div><div><dt>Observaciones</dt><dd class="detail-no-notes">Sin observaciones registradas</dd></div></dl>
+      </section>
+    </div>
+    <footer class="detail-modal-footer"><button type="button" class="detail-close-button" data-close-return-detail>Cerrar</button></footer>
+  </section>
+</div>
 {% if has_permission('devoluciones', 'write') %}
 <div class="modal-backdrop" id="return-modal" hidden>
   <div class="modal return-modal" role="dialog" aria-modal="true" aria-labelledby="return-title">
@@ -156,18 +240,26 @@
 
       <div class="return-form-step" id="return-details-panel" hidden>
         <label class="return-step-title">2. Selecciona los repuestos a devolver <span>*</span></label>
-        <div class="return-items-head">
-          <span>Repuesto</span>
-          <span>Vendido</span>
-          <span>A devolver</span>
-          <span>Subtotal</span>
+        <div class="return-items-table">
+          <div class="return-items-head">
+            <span aria-hidden="true"></span>
+            <span>Repuesto</span>
+            <span>Vendido</span>
+            <span>A devolver</span>
+            <span>Subtotal</span>
+          </div>
+          <div id="return-items-list" class="return-items-list"></div>
         </div>
-        <div id="return-items-list" class="return-items-list"></div>
+        <div class="return-summary-bar" id="return-summary-bar" hidden>
+          <span><strong id="return-selected-count">0</strong> repuesto(s) seleccionado(s)</span>
+          <span>Total a reembolsar: <strong id="return-summary-total">Q 0.00</strong></span>
+        </div>
       </div>
 
       <div class="return-form-step" id="return-motive-panel" hidden>
         <label class="return-step-title">3. Motivo de devolución <span>*</span></label>
-        <select id="return-motive-master" class="return-motive-master">
+        <select id="return-motive-master" class="return-motive-master" required>
+          <option value="" disabled selected>Selecciona un motivo...</option>
           {% for motivo in motivos %}
             <option value="{{ motivo.id }}">{{ motivo.nombre }}</option>
           {% endfor %}
@@ -182,7 +274,7 @@
 
       <div class="modal-actions compact-actions">
         <button type="button" class="secondary" id="cancel-return">Cancelar</button>
-        <button class="primary" type="submit"><i class="fa-solid fa-check"></i> Registrar Devolución</button>
+          <button class="primary" type="submit" id="submit-return" disabled><i class="fa-solid fa-check"></i> Registrar Devolución</button>
       </div>
       </div>
     </form>
@@ -191,6 +283,106 @@
 {% endif %}
 <script>
 const sales = {{ ventas_disponibles|tojson }};
+const returnListSearch = document.getElementById('return-search');
+const detailModal = document.getElementById('return-detail-modal');
+const detailNumber = document.getElementById('return-detail-number');
+const detailDate = document.querySelector('#return-detail-date span');
+const detailSale = document.getElementById('return-detail-sale');
+const detailClient = document.getElementById('return-detail-client');
+const detailItems = document.getElementById('return-detail-items');
+const detailTotal = document.getElementById('return-detail-total');
+const detailReason = document.getElementById('return-detail-reason');
+let lastDetailTrigger = null;
+
+function formatReturnDate(value) {
+  if (!value) return 'Fecha no disponible';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('es-GT', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(date);
+}
+
+function openReturnDetail(button) {
+  let data;
+  try {
+    data = JSON.parse(button.dataset.return);
+  } catch (error) {
+    console.error('No fue posible cargar el detalle de la devolución.', error);
+    return;
+  }
+
+  lastDetailTrigger = button;
+  detailNumber.textContent = `V-${String(data.id_venta).padStart(6, '0')}`;
+  detailDate.textContent = formatReturnDate(data.fecha_devolucion);
+  detailSale.textContent = `V-${String(data.id_venta).padStart(6, '0')}`;
+  detailClient.textContent = data.cliente || 'Sin cliente frecuente';
+
+  const items = Array.isArray(data.items) ? data.items : [];
+  detailItems.replaceChildren();
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'detail-return-item';
+
+    const info = document.createElement('div');
+    info.className = 'detail-item-info';
+    const name = document.createElement('strong');
+    name.textContent = item.nombre || 'Repuesto';
+    const code = document.createElement('small');
+    code.textContent = item.codigo || 'Sin código';
+    info.append(name, code);
+
+    const quantity = document.createElement('span');
+    quantity.className = 'detail-item-value detail-item-quantity';
+    quantity.textContent = String(item.cantidad ?? '—');
+    quantity.setAttribute('aria-label', `Cantidad: ${quantity.textContent}`);
+
+    const unitPrice = document.createElement('span');
+    unitPrice.className = 'detail-item-value detail-item-unit-price';
+    unitPrice.textContent = `Q ${Number(item.precio_unitario || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    unitPrice.setAttribute('aria-label', `Precio unitario ${unitPrice.textContent}`);
+
+    const subtotal = document.createElement('strong');
+    subtotal.className = 'detail-item-value detail-item-subtotal';
+    subtotal.textContent = `Q ${Number(item.subtotal || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    subtotal.setAttribute('aria-label', `Subtotal ${subtotal.textContent}`);
+    row.append(info, quantity, unitPrice, subtotal);
+    detailItems.append(row);
+  });
+
+  detailTotal.textContent = `Q ${Number(data.total_devuelto || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  detailReason.textContent = [...new Set(items.map(item => item.motivo).filter(Boolean))].join(', ') || 'Sin motivo registrado';
+  detailModal.hidden = false;
+  detailModal.querySelector('[data-close-return-detail]')?.focus();
+}
+
+function closeReturnDetail() {
+  if (!detailModal || detailModal.hidden) return;
+  detailModal.hidden = true;
+  lastDetailTrigger?.focus();
+}
+
+document.querySelectorAll('.view-return').forEach(button => {
+  button.addEventListener('click', () => openReturnDetail(button));
+});
+detailModal?.querySelectorAll('[data-close-return-detail]').forEach(button => {
+  button.addEventListener('click', closeReturnDetail);
+});
+detailModal?.addEventListener('click', event => {
+  if (event.target === detailModal) closeReturnDetail();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeReturnDetail();
+});
+
+returnListSearch?.addEventListener('input', () => {
+  const query = returnListSearch.value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  document.querySelectorAll('#list-view .return-row').forEach(row => {
+    const searchableText = (row.dataset.search || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+    row.hidden = !searchableText.includes(query);
+  });
+});
+
 const modal = document.getElementById('return-modal');
 const saleSearch = document.getElementById('return-sale-search');
 const saleSearchList = document.getElementById('sale-search-list');
@@ -201,6 +393,10 @@ const selectedSaleCode = document.getElementById('selected-sale-code');
 const selectedSaleMeta = document.getElementById('selected-sale-meta');
 const returnDetailsPanel = document.getElementById('return-details-panel');
 const returnItemsList = document.getElementById('return-items-list');
+const returnSummaryBar = document.getElementById('return-summary-bar');
+const returnSelectedCount = document.getElementById('return-selected-count');
+const returnSummaryTotal = document.getElementById('return-summary-total');
+const submitReturnButton = document.getElementById('submit-return');
 const returnMotivePanel = document.getElementById('return-motive-panel');
 const returnSubmitPanel = document.getElementById('return-submit-panel');
 const returnMotiveMaster = document.getElementById('return-motive-master');
@@ -212,6 +408,56 @@ function syncSelectedMotives() {
   values.forEach(input => {
     input.value = returnMotiveMaster.value;
   });
+}
+
+function updateReturnSummary() {
+  if (!returnItemsList || !returnSummaryBar) return;
+  const selectedRows = [...returnItemsList.querySelectorAll('.return-row')]
+    .filter(row => {
+      const checkbox = row.querySelector('.return-item-check');
+      const quantity = Number(row.querySelector('.return-qty-input')?.value || 0);
+      return checkbox?.checked && quantity > 0;
+    });
+  const totalCents = selectedRows.reduce((sum, row) => {
+    const quantity = Number(row.querySelector('.return-qty-input')?.value || 0);
+    const unitPriceCents = Number(row.dataset.unitPriceCents || 0);
+    return sum + (quantity * unitPriceCents);
+  }, 0);
+
+  returnSummaryBar.hidden = selectedRows.length === 0;
+  if (returnSelectedCount) returnSelectedCount.textContent = String(selectedRows.length);
+  if (submitReturnButton) {
+    submitReturnButton.disabled = selectedRows.length === 0 || !returnMotiveMaster?.value;
+  }
+  if (returnSummaryTotal) {
+    returnSummaryTotal.textContent = `Q ${(totalCents / 100).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+}
+
+function updateReturnRowAmounts(row) {
+  if (!row) return;
+  const checkbox = row.querySelector('.return-item-check');
+  const quantityInput = row.querySelector('.return-qty-input');
+  const quantityHidden = row.querySelector('input[name="cantidad[]"]');
+  const subtotalCell = row.querySelector('.subtotal-cell');
+  if (!checkbox || !quantityInput || !quantityHidden || !subtotalCell) return;
+
+  if (!checkbox.checked || quantityInput.value === '') {
+    quantityHidden.value = '0';
+    subtotalCell.textContent = '—';
+    updateReturnSummary();
+    return;
+  }
+
+  const maximum = Number(row.dataset.availableQuantity || quantityInput.max || 0);
+  const requested = Number(quantityInput.value);
+  const quantity = Math.min(maximum, Math.max(1, Math.floor(Number.isFinite(requested) ? requested : 1)));
+  quantityInput.value = String(quantity);
+  quantityHidden.value = String(quantity);
+
+  const subtotalCents = quantity * Number(row.dataset.unitPriceCents || 0);
+  subtotalCell.textContent = `Q ${(subtotalCents / 100).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  updateReturnSummary();
 }
 
 function renderSelectedSaleDetails(sale) {
@@ -232,6 +478,7 @@ function renderSelectedSaleDetails(sale) {
     }
     if (returnMotivePanel) returnMotivePanel.hidden = true;
     if (returnSubmitPanel) returnSubmitPanel.hidden = true;
+    updateReturnSummary();
     return;
   }
   if (returnDetailsPanel) returnDetailsPanel.hidden = false;
@@ -244,13 +491,12 @@ returnItemsList.innerHTML = (sale.items || []).map(item => {
     const soldQty = Number(item.cantidad_vendida ?? itemQty);
     const isAvailable = itemQty > 0;
     const unitPrice = Number(item.precio || 0);
-    const subtotal = itemQty * unitPrice;
-    const soldSubtotal = soldQty * unitPrice;
+    const unitPriceCents = Number(item.precio_centavos ?? Math.round(unitPrice * 100));
     const motiveValue = returnMotiveMaster ? returnMotiveMaster.value : '';
     return `
-      <div class="return-row${isAvailable ? '' : ' unavailable'}">
+      <div class="return-row${isAvailable ? '' : ' unavailable'}" data-unit-price-cents="${unitPriceCents}" data-available-quantity="${itemQty}">
         <label class="check-cell">
-          <input type="checkbox" class="return-item-check" ${isAvailable ? '' : 'disabled'}>
+          <input type="checkbox" class="return-item-check" aria-label="Seleccionar ${item.nombre || itemCode}" ${isAvailable ? '' : 'disabled'}>
         </label>
         <div class="product-cell">
           <span class="product-name">${item.nombre || itemCode}</span>
@@ -258,15 +504,21 @@ returnItemsList.innerHTML = (sale.items || []).map(item => {
         </div>
         <div class="sold-cell">${soldQty}</div>
         <div class="qty-cell">
-          <input type="number" class="return-qty-input" min="1" max="${itemQty}" value="0" data-item-id="${item.id}" ${isAvailable ? '' : 'disabled'}>
-          <input type="hidden" name="id_repuesto[]" value="${item.id}" ${isAvailable ? '' : 'disabled'}>
-          <input type="hidden" name="cantidad[]" value="0" ${isAvailable ? '' : 'disabled'}>
-          <input type="hidden" name="id_motivo[]" value="${motiveValue}" ${isAvailable ? '' : 'disabled'}>
+          <input type="number" class="return-qty-input" min="1" max="${itemQty}" step="1" value="${isAvailable ? 1 : 0}" data-item-id="${item.id}" aria-label="Cantidad a devolver. Vendidos: ${soldQty}. Máximo disponible: ${itemQty}" required disabled>
+          <input type="hidden" name="id_repuesto[]" value="${item.id}" disabled>
+          <input type="hidden" name="cantidad[]" value="0" disabled>
+          <input type="hidden" name="id_motivo[]" value="${motiveValue}" disabled>
         </div>
-        <div class="subtotal-cell${isAvailable ? '' : ' historic-subtotal'}">Q ${(isAvailable ? subtotal : soldSubtotal).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div class="subtotal-cell${isAvailable ? '' : ' historic-subtotal'}">${isAvailable ? '—' : 'Q 0.00'}</div>
       </div>
     `;
   }).join('');
+
+  returnItemsList.querySelectorAll('.return-qty-input').forEach(input => {
+    input.addEventListener('input', () => {
+      updateReturnRowAmounts(input.closest('.return-row'));
+    });
+  });
 
   returnItemsList.querySelectorAll('.return-item-check').forEach(checkbox => {
     checkbox.addEventListener('change', () => {
@@ -276,41 +528,46 @@ returnItemsList.innerHTML = (sale.items || []).map(item => {
       const repuestoInput = row.querySelector('input[name="id_repuesto[]"]');
       const cantidadInput = row.querySelector('input[name="cantidad[]"]');
       const motivoInput = row.querySelector('input[name="id_motivo[]"]');
+      const quantity = Number(row.dataset.availableQuantity || 0);
+      const subtotalCell = row.querySelector('.subtotal-cell');
       if (!checkbox.checked) {
-        if (qtyInput) qtyInput.value = '0';
+        if (qtyInput) qtyInput.disabled = true;
         if (cantidadInput) cantidadInput.value = '0';
         if (repuestoInput) repuestoInput.disabled = true;
         if (cantidadInput) cantidadInput.disabled = true;
         if (motivoInput) motivoInput.disabled = true;
+        row.classList.remove('selected-row');
+        if (subtotalCell) subtotalCell.textContent = '—';
+        updateReturnSummary();
         return;
       }
-      if (qtyInput) qtyInput.value = qtyInput.min || '1';
-      if (cantidadInput) cantidadInput.value = qtyInput ? qtyInput.value : '1';
+      if (qtyInput) {
+        qtyInput.disabled = false;
+        if (!qtyInput.value || Number(qtyInput.value) < 1) qtyInput.value = '1';
+        qtyInput.focus();
+      }
       if (repuestoInput) repuestoInput.disabled = false;
       if (cantidadInput) cantidadInput.disabled = false;
       if (motivoInput) motivoInput.disabled = false;
+      row.classList.add('selected-row');
+      updateReturnRowAmounts(row);
     });
   });
 
-  returnItemsList.querySelectorAll('.return-qty-input').forEach(input => {
-    input.addEventListener('input', () => {
-      const row = input.closest('.return-row');
-      const cantidadInput = row ? row.querySelector('input[name="cantidad[]"]') : null;
-      if (cantidadInput) cantidadInput.value = input.value || '0';
-    });
-  });
-
+  updateReturnSummary();
   syncSelectedMotives();
 }
 
 function resetSelection() {
-  selectedSaleId.value = '';
+  if (selectedSaleId) selectedSaleId.value = '';
+  if (returnMotiveMaster) returnMotiveMaster.value = '';
   if (saleSearch) saleSearch.value = '';
   if (selectedSaleBox) selectedSaleBox.hidden = true;
   if (returnDetailsPanel) returnDetailsPanel.hidden = true;
   if (returnMotivePanel) returnMotivePanel.hidden = true;
   if (returnSubmitPanel) returnSubmitPanel.hidden = true;
   if (returnItemsList) returnItemsList.innerHTML = '';
+  updateReturnSummary();
   if (saleSearchList) {
     saleSearchList.innerHTML = '';
     saleSearchList.hidden = true;
@@ -389,7 +646,10 @@ if (saleSearch) {
 }
 
 if (returnMotiveMaster) {
-  returnMotiveMaster.addEventListener('change', syncSelectedMotives);
+  returnMotiveMaster.addEventListener('change', () => {
+    syncSelectedMotives();
+    updateReturnSummary();
+  });
 }
 
 if (document.getElementById('remove-selected-sale')) {
@@ -402,11 +662,19 @@ if (returnForm) {
   returnForm.addEventListener('submit', (event) => {
     const selectedRows = [...returnForm.querySelectorAll('.return-row')];
     const checkedRows = selectedRows.filter(row => row.querySelector('.return-item-check')?.checked);
-    if (!selectedSaleId.value || !checkedRows.length) {
+    const validRows = checkedRows.filter(row => {
+      const quantityInput = row.querySelector('.return-qty-input');
+      const quantity = Number(quantityInput?.value);
+      const maximum = Number(row.dataset.availableQuantity || quantityInput?.max || 0);
+      return Number.isInteger(quantity) && quantity >= 1 && quantity <= maximum;
+    });
+    if (!selectedSaleId.value || !checkedRows.length || validRows.length !== checkedRows.length) {
       event.preventDefault();
-      alert('Debes seleccionar la venta y al menos un repuesto para devolver.');
+      alert('Debes seleccionar la venta y al menos un repuesto con una cantidad válida.');
       return;
     }
+
+    validRows.forEach(row => updateReturnRowAmounts(row));
 
     [...returnForm.querySelectorAll('.return-row')].forEach(row => {
       const check = row.querySelector('.return-item-check');
@@ -436,19 +704,124 @@ document.getElementById('cancel-return')?.addEventListener('click', () => {
 
 const returnReportForm = document.getElementById('return-report-form');
 const returnReportDownload = document.getElementById('return-report-download');
-if (returnReportForm && returnReportDownload) {
-  returnReportForm.querySelectorAll('input').forEach(input => {
-    input.addEventListener('input', () => {
-      const params = new URLSearchParams(new FormData(returnReportForm));
-      returnReportDownload.href = '{{ url_for('exportar_pdf_devoluciones') }}' + (params.toString() ? '?' + params.toString() : '');
-    });
+const returnReportBaseUrl = '{{ url_for('exportar_pdf_devoluciones') }}';
+const returnReportRows = [...document.querySelectorAll('.return-report-row')];
+const returnReportEmpty = document.getElementById('return-report-empty');
+const returnReportCount = document.getElementById('return-report-count');
+const returnReportPreviewCount = document.getElementById('return-report-preview-count');
+const returnReportDownloadCount = document.getElementById('return-report-download-count');
+const returnReportTotal = document.getElementById('return-report-total');
+
+function normalizeReportText(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
+}
+
+function updateReturnReport() {
+  if (!returnReportForm) return;
+  const filters = new FormData(returnReportForm);
+  const fromDate = filters.get('from_date') || '';
+  const toDate = filters.get('to_date') || '';
+  const clientQuery = normalizeReportText(filters.get('cliente'));
+  const partQuery = normalizeReportText(filters.get('repuesto'));
+  let visibleCount = 0;
+  let totalCents = 0;
+
+  returnReportRows.forEach(row => {
+    const date = (row.dataset.date || '').slice(0, 10);
+    const matchesDate = (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
+    const matchesClient = !clientQuery || normalizeReportText(row.dataset.client).includes(clientQuery);
+    const matchesPart = !partQuery || normalizeReportText(row.dataset.repuesto).includes(partQuery);
+    const isVisible = matchesDate && matchesClient && matchesPart;
+    row.hidden = !isVisible;
+    if (isVisible) {
+      visibleCount += 1;
+      totalCents += Math.round(Number(row.dataset.total || 0) * 100);
+    }
   });
-  document.getElementById('clear-return-report')?.addEventListener('click', () => {
-    returnReportForm.reset();
-    returnReportDownload.href = '{{ url_for('exportar_pdf_devoluciones') }}';
-  });
+
+  if (returnReportEmpty) returnReportEmpty.hidden = visibleCount > 0;
+  if (returnReportCount) returnReportCount.textContent = String(visibleCount);
+  if (returnReportPreviewCount) returnReportPreviewCount.textContent = String(visibleCount);
+  if (returnReportDownloadCount) returnReportDownloadCount.textContent = String(visibleCount);
+  if (returnReportTotal) {
+    returnReportTotal.textContent = `Q ${(totalCents / 100).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  const params = new URLSearchParams();
+  for (const [key, value] of filters.entries()) {
+    if (String(value).trim()) params.set(key, String(value).trim());
+  }
+  if (returnReportDownload) {
+    returnReportDownload.href = returnReportBaseUrl + (params.toString() ? `?${params.toString()}` : '');
+  }
+}
+
+returnReportForm?.addEventListener('submit', event => event.preventDefault());
+returnReportForm?.querySelectorAll('input').forEach(input => {
+  input.addEventListener('input', updateReturnReport);
+  input.addEventListener('change', updateReturnReport);
+});
+document.getElementById('clear-return-report')?.addEventListener('click', () => {
+  returnReportForm?.reset();
+  updateReturnReport();
 });
 
+const listView = document.getElementById('list-view');
+const reportView = document.getElementById('report-view');
+document.querySelectorAll('[data-tab]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const showReport = tab.dataset.tab === 'report';
+    if (listView) listView.hidden = showReport;
+    if (reportView) reportView.hidden = !showReport;
+    document.querySelectorAll('[data-tab]').forEach(button => {
+      const isActive = button === tab;
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+    if (showReport) updateReturnReport();
+  });
+});
+updateReturnReport();
+
 resetSelection();
+
+    // Mobile sidebar toggle
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+
+    mobileMenuButton?.addEventListener('click', () => {
+        const isClosed = sidebar.classList.contains('-translate-x-full');
+        sidebar.classList.toggle('-translate-x-full');
+        overlay.classList.toggle('hidden');
+        mobileMenuButton.setAttribute('aria-expanded', isClosed);
+    });
+
+    overlay?.addEventListener('click', () => {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+        mobileMenuButton.setAttribute('aria-expanded', 'false');
+    });
+
+    // Cerrar sidebar al hacer click en un enlace (móvil)
+    sidebar?.querySelectorAll('nav a').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                mobileMenuButton.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+
+    // Manejar redimensionamiento de ventana
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 768) {
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.add('hidden');
+        } else if (!sidebar.classList.contains('-translate-x-full')) {
+            overlay.classList.remove('hidden');
+        }
+    });
 </script>
 </body></html>

@@ -1,0 +1,21 @@
+<section class="form-section photo-section" aria-labelledby="photo-section-title">
+    <h2 class="form-section-title" id="photo-section-title">Fotografía</h2>
+    <div class="photo-control">
+        <div class="photo-preview-frame" id="photo-placeholder">
+            {% if form_mode == 'edit' and repuesto.fotografia %}
+                <img class="photo-current-image" src="{{ url_for('static', filename=repuesto.fotografia) }}" alt="Fotografía actual del repuesto">
+            {% else %}
+                <i class="fa-regular fa-image" aria-hidden="true"></i><span>Sin foto</span>
+            {% endif %}
+        </div>
+        <div class="photo-control-details">
+            <input type="file" id="fotografia-upload" name="fotografia" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" capture="environment" class="photo-input-hidden" tabindex="-1" aria-hidden="true">
+            <div class="photo-actions">
+                <button type="button" class="photo-action-button" id="choose-photo"><i class="fa-solid fa-camera" aria-hidden="true"></i> Subir foto</button>
+            </div>
+            {% if form_mode == 'edit' and repuesto.fotografia %}<label class="remove-photo"><input type="checkbox" name="eliminar_fotografia" value="1"> Eliminar fotografía actual</label>{% endif %}
+            <div class="photo-preview" id="photo-preview" hidden><img id="photo-preview-image" alt="Vista previa del repuesto"><span id="photo-preview-name"></span></div>
+            <small class="photo-help">JPG, PNG o WEBP · Máx. 3 MB</small>
+        </div>
+    </div>
+</section>

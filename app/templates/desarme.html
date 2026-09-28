@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desarme de Vehículos - Importadora Morales</title>
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='desarme.css') }}">
+</head>
+<body class="module-theme dismantling-page min-h-screen flex flex-col md:flex-row">
+    <div class="mobile-menu-trigger">
+        <button id="mobile-menu-button" type="button" aria-label="Abrir menú"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-72 max-w-[18rem] -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:w-64 bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen">
+        <div>
+            <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
+            <nav aria-label="Navegación principal">
+                <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
+                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
+                {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
+                {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake" aria-hidden="true"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
+                {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Devoluciones</a>{% endif %}
+                {% if has_permission('desarme', 'read') %}<a class="active" href="{{ url_for('desarme') }}" aria-current="page"><i class="fa-solid fa-car-side" aria-hidden="true"></i> Desarme de Vehículos</a>{% endif %}
+                {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Usuarios</a>{% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears" aria-hidden="true"></i> Mantenimiento</a>{% endif %}
+            </nav>
+        </div>
+        <div class="session-panel">
+            <small>Sesión activa</small><strong>{{ user_name }}</strong><span>{{ user_role }}</span>
+            <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Cerrar Sesión</a>
+        </div>
+    </aside>
+
+    <main class="disassembly-main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}<div class="flash {{ category }}" role="status">{{ message }}</div>{% endfor %}
+        {% endwith %}
+
+        <header class="disassembly-header">
+            <div><h1>Desarme de Vehículos</h1><p>Registro y control de vehículos para desarme</p></div>
+            {% if can_create %}<button class="new-vehicle-button" id="open-create-notice" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo vehículo</button>{% endif %}
+        </header>
+
+        <section class="disassembly-summary" aria-label="Resumen de desarmes">
+            {% for card in summary_cards %}
+            <article class="summary-card {{ card.color }}">
+                <span>{{ card.label }}</span><strong>{{ card.value }}</strong>
+            </article>
+            {% endfor %}
+        </section>
+
+        <form class="disassembly-filters" id="disassembly-filter-form" action="{{ url_for('desarme') }}" method="get" role="search">
+            <label class="vehicle-search">
+                <span class="sr-only">Buscar desarme</span><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search" name="q" value="{{ filters.q }}" placeholder="Buscar por ID, origen o estado..." autocomplete="off" aria-label="Buscar por ID, origen o estado">
+            </label>
+            <label>
+                <span class="sr-only">Filtrar por estado</span>
+                <select name="estado" aria-label="Filtrar por estado">
+                    <option value="">Todos los estados</option>
+                    {% for estado in estados %}<option value="{{ estado.id }}" {% if filters.estado == estado.id|string %}selected{% endif %}>{{ estado.nombre }}</option>{% endfor %}
+                </select>
+            </label>
+            <label>
+                <span class="sr-only">Filtrar por origen</span>
+                <select name="origen" aria-label="Filtrar por origen">
+                    <option value="">Todos los orígenes</option>
+                    {% for origen in origenes %}<option value="{{ origen.id }}" {% if filters.origen == origen.id|string %}selected{% endif %}>{{ origen.nombre }}</option>{% endfor %}
+                </select>
+            </label>
+        </form>
+
+        <section class="disassembly-results" aria-live="polite" aria-label="Vehículos para desarme">
+            {% if page_error %}
+                <div class="disassembly-message error-state" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>{{ page_error }}</p></div>
+            {% elif vehicles %}
+                <div class="disassembly-table-wrap">
+                    <table class="disassembly-table">
+                        <thead><tr><th>ID</th><th>Origen</th><th>Fecha inicio</th><th>Fecha finalización</th><th>Estado</th><th>Piezas</th><th>Observaciones</th></tr></thead>
+                        <tbody>
+                            {% for vehicle in vehicles %}
+                            <tr>
+                                <td class="vehicle-id">D-{{ '%06d'|format(vehicle.id|int) }}</td>
+                                <td>{{ vehicle.origen }}</td>
+                                <td>{{ vehicle.fecha_inicio.strftime('%d/%m/%Y') if vehicle.fecha_inicio and vehicle.fecha_inicio.strftime else vehicle.fecha_inicio or '—' }}</td>
+                                <td>{{ vehicle.fecha_finalizacion.strftime('%d/%m/%Y') if vehicle.fecha_finalizacion and vehicle.fecha_finalizacion.strftime else vehicle.fecha_finalizacion or '—' }}</td>
+                                <td><span class="state-badge {{ vehicle.state_class }}">{{ vehicle.estado }}</span></td>
+                                <td>{{ vehicle.piezas }}</td>
+                                <td class="vehicle-notes">{{ vehicle.observaciones or '—' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="disassembly-empty-state">
+                    <i class="fa-solid fa-car-side" aria-hidden="true"></i>
+                    <p>{{ 'No hay vehículos registrados para desarme' if not has_filters else 'No se encontraron desarmes con esos filtros' }}</p>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    {% if can_create %}
+    <div class="disassembly-modal-backdrop" id="create-notice" hidden>
+        <section class="disassembly-modal" role="dialog" aria-modal="true" aria-labelledby="create-notice-title" aria-describedby="create-notice-description">
+            <header><h2 id="create-notice-title">Registro de vehículo</h2><button type="button" class="modal-close" aria-label="Cerrar aviso" data-close-notice><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+            <div class="modal-notice-icon"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>
+            <p id="create-notice-description">El tablero y los filtros están disponibles, pero el registro de vehículos está pendiente de definir cómo se vincula cada vehículo con su proceso de desarme. No se guardó ningún cambio ni se modificó el inventario.</p>
+            <footer><button type="button" class="notice-confirm" data-close-notice>Entendido</button></footer>
+        </section>
+    </div>
+    {% endif %}
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('mobile-sidebar-overlay');
+        document.getElementById('mobile-menu-button')?.addEventListener('click', () => {
+            sidebar?.classList.toggle('-translate-x-full');
+            overlay?.classList.toggle('hidden');
+        });
+        overlay?.addEventListener('click', () => {
+            sidebar?.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+        });
+
+        const filterForm = document.getElementById('disassembly-filter-form');
+        let searchTimer;
+        filterForm?.querySelector('input[name="q"]')?.addEventListener('input', () => {
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(() => filterForm.requestSubmit(), 350);
+        });
+        filterForm?.querySelectorAll('select').forEach((select) => select.addEventListener('change', () => filterForm.requestSubmit()));
+
+        const notice = document.getElementById('create-notice');
+        const openNotice = document.getElementById('open-create-notice');
+        const closeNotice = () => {
+            if (!notice) return;
+            notice.hidden = true;
+            openNotice?.focus();
+        };
+        openNotice?.addEventListener('click', () => {
+            notice.hidden = false;
+            notice.querySelector('[data-close-notice]')?.focus();
+        });
+        notice?.querySelectorAll('[data-close-notice]').forEach((button) => button.addEventListener('click', closeNotice));
+        notice?.addEventListener('click', (event) => { if (event.target === notice) closeNotice(); });
+        document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && notice && !notice.hidden) closeNotice(); });
+    </script>
+</body>
+</html>

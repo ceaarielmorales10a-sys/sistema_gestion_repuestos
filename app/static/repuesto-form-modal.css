@@ -1,0 +1,177 @@
+:root {
+  --repuesto-modal-ink: #1f2937;
+  --repuesto-modal-muted: #7b8799;
+  --repuesto-modal-line: #e2e8f0;
+  --repuesto-modal-blue: var(--module-blue, #2165ee);
+  --repuesto-modal-control-height: 36px;
+  --repuesto-modal-radius: 8px;
+  --repuesto-modal-width: 720px;
+}
+
+body.repuesto-editor-page {
+  min-height: 100vh;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+.mobile-menu-trigger { position: fixed; top: 12px; left: 12px; z-index: 55; display: none; }
+.mobile-menu-trigger button { width: 40px; height: 40px; border: 1px solid var(--repuesto-modal-line); border-radius: 10px; background: #fff; color: var(--repuesto-modal-ink); box-shadow: 0 2px 6px rgb(15 23 42 / 12%); }
+
+body.repuesto-editor-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(15 23 42 / 52%);
+}
+
+.repuesto-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  padding: 28px 28px 28px 268px;
+  background: #f3f4f6;
+  filter: blur(.45px);
+  transform: scale(1.005);
+  transform-origin: right center;
+  user-select: none;
+}
+
+.inventory-backdrop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.inventory-backdrop-header h1 {
+  margin: 0 0 5px;
+  color: #1f2937;
+  font-size: 27px;
+  font-weight: 800;
+}
+
+.inventory-backdrop-header p { margin: 0; color: var(--repuesto-modal-muted); font-size: 14px; }
+.inventory-backdrop-header > span { display: inline-flex; align-items: center; gap: 9px; padding: 11px 16px; border-radius: 9px; background: var(--repuesto-modal-blue); color: #fff; font-size: 13px; font-weight: 700; }
+.inventory-backdrop-tabs { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; color: #61738c; font-size: 12px; }
+.inventory-backdrop-tabs span { display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px; }
+.inventory-backdrop-tabs .selected { border-radius: 9px 9px 0 0; border-bottom: 2px solid var(--repuesto-modal-blue); background: #fff; color: var(--repuesto-modal-blue); font-weight: 700; }
+.inventory-backdrop-search { display: flex; align-items: center; gap: 12px; margin: 16px 0; padding: 14px; border: 1px solid var(--repuesto-modal-line); border-radius: 10px; background: #fff; color: #8997aa; font-size: 12px; }
+.inventory-backdrop-table-wrap { overflow: hidden; border: 1px solid var(--repuesto-modal-line); border-radius: 10px; background: #fff; }
+.inventory-backdrop-table { width: 100%; border-collapse: collapse; text-align: left; }
+.inventory-backdrop-table th, .inventory-backdrop-table td { padding: 14px 16px; border-bottom: 1px solid #eef1f5; color: #53647d; font-size: 11px; }
+.inventory-backdrop-table th { background: #f8fafc; color: #53647d; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.inventory-backdrop-table tr:last-child td { border-bottom: 0; }
+
+body.repuesto-editor-page.add-repuesto-page .repuesto-modal {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--repuesto-modal-width), calc(100vw - 36px));
+  height: min(840px, calc(100dvh - 36px));
+  max-height: calc(100dvh - 36px);
+  margin: 0;
+  overflow: hidden;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--repuesto-modal-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
+  color: var(--repuesto-modal-ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body.repuesto-editor-page .repuesto-modal-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 22px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+body.repuesto-editor-page .repuesto-modal-header h1 { margin: 0; color: #1f2937; font-size: 18px; font-weight: 800; line-height: 1.2; }
+body.repuesto-editor-page .modal-close { display: inline-grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #9aa6b5; font-size: 17px; text-decoration: none; }
+body.repuesto-editor-page .modal-close:hover { background: #f3f6fa; color: #334155; }
+body.repuesto-editor-page .modal-close:focus-visible, body.repuesto-editor-page .repuesto-form button:focus-visible, body.repuesto-editor-page .repuesto-form a:focus-visible { outline: 3px solid rgb(33 101 238 / 32%); outline-offset: 2px; }
+.repuesto-form-messages { flex: 0 0 auto; padding: 10px 22px 0; }
+.form-message { display: flex; align-items: center; gap: 9px; margin: 0; padding: 9px 12px; border-radius: 7px; font-size: 12px; }
+.form-message.success { background: #f0fdf4; color: #15803d; }
+.form-message.error { background: #fef2f2; color: #b91c1c; }
+body.repuesto-editor-page .repuesto-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; overflow: hidden; }
+.repuesto-form-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 20px; scrollbar-gutter: stable; }
+.form-section { min-width: 0; margin: 0 0 17px; }
+.form-section:last-child { margin-bottom: 0; }
+body.repuesto-editor-page .form-section-title { margin: 0 0 10px; padding: 0 0 7px; border-bottom: 1px solid #dbeafe; color: var(--repuesto-modal-blue); font-size: 11px; font-weight: 800; letter-spacing: .055em; line-height: 1.2; text-transform: uppercase; }
+.field-grid { display: grid; min-width: 0; gap: 11px 14px; }
+.field-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.form-field { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+body.repuesto-editor-page .form-field > label { color: #475569 !important; font-size: 10px !important; font-weight: 600 !important; letter-spacing: normal !important; line-height: 1.2; text-transform: uppercase; }
+.form-field label em { color: #ef4444; font-style: normal; }
+body.repuesto-editor-page .form-field input:not([type="checkbox"]), body.repuesto-editor-page .form-field select, body.repuesto-editor-page .form-field textarea { display: block; width: 100%; min-width: 0; min-height: var(--repuesto-modal-control-height); margin: 0; padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: var(--repuesto-modal-radius); background-color: #fff; color: #253247; font: 12px/1.35 Arial, Helvetica, sans-serif; }
+body.repuesto-editor-page .form-field select { padding-right: 28px; }
+body.repuesto-editor-page .form-field textarea { min-height: 54px; resize: vertical; }
+body.repuesto-editor-page .form-field input::placeholder, body.repuesto-editor-page .form-field textarea::placeholder { color: #9aa3af; }
+body.repuesto-editor-page .form-field input:focus, body.repuesto-editor-page .form-field select:focus, body.repuesto-editor-page .form-field textarea:focus { border-color: var(--repuesto-modal-blue); outline: 0; box-shadow: 0 0 0 3px rgb(33 101 238 / 12%); }
+body.repuesto-editor-page .form-field input:disabled, body.repuesto-editor-page .form-field select:disabled, body.repuesto-editor-page .form-field input:read-only { background: #f8fafc; color: #748198; }
+.form-field .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.photo-section { margin-bottom: 4px; }
+.photo-control { display: flex; align-items: flex-start; gap: 15px; }
+.photo-preview-frame { display: flex; flex: 0 0 135px; width: 135px; height: 105px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; border: 1px dashed #dce3ec; border-radius: 10px; background: #fff; color: #b6c0ce; font-size: 11px; }
+.photo-preview-frame > i { font-size: 24px; }
+.photo-preview-frame .photo-current-image { width: 100%; height: 100%; object-fit: cover; }
+.photo-control-details { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 9px; }
+.photo-input-hidden { display: none !important; }
+.photo-actions { display: flex; align-items: center; gap: 8px; }
+.photo-action-button { display: inline-flex; min-width: 148px; min-height: 35px; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 0; border-radius: 8px; background: #f3f4f6; color: #334155; font-size: 11px; font-weight: 700; cursor: pointer; }
+.photo-action-button:hover { background: #e9eef5; }
+.photo-help { color: #94a3b8; font-size: 10px; }
+.photo-preview { display: flex; align-items: center; gap: 9px; max-width: 260px; color: #52637a; font-size: 10px; }
+.photo-preview[hidden] { display: none; }
+.photo-preview img { width: 48px; height: 42px; border: 1px solid var(--repuesto-modal-line); border-radius: 6px; object-fit: cover; }
+.photo-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remove-photo { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 10px; }
+.remove-photo input { accent-color: var(--repuesto-modal-blue); }
+
+body.repuesto-editor-page .modal-actions { position: relative; z-index: 2; display: flex; flex: 0 0 auto; justify-content: space-between; gap: 12px; margin: 0; padding: 13px 22px; border-top: 1px solid #e5e7eb; background: rgb(255 255 255 / 98%); }
+body.repuesto-editor-page .primary-action, body.repuesto-editor-page .secondary-action { display: inline-flex; flex: 1 1 0; min-width: 0; min-height: 37px; align-items: center; justify-content: center; gap: 8px; padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font: 700 12px/1.2 Arial, Helvetica, sans-serif; text-decoration: none; cursor: pointer; }
+body.repuesto-editor-page .secondary-action { background: #fff; color: #334155; }
+body.repuesto-editor-page .secondary-action:hover { background: #f8fafc; }
+body.repuesto-editor-page .primary-action { border-color: var(--repuesto-modal-blue); background: var(--repuesto-modal-blue); color: #fff; }
+body.repuesto-editor-page .primary-action:hover { background: #1857d3; }
+
+@media (max-width: 1000px) {
+  .repuesto-editor-backdrop { padding-right: 18px; padding-left: 258px; }
+  body.repuesto-editor-page.add-repuesto-page .repuesto-modal { width: min(720px, calc(100vw - 290px)); }
+}
+
+@media (max-width: 900px) and (min-width: 768px) {
+  .field-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .mobile-menu-trigger { display: none; }
+  .repuesto-editor-backdrop { left: 0; padding: 18px 12px; }
+  .inventory-backdrop-header { margin: 55px 0 18px; }
+  body.repuesto-editor-page.add-repuesto-page .repuesto-modal { width: calc(100vw - 20px); height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); border-radius: 12px; }
+  body.repuesto-editor-page .repuesto-modal-header { min-height: 53px; padding: 0 16px; }
+  body.repuesto-editor-page .repuesto-modal-header h1 { font-size: 16px; }
+  .repuesto-form-body { padding: 15px 16px 18px; }
+  .field-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-section { margin-bottom: 16px; }
+  body.repuesto-editor-page.add-repuesto-page .modal-actions { flex-direction: row; gap: 9px; padding: 11px 16px max(11px, env(safe-area-inset-bottom)); }
+  body.repuesto-editor-page .primary-action, body.repuesto-editor-page .secondary-action { min-height: 42px; font-size: 11px; }
+}
+
+@media (max-width: 420px) {
+  .field-grid-2, .field-grid-4 { grid-template-columns: minmax(0, 1fr); }
+  .photo-preview-frame { flex-basis: 110px; width: 110px; height: 96px; }
+  .photo-action-button { min-width: 126px; }
+}

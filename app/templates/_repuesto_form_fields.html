@@ -1,0 +1,64 @@
+{% set is_edit = form_mode == 'edit' %}
+<div class="repuesto-form-body">
+    <section class="form-section" aria-labelledby="identificacion-title">
+        <h2 class="form-section-title" id="identificacion-title">Identificación</h2>
+        <div class="field-grid field-grid-2">
+            <div class="form-field"><label for="codigo_repuesto">Código <em>*</em></label><input type="text" id="codigo_repuesto" name="codigo_repuesto" required autocomplete="off" placeholder="Ingrese el código..." value="{{ repuesto.codigo_repuesto if is_edit else '' }}"></div>
+            <div class="form-field"><label for="id_vehiculo_origen">Vehículo origen <em>*</em></label><select id="id_vehiculo_origen" name="id_vehiculo_origen" required><option value="" disabled {% if not is_edit or not repuesto.id_vehiculo_origen %}selected{% endif %}>Seleccionar vehículo...</option>{% for vehiculo in vehiculos_origen %}<option value="{{ vehiculo.id }}" {% if is_edit and repuesto.id_vehiculo_origen == vehiculo.id %}selected{% endif %}>{{ vehiculo.nombre }}</option>{% endfor %}</select></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="clasificacion-title">
+        <h2 class="form-section-title" id="clasificacion-title">Clasificación del repuesto</h2>
+        <div class="field-grid field-grid-4">
+            <div class="form-field"><label for="id_tipo_repuesto">Tipo de repuesto <em>*</em></label><select id="id_tipo_repuesto" name="id_tipo_repuesto" required><option value="" disabled {% if not is_edit or not repuesto.id_tipo_repuesto %}selected{% endif %}>Seleccionar...</option>{% for tipo in tipos %}<option value="{{ tipo.id }}" data-ubicacion-id="{{ tipo.id_ubicacion or '' }}" {% if is_edit and repuesto.id_tipo_repuesto == tipo.id %}selected{% endif %}>{{ tipo.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_marca">Marca <em>*</em></label><select id="id_marca" name="id_marca" required><option value="" disabled {% if not is_edit or not repuesto.id_marca %}selected{% endif %}>Seleccionar...</option>{% for marca in marcas %}<option value="{{ marca.id }}" {% if is_edit and repuesto.id_marca == marca.id %}selected{% endif %}>{{ marca.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_modelo">Modelo <em>*</em></label><select id="id_modelo" name="id_modelo" data-selected-model="{{ repuesto.id_modelo if is_edit else '' }}" required {% if not is_edit %}disabled{% endif %}><option value="" disabled {% if not is_edit or not repuesto.id_modelo %}selected{% endif %}>{{ 'Seleccionar...' if is_edit else 'Seleccionar primero la marca...' }}</option>{% for modelo in modelos %}<option value="{{ modelo.id }}" {% if is_edit and repuesto.id_modelo == modelo.id %}selected{% endif %}>{{ modelo.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_anio">Año <em>*</em></label><select id="id_anio" name="id_anio" required><option value="" disabled {% if not is_edit or not repuesto.id_anio %}selected{% endif %}>Seleccionar...</option>{% for anio in anios %}<option value="{{ anio.id }}" {% if is_edit and repuesto.id_anio == anio.id %}selected{% endif %}>{{ anio.nombre }}</option>{% endfor %}</select></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="caracteristicas-title">
+        <h2 class="form-section-title" id="caracteristicas-title">Características</h2>
+        <div class="field-grid field-grid-4">
+            <div class="form-field"><label for="id_color">Color</label><select id="id_color" name="id_color"><option value="" {% if not is_edit or not repuesto.id_color %}selected{% endif %}>No aplica</option>{% for color in colores %}<option value="{{ color.id }}" {% if is_edit and repuesto.id_color == color.id %}selected{% endif %}>{{ color.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_lado">Lado</label><select id="id_lado" name="id_lado"><option value="" {% if not is_edit or not repuesto.id_lado %}selected{% endif %}>No aplica</option>{% for lado in lados %}<option value="{{ lado.id }}" {% if is_edit and repuesto.id_lado == lado.id %}selected{% endif %}>{{ lado.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_posicion">Posición</label><select id="id_posicion" name="id_posicion"><option value="" {% if not is_edit or not repuesto.id_posicion %}selected{% endif %}>No aplica</option>{% for posicion in posiciones %}<option value="{{ posicion.id }}" {% if is_edit and repuesto.id_posicion == posicion.id %}selected{% endif %}>{{ posicion.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_transmision">Transmisión</label><select id="id_transmision" name="id_transmision"><option value="" {% if not is_edit or not repuesto.id_transmision %}selected{% endif %}>No aplica</option>{% for transmision in transmisiones %}<option value="{{ transmision.id }}" {% if is_edit and repuesto.id_transmision == transmision.id %}selected{% endif %}>{{ transmision.nombre }}</option>{% endfor %}</select></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="bodega-title">
+        <h2 class="form-section-title" id="bodega-title">Bodega y estado</h2>
+        <div class="field-grid field-grid-4">
+            <div class="form-field"><label for="id_ubicacion">Ubicación en bodega <em>*</em></label><select id="id_ubicacion" name="id_ubicacion" required disabled><option value="" disabled {% if not is_edit or not repuesto.id_bodega and not repuesto.id_ubicacion %}selected{% endif %}>Seleccionar...</option>{% for bodega in bodegas %}<option value="{{ bodega.id }}" {% if is_edit and (repuesto.id_bodega == bodega.id or repuesto.id_ubicacion == bodega.id) %}selected{% endif %}>{{ bodega.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="id_estado_repuesto">Estado del repuesto <em>*</em></label><select id="id_estado_repuesto" name="id_estado_repuesto" required><option value="" disabled {% if not is_edit or not repuesto.id_estado_repuesto %}selected{% endif %}>Seleccionar...</option>{% for estado in estados_repuesto %}<option value="{{ estado.id }}" {% if is_edit and repuesto.id_estado_repuesto == estado.id %}selected{% endif %}>{{ estado.nombre }}</option>{% endfor %}</select></div>
+            <div class="form-field"><label for="stock">Stock actual <em>*</em></label><input type="number" id="stock" name="stock" required min="0" step="1" placeholder="0" value="{{ repuesto.stock if is_edit else '' }}"></div>
+            <div class="form-field"><label for="stock_minimo">Stock mínimo</label><input type="number" id="stock_minimo" name="stock_minimo" min="0" step="1" placeholder="0" value="{{ repuesto.stock_minimo if is_edit and repuesto.stock_minimo is not none else '' }}"></div>
+            <div class="form-field"><label for="stock_maximo">Stock máximo <em>*</em></label><input type="number" id="stock_maximo" name="stock_maximo" required min="0" step="1" placeholder="0" value="{{ repuesto.stock_maximo if is_edit and repuesto.stock_maximo is not none else '' }}"></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="precios-title">
+        <h2 class="form-section-title" id="precios-title">Precios (Q)</h2>
+        <div class="field-grid field-grid-2">
+            <div class="form-field"><label for="precio_compra">Precio de compra <em>*</em></label><input type="number" id="precio_compra" name="precio_compra" required min="0" step="0.01" placeholder="0.00" value="{{ repuesto.precio_compra if is_edit else '' }}"></div>
+            <div class="form-field"><label for="precio_venta">Precio de venta <em>*</em></label><input type="number" id="precio_venta" name="precio_venta" required min="0" step="0.01" placeholder="0.00" value="{{ repuesto.precio_venta if is_edit else '' }}"></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="registro-title">
+        <h2 class="form-section-title" id="registro-title">Registro</h2>
+        <div class="field-grid field-grid-2">
+            <div class="form-field"><label for="fecha_ingreso_display">Fecha de ingreso</label><input id="fecha_ingreso_display" type="text" readonly value="{% if is_edit and repuesto.fecha_ingreso %}{{ repuesto.fecha_ingreso.strftime('%d/%m/%Y') if repuesto.fecha_ingreso.strftime else repuesto.fecha_ingreso }}{% endif %}"></div>
+            <div class="form-field"><label for="registrado_por">Registrado por</label><input id="registrado_por" type="text" readonly value="{{ repuesto_registrado_por if is_edit else session.get('full_name', session.get('user', 'Usuario')) }}"></div>
+        </div>
+    </section>
+
+    <section class="form-section" aria-labelledby="observaciones-title">
+        <h2 class="form-section-title" id="observaciones-title">Observaciones</h2>
+        <div class="form-field"><label class="sr-only" for="observaciones">Observaciones adicionales del repuesto</label><textarea id="observaciones" name="observaciones" rows="2" placeholder="Notas adicionales sobre el repuesto...">{{ repuesto.observaciones if is_edit else '' }}</textarea></div>
+    </section>
+
+    {% include '_repuesto_photo_field.html' %}
+</div>

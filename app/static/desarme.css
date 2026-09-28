@@ -1,0 +1,102 @@
+:root {
+  --disassembly-pending: #e7a600;
+  --disassembly-pending-tint: #fffbea;
+  --disassembly-progress: #2165ee;
+  --disassembly-progress-tint: #eff6ff;
+  --disassembly-complete: #19a85a;
+  --disassembly-complete-tint: #effcf4;
+  --disassembly-parts: #a23cff;
+  --disassembly-parts-tint: #faf5ff;
+  --disassembly-gap: 14px;
+  --disassembly-radius: 10px;
+  --disassembly-control-height: 36px;
+}
+
+.dismantling-page { min-height: 100vh; }
+.dismantling-page #sidebar { width: 244px; }
+body.module-theme.dismantling-page .brand { height: 182px; }
+body.module-theme.dismantling-page main.disassembly-main { flex: 1; min-width: 0; padding: 34px 30px; }
+body.module-theme.dismantling-page .disassembly-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
+body.module-theme.dismantling-page .disassembly-header h1 { margin: 0 0 7px; color: var(--module-ink); font-size: 28px; font-weight: 800; line-height: 1.2; }
+body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var(--module-muted); font-size: 14px; }
+.new-vehicle-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; flex: 0 0 auto; min-height: 40px; padding: 0 17px; border: 0; border-radius: 10px; background: var(--module-blue); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background-color .16s ease, transform .16s ease; }
+.new-vehicle-button:hover { background: #1857d3; transform: translateY(-1px); }
+.new-vehicle-button:focus-visible, .disassembly-filters input:focus-visible, .disassembly-filters select:focus-visible, .notice-confirm:focus-visible, .modal-close:focus-visible { outline: 3px solid #2165ee55; outline-offset: 2px; }
+.disassembly-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--disassembly-gap); margin-bottom: 22px; }
+.summary-card { min-height: 79px; padding: 14px 16px; border: 1px solid var(--module-line); border-left: 3px solid; border-radius: var(--disassembly-radius); box-shadow: 0 2px 3px #152b450c; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+.summary-card span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.summary-card strong { font-size: 23px; line-height: 1; font-weight: 800; }
+.summary-card.pending { border-left-color: var(--disassembly-pending); background: var(--disassembly-pending-tint); color: #805000; }
+.summary-card.in-progress { border-left-color: var(--disassembly-progress); background: var(--disassembly-progress-tint); color: #173f9d; }
+.summary-card.completed { border-left-color: var(--disassembly-complete); background: var(--disassembly-complete-tint); color: #075d30; }
+.summary-card.parts { border-left-color: var(--disassembly-parts); background: var(--disassembly-parts-tint); color: #6806a0; }
+.disassembly-filters { display: grid; grid-template-columns: minmax(220px, 1.05fr) minmax(190px, 1fr) minmax(190px, 1fr); align-items: center; gap: 14px; margin: 0 0 21px; padding: 14px 15px; border: 1px solid var(--module-line); border-radius: var(--disassembly-radius); background: #fff; box-shadow: 0 2px 3px #152b450c; }
+.disassembly-filters label { display: block; min-width: 0; }
+.disassembly-filters .vehicle-search { position: relative; display: flex; align-items: center; }
+.vehicle-search > i { position: absolute; left: 13px; z-index: 1; color: #9aa8b9; font-size: 14px; pointer-events: none; }
+.disassembly-filters input, .disassembly-filters select { width: 100%; min-width: 0; height: var(--disassembly-control-height); padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 9px; background-color: #fff; color: #19365d; font-family: inherit; font-size: 12px; }
+.disassembly-filters input { padding-left: 37px; }
+.disassembly-filters input::placeholder { color: #8795a8; }
+.disassembly-results { min-height: 190px; overflow: hidden; border: 1px solid var(--module-line); border-radius: var(--disassembly-radius); background: #fff; box-shadow: 0 2px 3px #152b450c; }
+.disassembly-empty-state { min-height: 188px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 28px; color: var(--module-muted); text-align: center; }
+.disassembly-empty-state > i { color: #dfe3e8; font-size: 31px; }
+.disassembly-empty-state p { margin: 0; font-size: 14px; }
+.disassembly-message { min-height: 188px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
+.disassembly-message i { font-size: 26px; }
+.disassembly-message p { max-width: 580px; margin: 0; line-height: 1.6; }
+.error-state { color: #a12b2b; }
+.disassembly-table-wrap { overflow-x: auto; }
+.disassembly-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.disassembly-table th, .disassembly-table td { padding: 13px 14px; border-bottom: 1px solid var(--module-line); text-align: left; font-size: 12px; }
+.disassembly-table th { background: #f8fafc; color: #52637a; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.disassembly-table tr:last-child td { border-bottom: 0; }
+.disassembly-table tbody tr:hover { background: #f8fbff; }
+.vehicle-id { color: var(--module-blue) !important; font-weight: 700; white-space: nowrap; }
+.vehicle-notes { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; background: #f1f5f9; color: #52637a; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.state-badge.pending { background: var(--disassembly-pending-tint); color: #805000; }
+.state-badge.in-progress { background: var(--disassembly-progress-tint); color: #173f9d; }
+.state-badge.completed { background: var(--disassembly-complete-tint); color: #075d30; }
+.mobile-menu-trigger { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.disassembly-modal-backdrop[hidden] { display: none; }
+.disassembly-modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: #11182780; }
+.disassembly-modal { width: min(100%, 460px); padding: 22px; border: 1px solid var(--module-line); border-radius: 14px; background: #fff; box-shadow: 0 18px 45px #0f172a30; animation: notice-enter .16s ease-out; }
+.disassembly-modal header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.disassembly-modal h2 { margin: 0; color: var(--module-ink); font-size: 18px; font-weight: 800; }
+.modal-close { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--module-muted); cursor: pointer; }
+.modal-close:hover { background: #f1f5f9; }
+.modal-notice-icon { display: grid; place-items: center; width: 44px; height: 44px; margin: 20px 0 12px; border-radius: 50%; background: #eff6ff; color: var(--module-blue); font-size: 20px; }
+.disassembly-modal > p { margin: 0; color: #56667c; font-size: 13px; line-height: 1.65; }
+.disassembly-modal footer { display: flex; justify-content: flex-end; margin-top: 22px; }
+.notice-confirm { min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; background: var(--module-blue); color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.notice-confirm:hover { background: #1857d3; }
+@keyframes notice-enter { from { opacity: 0; transform: translateY(5px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (max-width: 1000px) {
+  body.module-theme.dismantling-page main.disassembly-main { padding: 28px 22px; }
+  .disassembly-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .mobile-menu-trigger { position: fixed; z-index: 15; top: 12px; left: 12px; display: block; }
+  .mobile-menu-trigger button { width: 40px; height: 40px; border: 1px solid var(--module-line); border-radius: 10px; background: #fff; color: var(--module-ink); box-shadow: 0 2px 6px #0f172a15; }
+  body.module-theme.dismantling-page main.disassembly-main { width: 100%; padding: 68px 15px 22px; }
+  body.module-theme.dismantling-page .disassembly-header { align-items: flex-start; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+  body.module-theme.dismantling-page .disassembly-header h1 { font-size: 23px; }
+  body.module-theme.dismantling-page .disassembly-header p { font-size: 12px; }
+  .new-vehicle-button { min-height: 40px; }
+  .disassembly-summary { gap: 10px; margin-bottom: 15px; }
+  .summary-card { min-height: 70px; padding: 11px 12px; }
+  .summary-card span { font-size: 9px; }
+  .summary-card strong { font-size: 20px; }
+  .disassembly-filters { grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 15px; padding: 12px; }
+  .disassembly-filters input, .disassembly-filters select { height: 40px; font-size: 13px; }
+  .disassembly-results, .disassembly-empty-state { min-height: 190px; }
+  .disassembly-empty-state { gap: 12px; }
+  .disassembly-empty-state p { font-size: 13px; }
+}
+
+@media (max-width: 360px) {
+  .disassembly-summary { grid-template-columns: 1fr; }
+}

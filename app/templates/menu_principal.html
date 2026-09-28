@@ -57,8 +57,11 @@
                 {% endif %}
 
                 {% if has_permission('prestamos', 'read') %}
-                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                <a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl flex justify-between items-center hover:bg-slate-800/60 hover:text-white transition-all">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-handshake text-base w-5"></i> Préstamos
+                    </div>
+                    {% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}
                 </a>
                 {% endif %}
 
@@ -146,12 +149,13 @@
                 {% endif %}
 
                 {% if has_permission('prestamos', 'read') %}
-                <a href="/prestamos" class="modulo-card bg-violet-500 text-white rounded-2xl p-6 shadow-lg shadow-violet-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform">
+                <a href="/prestamos" class="modulo-card bg-violet-500 text-white rounded-2xl p-6 shadow-lg shadow-violet-500/20 cursor-pointer flex flex-col items-center text-center hover:scale-[1.02] transition-transform relative">
                     <div class="bg-white/15 p-4 rounded-full mb-4 text-2xl w-14 h-14 flex justify-center items-center">
                         <i class="fa-solid fa-handshake"></i>
                     </div>
                     <h2 class="text-xl font-bold tracking-wide">Préstamos</h2>
                     <p class="text-xs text-violet-100 font-medium mt-1">Préstamos de repuestos</p>
+                    {% if vencidos > 0 %}<span class="loan-overdue-badge" style="position: absolute; top: 12px; right: 12px;" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}
                 </a>
                 {% endif %}
 

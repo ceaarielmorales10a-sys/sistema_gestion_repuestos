@@ -1,0 +1,15 @@
+<section class="repuesto-modal" role="dialog" aria-modal="true" aria-labelledby="repuesto-modal-title">
+    <header class="repuesto-modal-header">
+        <h1 id="repuesto-modal-title">{{ form_title }}</h1>
+        <a href="{{ url_for('inventario') }}" class="modal-close" aria-label="Cerrar formulario"><i class="fa-solid fa-xmark" aria-hidden="true"></i></a>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="repuesto-form-messages" role="status">{% for category, message in messages %}<p class="form-message {{ category }}"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i>{{ message }}</p>{% endfor %}</div>{% endif %}
+    {% endwith %}
+
+    <form id="repuesto-form" action="{{ form_action }}" method="POST" enctype="multipart/form-data" class="repuesto-form" data-mode="{{ form_mode }}">
+        {% include '_repuesto_form_fields.html' %}
+        {% include '_repuesto_form_actions.html' %}
+    </form>
+</section>

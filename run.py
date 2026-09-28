@@ -3,8 +3,10 @@ import os
 import io
 import re
 import secrets
+import unicodedata
 from uuid import uuid4
 from datetime import datetime
+from decimal import Decimal
 import pyodbc
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
@@ -43,6 +45,20 @@ app.jinja_env.globals['has_permission'] = has_permission_in_session
 UPLOAD_REPUESTOS_DIR = os.path.join(static_dir, 'uploads', 'repuestos')
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 MAX_IMAGE_SIZE = 3 * 1024 * 1024
+
+
+@app.context_processor
+def inject_vencidos():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM prestamo WHERE LOWER(estado) = 'vencido'")
+        vencidos = cursor.fetchone()[0] or 0
+        cursor.close()
+        conn.close()
+        return dict(vencidos=vencidos)
+    except Exception:
+        return dict(vencidos=0)
 
 
 @app.before_request
@@ -3131,11 +3147,15 @@ def agregar_repuesto():
                                        anios=anios,
                                        colores=colores, 
                                        lados=lados, 
-                                       posiciones=posiciones,
-                                       estados_repuesto=estados_repuesto,
-                                       bodegas=bodegas,
-                                       repuestos_registrados=repuestos_registrados)
-        
+                               posiciones=posiciones,
+                               estados_repuesto=estados_repuesto,
+                               bodegas=bodegas,
+repuesto_registrado_por=(
+                                    get_user_full_name_by_id(session.get('user_id'))
+                                    or session.get('full_name', session.get('user', 'Usuario'))
+                                ),
+                               repuestos_registrados=repuestos_registrados)
+
         except Exception as e:
             flash(f'Error al cargar los catálogos: {str(e)}', 'error')
             return render_template('agregar_repuesto.html', tipos=[], transmisiones=[], marcas=[], modelos=[], anios=[], colores=[], lados=[], posiciones=[], estados_repuesto=[], bodegas=[], vehiculos_origen=[], repuestos_registrados=[])
@@ -3994,21 +4014,24 @@ def devoluciones():
                 'fecha_devolucion': data.get('fecha_devolucion'),
                 'usuario': lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or 'Sistema',
                 'cliente': get_cliente_full_name(cursor, None),
-                'total_devuelto': float(data.get('total_devuelto') or 0),
+                'total_devuelto': Decimal('0.00'),
                 'items': [],
             })
             id_repuesto = data.get('id_repuesto')
             if id_repuesto is not None:
+                subtotal = Decimal(str(data.get('subtotal') or 0))
+                current['total_devuelto'] += subtotal
                 current['items'].append({
                     'codigo': data.get('codigo_repuesto') or str(id_repuesto),
                     'nombre': get_repuesto_display_name(cursor, id_repuesto) or data.get('codigo_repuesto') or str(id_repuesto),
                     'cantidad': data.get('cantidad') or 0,
                     'precio_unitario': float(data.get('precio_unitario') or 0),
-                    'subtotal': float(data.get('subtotal') or 0),
+                    'subtotal': float(subtotal),
                     'motivo': lookup_foreign_key_display(cursor, 'id_motivo', data.get('id_motivo'), ['motivo_devolucion']) or 'Otro',
                 })
         for item in grouped.values():
             item['items'] = list(item.get('items', []))
+            item['total_devuelto'] = float(item['total_devuelto'])
             cursor.execute('SELECT id_cliente FROM venta WHERE id_venta = ?', (item['id_venta'],))
             sale = cursor.fetchone()
             item['cliente'] = get_cliente_full_name(cursor, sale[0]) if sale else 'Sin cliente frecuente'
@@ -4051,11 +4074,13 @@ def devoluciones():
             for item_row in cursor.fetchall():
                 cantidad_disponible = item_row[1] or 0
                 cantidad_devuelta = item_row[4] or 0
+                precio_unitario = Decimal(str(item_row[2] or 0)).quantize(Decimal('0.01'))
                 sale['items'].append({
                     'id': item_row[0], 'cantidad': cantidad_disponible,
                     'cantidad_vendida': cantidad_disponible + cantidad_devuelta,
                     'cantidad_devuelta': cantidad_devuelta,
-                    'precio': float(item_row[2] or 0),
+                    'precio': float(precio_unitario),
+                    'precio_centavos': int(precio_unitario * 100),
                     'codigo': item_row[3] or str(item_row[0]),
                     'nombre': get_repuesto_display_name(cursor, item_row[0]) or item_row[3] or str(item_row[0]),
                 })
@@ -4066,7 +4091,10 @@ def devoluciones():
 
         cursor.execute('SELECT id_motivo, motivo FROM motivo_devolucion ORDER BY motivo')
         motivos = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
-        cursor.execute('SELECT COUNT(*), COALESCE(SUM(total_devuelto), 0) FROM devolucion')
+        cursor.execute(
+            'SELECT COUNT(*), COALESCE((SELECT SUM(subtotal) FROM detalle_devolucion), 0) '
+            'FROM devolucion'
+        )
         total_devoluciones, monto_total = cursor.fetchone()
     finally:
         cursor.close()
@@ -4078,8 +4106,157 @@ def devoluciones():
     )
 
 
+@app.route('/desarme')
+def desarme():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = None
+    cursor = None
+    page_error = None
+    estados = []
+    origenes = []
+    vehicles = []
+    summary = {'pending': 0, 'in_progress': 0, 'completed': 0, 'parts': 0}
+    filters = {
+        'q': request.args.get('q', '').strip(),
+        'estado': request.args.get('estado', '').strip(),
+        'origen': request.args.get('origen', '').strip(),
+    }
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        estados = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['estado_desarme']) or [])
+        ]
+        origenes = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['vehiculo_origen']) or [])
+        ]
+
+        cursor.execute(
+            'SELECT d.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre AS estado, d.id_vehiculo_origen, vo.origen, '
+            'COALESCE(SUM(dd.cantidad), 0) AS piezas '
+            'FROM dbo.desarme d '
+            'LEFT JOIN dbo.estado_desarme ed ON ed.id_estado_desarme = d.id_estado_desarme '
+            'LEFT JOIN dbo.vehiculo_origen vo ON vo.id_origen = d.id_vehiculo_origen '
+            'LEFT JOIN dbo.detalle_desarme dd ON dd.id_desarme = d.id_desarme '
+            'GROUP BY d.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre, d.id_vehiculo_origen, vo.origen '
+            'ORDER BY d.fecha_inicio DESC, d.id_desarme DESC'
+        )
+        columns = [column[0] for column in cursor.description]
+        for row in cursor.fetchall():
+            item = dict(zip(columns, row))
+            label = item.get('estado') or 'Sin estado'
+            normalized_state = _normalize_catalog_label(label)
+            pieces = int(item.get('piezas') or 0)
+            state_class = (
+                'pending' if normalized_state == 'pendiente' else
+                'in-progress' if normalized_state == 'en proceso' else
+                'completed' if normalized_state in {'finalizado', 'desarmado', 'desarmados'} else
+                ''
+            )
+            vehicle = {
+                'id': item.get('id_desarme'),
+                'fecha_inicio': item.get('fecha_inicio'),
+                'fecha_finalizacion': item.get('fecha_finalizacion'),
+                'observaciones': item.get('observaciones'),
+                'state_id': item.get('id_estado_desarme'),
+                'estado': label,
+                'state_class': state_class,
+                'origen': item.get('origen') or 'Sin origen',
+                'id_origen': item.get('id_vehiculo_origen'),
+                'piezas': pieces,
+            }
+            if filters['estado'] and str(vehicle['state_id']) != filters['estado']:
+                continue
+            if filters['origen'] and str(vehicle['id_origen']) != filters['origen']:
+                continue
+            search_value = ' '.join(str(value or '') for value in (
+                vehicle['id'], vehicle['origen'], vehicle['estado'], vehicle['observaciones'],
+            )).casefold()
+            if filters['q'] and filters['q'].casefold() not in search_value:
+                continue
+
+            if normalized_state == 'pendiente':
+                summary['pending'] += 1
+            elif normalized_state == 'en proceso':
+                summary['in_progress'] += 1
+            elif normalized_state in {'finalizado', 'desarmado', 'desarmados'}:
+                summary['completed'] += 1
+            summary['parts'] += pieces
+            vehicles.append(vehicle)
+    except Exception:
+        app.logger.exception('No se pudo cargar el módulo de desarme.')
+        page_error = 'No fue posible cargar los datos del desarme. Intenta actualizar la página.'
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+    summary_cards = [
+        {'label': 'Pendientes', 'value': summary['pending'], 'color': 'pending'},
+        {'label': 'En proceso', 'value': summary['in_progress'], 'color': 'in-progress'},
+        {'label': 'Desarmados', 'value': summary['completed'], 'color': 'completed'},
+        {'label': 'Total piezas', 'value': summary['parts'], 'color': 'parts'},
+    ]
+    user = get_current_sidebar_user()
+    return render_template(
+        'desarme.html',
+        user_name=user['name'],
+        user_role=user['role'],
+        can_create=has_permission_in_session('desarme', 'write'),
+        summary_cards=summary_cards,
+        estados=estados,
+        origenes=origenes,
+        vehicles=vehicles,
+        filters=filters,
+        has_filters=any(filters.values()),
+        page_error=page_error,
+    )
+
+
 def _prestamos_write_allowed():
     return has_permission_in_session('prestamos', 'write')
+
+
+def _normalize_catalog_label(value):
+    decomposed = unicodedata.normalize('NFD', str(value or ''))
+    without_accents = ''.join(char for char in decomposed if unicodedata.category(char) != 'Mn')
+    return without_accents.strip().casefold()
+
+
+def _get_prestamo_estado_id(cursor, estado, create=False):
+    expected = _normalize_catalog_label(estado)
+    cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo')
+    for id_estado, label in cursor.fetchall():
+        if _normalize_catalog_label(label) == expected:
+            return id_estado
+    if not create:
+        return None
+    cursor.execute(
+        'INSERT INTO estado_prestamo (estado) OUTPUT INSERTED.id_estado_prestamo VALUES (?)',
+        (estado.capitalize(),),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise RuntimeError(f'No se pudo crear el estado de préstamo "{estado}".')
+    return row[0]
+
+
+def _get_inventory_movement_type_id(cursor, movement_name):
+    expected = _normalize_catalog_label(movement_name)
+    cursor.execute('SELECT id_tipo_movimiento, nombre FROM tipo_movimiento')
+    for id_tipo, label in cursor.fetchall():
+        if _normalize_catalog_label(label) == expected:
+            return id_tipo
+    raise ValueError(f'No está configurado el tipo de movimiento "{movement_name}".')
 
 
 @app.route('/prestamos')
@@ -4090,12 +4267,17 @@ def prestamos():
     clientes = []
     repuestos = []
     estados = []
+    metodos_pago = []
     try:
-        cursor.execute(
-            "UPDATE prestamo SET id_estado = 2 "
-            "WHERE id_estado = 1 AND fecha_devolucion_estimada < CAST(GETDATE() AS DATE)"
-        )
-        conn.commit()
+        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
+        overdue_state_id = _get_prestamo_estado_id(cursor, 'Vencido')
+        if active_state_id is not None and overdue_state_id is not None:
+            cursor.execute(
+                'UPDATE prestamo SET id_estado = ? '
+                'WHERE id_estado = ? AND fecha_devolucion_estimada < CAST(GETDATE() AS DATE)',
+                (overdue_state_id, active_state_id),
+            )
+            conn.commit()
         cursor.execute(
             'SELECT p.id_prestamo, p.fecha_prestamo, p.fecha_devolucion_estimada, p.id_cliente, p.id_usuario, '
             'p.observaciones, p.id_estado, ep.estado '
@@ -4144,6 +4326,8 @@ def prestamos():
             clientes.append({'id': data['id_cliente'], 'nombre': cliente_display_from_row(data)})
         cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo ORDER BY id_estado_prestamo')
         estados = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
+        cursor.execute('SELECT id_metodo_pago, metodo FROM metodo_pago ORDER BY id_metodo_pago')
+        metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
         cursor.execute(
             "SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto "
             "WHERE id_estado_repuesto <> 3 OR id_estado_repuesto IS NULL ORDER BY codigo_repuesto"
@@ -4163,7 +4347,8 @@ def prestamos():
     valor_prestamo = sum(loan['total'] for loan in prestamos_rows if loan['estado'].lower() in {'activo', 'vencido'})
     return render_template(
         'prestamos.html', prestamos=prestamos_rows, clientes=clientes, repuestos=repuestos,
-        estados=estados, activos=activos, vencidos=vencidos, valor_prestamo=valor_prestamo,
+        estados=estados, metodos_pago=metodos_pago, activos=activos, vencidos=vencidos,
+        valor_prestamo=valor_prestamo,
     )
 
 
@@ -4216,10 +4401,13 @@ def nuevo_prestamo():
             if cursor.rowcount != 1:
                 raise ValueError('La cantidad solicitada supera el stock disponible.')
 
+        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
+        if active_state_id is None:
+            raise ValueError('No está configurado el estado Activo para préstamos.')
         cursor.execute(
             'INSERT INTO prestamo (fecha_prestamo, fecha_devolucion_estimada, id_cliente, id_usuario, observaciones, id_estado) '
-            'OUTPUT INSERTED.id_prestamo VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, 1)',
-            (fecha_devolucion, id_cliente, session.get('user_id'), observaciones)
+            'OUTPUT INSERTED.id_prestamo VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, ?)',
+            (fecha_devolucion, id_cliente, session.get('user_id'), observaciones, active_state_id)
         )
         id_prestamo = cursor.fetchone()[0]
         for id_repuesto, quantity, price in items:
@@ -4254,89 +4442,152 @@ def actualizar_estado_prestamo(id_prestamo):
     if not _prestamos_write_allowed():
         flash('No tienes permisos para actualizar préstamos.', 'error')
         return redirect(url_for('prestamos'))
+
     estado = request.form.get('estado', '').strip().lower()
-    
+    if estado not in {'devuelto', 'pagado'}:
+        flash('El estado solicitado no es válido.', 'error')
+        return redirect(url_for('prestamos'))
+
+    id_metodo_pago = request.form.get('id_metodo_pago', type=int) if estado == 'pagado' else None
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute('SELECT id_estado, id_cliente FROM prestamo WHERE id_prestamo = ?', (id_prestamo,))
+        # Serializa solicitudes simultáneas sobre el mismo préstamo para que
+        # el stock, los movimientos y la venta solo puedan aplicarse una vez.
+        cursor.execute(
+            'SELECT p.id_estado, p.id_cliente, ep.estado '
+            'FROM prestamo p WITH (UPDLOCK, HOLDLOCK) '
+            'LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado '
+            'WHERE p.id_prestamo = ?',
+            (id_prestamo,),
+        )
         current = cursor.fetchone()
         if not current:
             raise ValueError('No se encontró el préstamo.')
-        
-        current_estado = current[0]
-        id_cliente = current[1]
-        
-        if estado == 'devuelto':
-            if current_estado in (1, 2):
+
+        current_state_id, id_cliente = current[0], current[1]
+        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
+        overdue_state_id = _get_prestamo_estado_id(cursor, 'Vencido')
+        returned_state_id = _get_prestamo_estado_id(cursor, 'Devuelto', create=estado == 'devuelto')
+        paid_state_id = _get_prestamo_estado_id(cursor, 'Pagado', create=estado == 'pagado')
+        target_state_id = returned_state_id if estado == 'devuelto' else paid_state_id
+        terminal_state_ids = {state_id for state_id in (returned_state_id, paid_state_id) if state_id is not None}
+        target_state_name = 'devuelto' if estado == 'devuelto' else 'pagado'
+
+        if current_state_id == target_state_id:
+            success_message = f'El préstamo ya está {target_state_name}.'
+            success_category = 'info'
+        elif current_state_id in terminal_state_ids:
+            other_state = 'pagado' if current_state_id == paid_state_id else 'devuelto'
+            raise ValueError(f'El préstamo ya fue {other_state} y no se puede cambiar a {target_state_name}.')
+        elif current_state_id not in {active_state_id, overdue_state_id}:
+            raise ValueError(f'No se puede cerrar un préstamo en estado {current[2] or "desconocido"}.')
+        elif estado == 'devuelto':
+            cursor.execute(
+                'SELECT id_repuesto, SUM(cantidad) AS cantidad '
+                'FROM detalle_prestamo WHERE id_prestamo = ? GROUP BY id_repuesto',
+                (id_prestamo,),
+            )
+            items = cursor.fetchall()
+            if not items:
+                raise ValueError('El préstamo no tiene repuestos para reintegrar.')
+
+            movement_return_id = _get_inventory_movement_type_id(cursor, 'Devolucion')
+            movement_detail = f'Retorno de préstamo P-{id_prestamo:06d}'
+            for id_repuesto, quantity in items:
+                quantity = int(quantity or 0)
+                if quantity < 1:
+                    raise ValueError('La cantidad del préstamo no es válida.')
                 cursor.execute(
-                    'SELECT id_repuesto, cantidad FROM detalle_prestamo WHERE id_prestamo = ?', (id_prestamo,)
+                    'UPDATE repuesto '
+                    'SET stock = COALESCE(stock, 0) + ?, '
+                    'id_estado_repuesto = CASE WHEN COALESCE(stock, 0) + ? > 0 THEN 1 ELSE 3 END '
+                    'WHERE id_repuesto = ?',
+                    (quantity, quantity, id_repuesto),
                 )
-                for id_repuesto, quantity in cursor.fetchall():
-                    cursor.execute(
-                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ?, id_estado_repuesto = 1 '
-                        'WHERE id_repuesto = ?',
-                        (quantity, id_repuesto),
-                    )
-                    if cursor.rowcount != 1:
-                        raise ValueError('No se encontró el repuesto original para reintegrarlo al inventario.')
-                    registrar_movimiento_inventario(cursor, id_repuesto, 4, quantity, f'Retorno de préstamo P-{id_prestamo:06d}', session.get('user_id'))
-                cursor.execute('UPDATE prestamo SET id_estado = 3 WHERE id_prestamo = ?', (id_prestamo,))
-                flash('Préstamo marcado como devuelto. Repuestos reintegrados al inventario.', 'success')
-            elif current_estado == 3:
-                flash('El préstamo ya está devuelto.', 'info')
-            else:
-                flash('Un préstamo pagado no puede marcarse como devuelto.', 'error')
-                
-        elif estado == 'pagado':
-            if current_estado in (1, 2):
-                cursor.execute(
-                    'SELECT id_repuesto, cantidad, precio FROM detalle_prestamo WHERE id_prestamo = ?', (id_prestamo,)
+                if cursor.rowcount != 1:
+                    raise ValueError('No se encontró un repuesto para reintegrarlo al inventario.')
+                movement_result = registrar_movimiento_inventario(
+                    cursor, id_repuesto, movement_return_id, quantity, movement_detail, session.get('user_id')
                 )
-                items = cursor.fetchall()
-                if not items:
-                    raise ValueError('El préstamo no tiene repuestos para convertir en venta.')
-                
-                cursor.execute('SELECT id_metodo_pago FROM metodo_pago ORDER BY id_metodo_pago')
-                metodo_pago = cursor.fetchone()
-                if not metodo_pago:
-                    raise ValueError('No hay métodos de pago configurados.')
-                id_metodo_pago = metodo_pago[0]
-                
-                total = sum(float(detail[2] or 0) * (detail[1] or 0) for detail in items)
-                observaciones = f'Convertido de préstamo P-{id_prestamo:06d}'
-                
-                cursor.execute(
-                    'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
-                    'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, 0)',
-                    (id_cliente, session.get('user_id'), total, observaciones, id_metodo_pago)
-                )
-                id_venta = cursor.fetchone()[0]
-                
-                for id_repuesto, quantity, price in items:
-                    cursor.execute(
-                        'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
-                        'VALUES (?, ?, ?, ?, ?)',
-                        (id_venta, id_repuesto, price, float(price or 0) * (quantity or 0), quantity)
-                    )
-                    registrar_movimiento_inventario(cursor, id_repuesto, 1, quantity, f'Venta por préstamo pagado P-{id_prestamo:06d}', session.get('user_id'))
-                
-                cursor.execute('UPDATE prestamo SET id_estado = 4 WHERE id_prestamo = ?', (id_prestamo,))
-                flash(f'Préstamo convertido en venta V-{id_venta:06d}.', 'success')
-            elif current_estado == 4:
-                flash('El préstamo ya está pagado.', 'info')
-            else:
-                flash('Un préstamo devuelto no puede convertirse en venta.', 'error')
-                
-        elif estado in ('activo', 'vencido'):
-            target = {'activo': 1, 'vencido': 2}.get(estado)
-            cursor.execute('UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ?', (target, id_prestamo))
-            flash('Estado del préstamo actualizado correctamente.', 'success')
+                if movement_result is None:
+                    raise RuntimeError('No se pudo registrar el movimiento de devolución en inventario.')
+
+            success_message = 'Préstamo marcado como devuelto. Repuestos reintegrados al inventario.'
+            success_category = 'success'
         else:
-            flash('El estado solicitado no es válido.', 'error')
-            return redirect(url_for('prestamos'))
-        
+            if not id_metodo_pago:
+                raise ValueError('Selecciona un método de pago para registrar la venta.')
+            cursor.execute('SELECT id_metodo_pago FROM metodo_pago WHERE id_metodo_pago = ?', (id_metodo_pago,))
+            if not cursor.fetchone():
+                raise ValueError('El método de pago seleccionado no existe.')
+
+            cursor.execute(
+                'SELECT id_repuesto, cantidad, precio FROM detalle_prestamo WHERE id_prestamo = ?',
+                (id_prestamo,),
+            )
+            items = cursor.fetchall()
+            if not items:
+                raise ValueError('El préstamo no tiene repuestos para convertir en venta.')
+
+            sale_items = []
+            movement_quantities = {}
+            total = Decimal('0.00')
+            for id_repuesto, quantity, price in items:
+                quantity = int(quantity or 0)
+                price = Decimal(str(price or 0)).quantize(Decimal('0.01'))
+                if quantity < 1 or price < 0:
+                    raise ValueError('La cantidad o el precio del préstamo no son válidos.')
+                subtotal = (price * quantity).quantize(Decimal('0.01'))
+                total += subtotal
+                sale_items.append((id_repuesto, quantity, price, subtotal))
+                movement_quantities[id_repuesto] = movement_quantities.get(id_repuesto, 0) + quantity
+
+            # La venta normal descuenta stock y registra su movimiento mediante
+            # triggers de detalle_venta. Las unidades prestadas ya se apartaron
+            # del inventario al crear el préstamo: se liberan dentro de esta
+            # transacción para que los triggers hagan una única salida neta.
+            for id_repuesto, quantity in movement_quantities.items():
+                cursor.execute(
+                    'UPDATE repuesto '
+                    'SET stock = COALESCE(stock, 0) + ?, '
+                    'id_estado_repuesto = CASE WHEN COALESCE(stock, 0) + ? > 0 THEN 1 ELSE 3 END '
+                    'WHERE id_repuesto = ?',
+                    (quantity, quantity, id_repuesto),
+                )
+                if cursor.rowcount != 1:
+                    raise ValueError('No se encontró un repuesto del préstamo para convertirlo en venta.')
+
+            observation = f'Convertido de préstamo P-{id_prestamo:06d}'
+            cursor.execute(
+                'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
+                'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, 0)',
+                (id_cliente, session.get('user_id'), total, observation, id_metodo_pago),
+            )
+            id_venta = cursor.fetchone()[0]
+            for id_repuesto, quantity, price, subtotal in sale_items:
+                cursor.execute(
+                    'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
+                    'VALUES (?, ?, ?, ?, ?)',
+                    (id_venta, id_repuesto, price, subtotal, quantity),
+                )
+
+            # Los triggers asociados al detalle ya registran el movimiento de
+            # venta y descuentan exactamente las unidades recién liberadas.
+            success_message = f'Préstamo convertido en venta V-{id_venta:06d}.'
+            success_category = 'success'
+
+        cursor.execute(
+            'UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ? AND id_estado = ?',
+            (target_state_id, id_prestamo, current_state_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError('El estado del préstamo cambió durante la operación. Actualiza la página e inténtalo de nuevo.')
         conn.commit()
+        flash(success_message, success_category)
+    except (TypeError, ValueError) as error:
+        conn.rollback()
+        flash(str(error), 'error')
     except Exception as error:
         conn.rollback()
         flash(f'No fue posible actualizar el préstamo: {error}', 'error')
@@ -4445,7 +4696,7 @@ def nueva_devolucion():
             raise ValueError('Selecciona la venta que deseas devolver.')
 
         items = []
-        total = 0.0
+        total = Decimal('0.00')
         for index, repuesto_id in enumerate(repuesto_ids):
             if not repuesto_id:
                 continue
@@ -4464,8 +4715,8 @@ def nueva_devolucion():
             detail = cursor.fetchone()
             if not detail or quantity > detail.cantidad:
                 raise ValueError('La cantidad devuelta supera la cantidad disponible de la venta.')
-            price = float(detail.precio_unitario or 0)
-            subtotal = price * quantity
+            price = Decimal(str(detail.precio_unitario or 0)).quantize(Decimal('0.01'))
+            subtotal = (price * quantity).quantize(Decimal('0.01'))
             items.append((detail.id_repuesto, quantity, motivo_id, price, subtotal))
             total += subtotal
         if not items:
@@ -4539,18 +4790,28 @@ def exportar_pdf_devoluciones():
         return redirect(url_for('dashboard'))
     from_date = request.args.get('from_date', '').strip()
     to_date = request.args.get('to_date', '').strip()
-    cliente = request.args.get('cliente', '').strip().lower()
-    repuesto = request.args.get('repuesto', '').strip().lower()
+    cliente = request.args.get('cliente', '').strip()
+    repuesto = request.args.get('repuesto', '').strip()
+
+    def normalize_report_text(value):
+        decomposed = unicodedata.normalize('NFD', str(value or ''))
+        without_accents = ''.join(char for char in decomposed if unicodedata.category(char) != 'Mn')
+        return without_accents.strip().casefold()
+
+    cliente_query = normalize_report_text(cliente)
+    repuesto_query = normalize_report_text(repuesto)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             'SELECT d.id_devolucion, d.id_venta, d.fecha_devolucion, d.total_devuelto, '
             'dv.id_repuesto, dv.cantidad, dv.subtotal, r.codigo_repuesto, '
-            'v.id_cliente, c.primer_nombre, c.segundo_nombre, c.primer_apellido, c.segundo_apellido, c.nit, c.correo '
+            'v.id_cliente, c.primer_nombre, c.segundo_nombre, c.primer_apellido, c.segundo_apellido, '
+            'c.nit, c.correo, md.motivo '
             'FROM devolucion d '
             'LEFT JOIN detalle_devolucion dv ON dv.id_devolucion = d.id_devolucion '
             'LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto '
+            'LEFT JOIN motivo_devolucion md ON md.id_motivo = dv.id_motivo '
             'LEFT JOIN venta v ON v.id_venta = d.id_venta '
             'LEFT JOIN cliente c ON c.id_cliente = v.id_cliente '
             'ORDER BY d.fecha_devolucion DESC'
@@ -4558,6 +4819,8 @@ def exportar_pdf_devoluciones():
         raw_rows = cursor.fetchall()
         rows = []
         for row in raw_rows:
+            if row[4] is None:
+                continue
             dev_date = str(row[2] or '')[:10]
             if from_date and dev_date < from_date:
                 continue
@@ -4565,20 +4828,29 @@ def exportar_pdf_devoluciones():
                 continue
             client_name = ' '.join(filter(None, [row[9], row[10], row[11], row[12]])).strip()
             if not client_name:
-                client_name = row[13] or row[14] or f'Cliente #{row[8] or "-" }'
-            if cliente and cliente not in client_name.lower():
+                client_name = row[14] or row[13] or (f'Cliente #{row[8]}' if row[8] else 'Sin cliente frecuente')
+            if cliente_query and cliente_query not in normalize_report_text(client_name):
                 continue
-            repuesto_text = f'{row[7] or ""} {get_repuesto_display_name(cursor, row[4]) or ""}'.lower()
-            if repuesto and repuesto not in repuesto_text:
+            part_name = get_repuesto_display_name(cursor, row[4]) or row[7] or str(row[4])
+            part_text = normalize_report_text(f'{row[7] or ""} {part_name}')
+            if repuesto_query and repuesto_query not in part_text:
                 continue
-            rows.append((row[0], row[1], row[2], row[3]))
+            rows.append((
+                f'V-{int(row[1] or 0):06d}', dev_date, part_name, row[7] or '-', client_name,
+                int(row[5] or 0), f'Q {float(row[6] or 0):,.2f}', row[15] or 'Otro',
+            ))
     finally:
         cursor.close()
         conn.close()
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle('Reporte de Devoluciones - Importadora Morales')
-    draw_table_pdf(pdf, 'Reporte de Devoluciones — Importadora Morales', ['N° Devolución', 'N° Venta', 'Fecha', 'Total devuelto'], [[f'D-{r[0]:06d}', f'V-{r[1]:06d}', str(r[2])[:10], f'Q {float(r[3] or 0):,.2f}'] for r in rows])
+    draw_table_pdf(
+        pdf,
+        'Reporte de Devoluciones — Importadora Morales',
+        ['# Venta', 'Fecha', 'Repuesto', 'Código', 'Cliente', 'Cantidad', 'Total (Q)', 'Motivo'],
+        rows,
+    )
     pdf.showPage()
     pdf.save()
     buffer.seek(0)

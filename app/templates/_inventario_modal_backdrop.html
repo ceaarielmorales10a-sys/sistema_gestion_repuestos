@@ -1,0 +1,18 @@
+<div class="inventory-modal-backdrop" aria-hidden="true">
+    <header class="inventory-backdrop-header">
+        <div><h1>Inventario de Repuestos</h1><p>Repuestos de vehículos y desarmadero</p></div>
+        <span><i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar Repuesto</span>
+    </header>
+    <nav class="inventory-backdrop-tabs" aria-hidden="true"><span class="selected"><i class="fa-solid fa-box" aria-hidden="true"></i> Lista</span><span><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i> Movimientos</span><span><i class="fa-solid fa-chart-column" aria-hidden="true"></i> Reportes</span></nav>
+    <div class="inventory-backdrop-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Buscar por código, tipo o repuesto...</span></div>
+    <div class="inventory-backdrop-table-wrap">
+        <table class="inventory-backdrop-table">
+            <thead><tr><th>Código</th><th>Repuesto</th><th>Vehículo origen</th><th>Precio venta</th><th>Stock</th><th>Observaciones</th></tr></thead>
+            <tbody>
+                {% for item in repuestos_registrados %}
+                <tr><td>{{ item.codigo_repuesto or '—' }}</td><td>Repuesto {{ item.codigo_repuesto or item.id_repuesto }}</td><td>Vehículo</td><td>Q {{ '{:,.2f}'.format(item.precio_venta or 0) }}</td><td>{{ item.stock or 0 }}</td><td>{{ item.observaciones or '—' }}</td></tr>
+                {% else %}<tr><td colspan="6">No hay repuestos registrados.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modificar Usuario</title>
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='modificar_usuario.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
@@ -29,7 +30,7 @@
                     </div>
 
                     <div class="field-group password-wrap">
-                        <label for="field_password">Contraseña <span>*</span></label>
+                        <label for="field_password">Nueva Contraseña <span>*</span></label>
                         <input id="field_password" name="password" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" data-lpignore="true" data-form-type="other" aria-autocomplete="none" value="">
                         <button type="button" class="toggle-password" aria-label="Mostrar contraseña">
                             <i class="fa-regular fa-eye"></i>
