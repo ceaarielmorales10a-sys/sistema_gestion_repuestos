@@ -1,26 +1,27 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
+from flask import Flask, g, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 import os
 import io
+import json
 import re
-import secrets
-import unicodedata
+import secrets 
+import csv
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
+from xml.sax.saxutils import escape
 import pyodbc
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfgen import canvas
-from reportlab.platypus import Paragraph, Table, TableStyle
-
-load_dotenv()
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # Buscamos la ruta absoluta de run.py
 base_dir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(base_dir, '.env'))
 
 # Definimos las rutas exactas apuntando a la subcarpeta 'app'
 templates_dir = os.path.join(base_dir, 'app', 'templates')
@@ -47,20 +48,6 @@ ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 MAX_IMAGE_SIZE = 3 * 1024 * 1024
 
 
-@app.context_processor
-def inject_vencidos():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM prestamo WHERE LOWER(estado) = 'vencido'")
-        vencidos = cursor.fetchone()[0] or 0
-        cursor.close()
-        conn.close()
-        return dict(vencidos=vencidos)
-    except Exception:
-        return dict(vencidos=0)
-
-
 @app.before_request
 def restringir_modulos_bodeguero():
     # Solo el inicio de sesión y los archivos estáticos son públicos.
@@ -68,6 +55,8 @@ def restringir_modulos_bodeguero():
     if request.endpoint not in rutas_publicas and (
         not session.get('user_id') or not session.get('user')
     ):
+        if request.path.rstrip('/') == '/mantenimiento/auditoria':
+            return jsonify({'error': 'La sesión expiró. Inicia sesión y vuelve a abrir las bitácoras.'}), 401
         return redirect(url_for('login'))
 
     ruta = request.path.rstrip('/') or '/'
@@ -94,6 +83,7 @@ def restringir_modulos_bodeguero():
         return None
 
     module_routes = (
+        ('/api/analytics', 'analytics'),
         ('/analytics', 'analytics'),
         ('/clientes', 'clientes'),
         ('/inventario', 'inventario'),
@@ -106,6 +96,8 @@ def restringir_modulos_bodeguero():
     )
     for prefix, module_key in module_routes:
         if ruta.startswith(prefix) and not has_module_permission(role_permissions, module_key, 'read'):
+            if ruta.startswith('/mantenimiento/auditoria'):
+                return jsonify({'error': 'No tienes permisos para consultar estas bitácoras.'}), 403
             flash('No tienes permisos para acceder a este módulo.', 'error')
             return redirect(url_for('dashboard'))
 
@@ -131,6 +123,37 @@ def get_db_connection():
     return pyodbc.connect(CONN_STR)
 
 
+def get_overdue_loan_count():
+    if hasattr(g, 'overdue_loan_count'):
+        return g.overdue_loan_count
+
+    g.overdue_loan_count = 0
+    if not session.get('user_id') or not has_permission_in_session('prestamos', 'read'):
+        return g.overdue_loan_count
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT COUNT(*) FROM prestamo p "
+            "LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado "
+            "WHERE LOWER(LTRIM(RTRIM(ep.estado))) = 'vencido' "
+            "OR (LOWER(LTRIM(RTRIM(ep.estado))) = 'activo' "
+            "AND p.fecha_devolucion_estimada < CAST(GETDATE() AS DATE))"
+        )
+        g.overdue_loan_count = cursor.fetchone()[0] or 0
+    finally:
+        cursor.close()
+        conn.close()
+
+    return g.overdue_loan_count
+
+
+@app.context_processor
+def inject_overdue_loan_count():
+    return {'vencidos': get_overdue_loan_count()}
+
+
 def get_estado_usuario_id(cursor, activo):
     """Obtiene un estado válido para usuario; 0 no es una clave foránea válida."""
     if activo:
@@ -153,6 +176,41 @@ def get_estado_usuario_id(cursor, activo):
 
     # En el catálogo estándar: 1 = Activo y 2 = Inactivo.
     return 2
+
+
+def get_estado_general_id(cursor, activo):
+    """Resolve the active/inactive foreign key from estado_general by its label."""
+    columns = get_table_columns(cursor, 'estado_general')
+    id_column = next(
+        (column for column in columns if column.lower() == 'id_estado'),
+        next((column for column in columns if column.lower().startswith('id')), None),
+    )
+    display_column = choose_display_column(columns)
+    if not id_column or not display_column:
+        raise ValueError('No se encontró el catálogo de estados generales.')
+
+    state_name = 'activo' if activo else 'inactivo'
+    cursor.execute(
+        f"SELECT TOP 1 [{id_column}] FROM estado_general "
+        f"WHERE LOWER(LTRIM(RTRIM([{display_column}]))) = ?",
+        (state_name,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError(f'No existe el estado general «{state_name}».')
+    return row[0]
+
+
+def split_repuestos_por_estado(repuestos):
+    """Keep inactive inventory separate while treating unknown legacy states as active."""
+    activos = []
+    inactivos = []
+    for repuesto in repuestos:
+        if str(repuesto.get('estado') or '').strip().casefold() == 'inactivo':
+            inactivos.append(repuesto)
+        else:
+            activos.append(repuesto)
+    return activos, inactivos
 
 
 def get_table_columns(cursor, table_name):
@@ -256,9 +314,13 @@ def fetch_catalog_for_candidates(cursor, candidates):
                 id_col = c
                 break
         display_col = choose_display_column(cols)
+        has_estado = any(c.lower() == 'id_estado' for c in cols)
         if id_col and display_col:
             try:
-                cursor.execute(f"SELECT {id_col} AS id, {display_col} AS nombre FROM {table} ORDER BY {display_col}")
+                if has_estado:
+                    cursor.execute(f"SELECT {id_col} AS id, {display_col} AS nombre FROM {table} WHERE id_estado = 1 ORDER BY {display_col}")
+                else:
+                    cursor.execute(f"SELECT {id_col} AS id, {display_col} AS nombre FROM {table} ORDER BY {display_col}")
                 return cursor.fetchall()
             except Exception:
                 continue
@@ -267,10 +329,18 @@ def fetch_catalog_for_candidates(cursor, candidates):
 
 def fetch_modelos_by_marca(cursor, id_marca):
     try:
-        cursor.execute(
-            "SELECT id_modelo AS id, nombre FROM modelo_vehiculo WHERE id_marca = ? ORDER BY nombre",
-            (id_marca,)
-        )
+        cols = get_table_columns(cursor, 'modelo_vehiculo')
+        has_estado = any(c.lower() == 'id_estado' for c in cols)
+        if has_estado:
+            cursor.execute(
+                "SELECT id_modelo AS id, nombre FROM modelo_vehiculo WHERE id_marca = ? AND id_estado = 1 ORDER BY nombre",
+                (id_marca,)
+            )
+        else:
+            cursor.execute(
+                "SELECT id_modelo AS id, nombre FROM modelo_vehiculo WHERE id_marca = ? ORDER BY nombre",
+                (id_marca,)
+            )
         return cursor.fetchall()
     except Exception:
         return []
@@ -700,8 +770,24 @@ DEFAULT_ROLE_PERMISSIONS = {
 }
 
 
+def _normalize_role_name(role_name):
+    """Normaliza el nombre del rol a la forma canónica para buscar permisos."""
+    if not role_name:
+        return ''
+    normalized = str(role_name).strip().lower()
+    if 'admin' in normalized:
+        return 'administrador del sistema'
+    if 'vendedor' in normalized:
+        return 'vendedor'
+    if 'bodeguero' in normalized:
+        return 'bodeguero'
+    if 'almacen' in normalized:
+        return 'almacenista'
+    return normalized
+
+
 def build_default_permissions_for_role(role_name):
-    role_key = (role_name or '').strip().lower()
+    role_key = _normalize_role_name(role_name)
     return DEFAULT_ROLE_PERMISSIONS.get(role_key, {key: 'none' for key, _ in MODULOS_SISTEMA})
 
 
@@ -780,6 +866,8 @@ def get_role_permissions_for_role_id(role_id, fallback_name=None):
         if role_row:
             role_name = role_row[0] or role_name
 
+        role_name = _normalize_role_name(role_name)
+
         if not ensure_role_permission_tables(cursor):
             cursor.close(); conn.close()
             return build_default_permissions_for_role(role_name)
@@ -811,7 +899,7 @@ def get_role_permissions_from_db(role_name):
             return build_default_permissions_for_role(role_name)
 
         seed_default_modules(cursor)
-        role_lower = (role_name or '').strip().lower()
+        role_lower = _normalize_role_name(role_name)
         cursor.execute(
             "SELECT r.id_rol, r.nombre FROM rol r WHERE LOWER(r.nombre) = ?",
             (role_lower,),
@@ -869,7 +957,6 @@ def get_role_permission_rows(cursor, role_id):
         return []
     if not ensure_role_permission_tables(cursor):
         return []
-    seed_default_modules(cursor)
     cursor.execute(
         "SELECT m.clave, m.nombre, rm.acceso FROM rol_modulo rm INNER JOIN modulo m ON m.id_modulo = rm.id_modulo WHERE rm.id_rol = ? ORDER BY m.nombre",
         (role_id,),
@@ -1194,7 +1281,7 @@ def get_ventas_reporte():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            'SELECT id_venta, fecha_venta, id_cliente, id_usuario, total, id_metodo_pago '
+            'SELECT id_venta, fecha_venta, id_cliente, id_usuario, total, id_metodo_pago, id_estado_venta '
             'FROM venta ORDER BY fecha_venta DESC'
         )
         sale_rows = cursor.fetchall()
@@ -1241,6 +1328,8 @@ def get_ventas_reporte():
                 'unidades': units,
                 'detalle_repuestos': detail_text,
                 'total': float(sale.get('total') or 0),
+                'id_estado_venta': int(sale.get('id_estado_venta') or 1),
+                'estado': 'Devuelta' if int(sale.get('id_estado_venta') or 1) == 2 else 'Completada',
             })
         return report_rows
     finally:
@@ -1248,7 +1337,7 @@ def get_ventas_reporte():
         conn.close()
 
 
-def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vendedor=None, metodo_pago=None):
+def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vendedor=None, repuesto=None, metodo_pago=None, estado=None, min_total=None, max_total=None):
     filtered = []
     for row in rows:
         sale_date = str(row.get('fecha') or '').split(' ')[0]
@@ -1260,8 +1349,20 @@ def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vend
             continue
         if vendedor and vendedor.casefold() not in str(row.get('vendedor') or '').casefold():
             continue
+        if repuesto and repuesto.casefold() not in str(row.get('detalle_repuestos') or '').casefold():
+            continue
         if metodo_pago and metodo_pago.casefold() != str(row.get('metodo_pago') or '').casefold():
             continue
+        if estado and estado != str(row.get('id_estado_venta') or 1):
+            continue
+        if min_total is not None:
+            total = float(row.get('total') or 0)
+            if total < min_total:
+                continue
+        if max_total is not None:
+            total = float(row.get('total') or 0)
+            if total > max_total:
+                continue
         filtered.append(row)
     return filtered
 
@@ -1491,32 +1592,158 @@ def exportar_pdf_movimientos():
     )
 
     buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    page_width, page_height = landscape(letter)
+    margin_left = 28
+    margin_right = 28
+    usable_width = page_width - margin_left - margin_right
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        leftMargin=margin_left,
+        rightMargin=margin_right,
+        topMargin=78,
+        bottomMargin=38,
+        title='Reporte de Movimientos - Importadora Morales',
+    )
 
-    rows = [
-        [
-            str(item.get('id_movimiento') or '-'),
-            str(item.get('repuesto_nombre') or item.get('id_repuesto') or '-'),
-            str(item.get('tipo_movimiento') or '-'),
-            str(item.get('fecha_movimiento') or '-'),
-            str(item.get('cantidad') or 0),
-            str(item.get('detalle') or '-'),
-            str(item.get('usuario') or '-'),
-            str(item.get('estado') or '-'),
-        ]
-        for item in movimientos
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'MovementReportTitle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=17,
+        leading=21,
+        alignment=0,
+        textColor='#172554',
+        spaceAfter=3,
+    )
+    subtitle_style = ParagraphStyle(
+        'MovementReportSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=11,
+        textColor='#64748b',
+        spaceAfter=4,
+    )
+    cell_style = ParagraphStyle(
+        'MovementReportCell',
+        parent=styles['BodyText'],
+        fontName='Helvetica',
+        fontSize=7.5,
+        leading=9,
+        textColor='#1e293b',
+        wordWrap='CJK',
+    )
+    header_style = ParagraphStyle(
+        'MovementReportHeader',
+        parent=cell_style,
+        fontName='Helvetica-Bold',
+        fontSize=7.5,
+        leading=9,
+        textColor='#ffffff',
+    )
+    centered_style = ParagraphStyle(
+        'MovementReportCenteredCell',
+        parent=cell_style,
+        alignment=1,
+    )
+
+    filters = []
+    if from_date:
+        filters.append(f'Desde: {escape(from_date)}')
+    if to_date:
+        filters.append(f'Hasta: {escape(to_date)}')
+    if tipo:
+        filters.append(f'Tipo: {escape(tipo)}')
+    if usuario:
+        filters.append(f'Usuario: {escape(usuario)}')
+    if search:
+        filters.append(f'Búsqueda: {escape(search)}')
+    filter_summary = ' · '.join(filters) if filters else 'Sin filtros aplicados'
+
+    story = [
+        Paragraph('Reporte de movimientos de inventario', title_style),
+        Paragraph('Importadora Morales', subtitle_style),
+        Paragraph(
+            f'<b>Generado:</b> {datetime.now().strftime("%d/%m/%Y %H:%M")} '
+            f'&nbsp;&nbsp; <b>Filtros:</b> {filter_summary}',
+            subtitle_style,
+        ),
+        Spacer(1, 8),
     ]
 
-    pdf.setTitle('Reporte de Movimientos - Importadora Morales')
-    headers = ['ID Movimiento', 'Repuesto', 'Tipo', 'Fecha', 'Cantidad', 'Detalle', 'Usuario', 'Estado']
-    if from_date or to_date:
-        pdf.setFont('Helvetica', 10)
-        pdf.drawString(60, height - 90, f'Filtro: {from_date or "Inicio"} - {to_date or "Hoy"}')
-    draw_table_pdf(pdf, 'Reporte de Movimientos — Importadora Morales', headers, rows)
+    headers = [
+        'ID movimiento', 'Repuesto', 'Tipo', 'Fecha y hora',
+        'Cantidad', 'Detalle', 'Usuario', 'Estado',
+    ]
+    table_data = [[Paragraph(escape(header), header_style) for header in headers]]
+    for item in movimientos:
+        values = [
+            item.get('id_movimiento') or '-',
+            item.get('repuesto_nombre') or item.get('id_repuesto') or '-',
+            item.get('tipo_movimiento') or '-',
+            item.get('fecha_movimiento') or '-',
+            item.get('cantidad') or 0,
+            item.get('detalle') or '-',
+            item.get('usuario') or '-',
+            item.get('estado') or '-',
+        ]
+        table_data.append([
+            Paragraph(escape(str(value)), centered_style if index in (0, 4) else cell_style)
+            for index, value in enumerate(values)
+        ])
 
-    pdf.showPage()
-    pdf.save()
+    column_widths = [
+        0.08 * usable_width,
+        0.21 * usable_width,
+        0.10 * usable_width,
+        0.13 * usable_width,
+        0.07 * usable_width,
+        0.22 * usable_width,
+        0.11 * usable_width,
+        0.08 * usable_width,
+    ]
+    table = Table(
+        table_data,
+        colWidths=column_widths,
+        repeatRows=1,
+        splitByRow=1,
+        hAlign='LEFT',
+    )
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), '#1e3a8a'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (4, 0), (4, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -1), 0.35, '#cbd5e1'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), ['#ffffff', '#f1f5f9']),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    if movimientos:
+        story.append(table)
+    else:
+        story.append(Paragraph('No se encontraron movimientos para los filtros seleccionados.', cell_style))
+
+    def draw_page_chrome(page_canvas, document):
+        page_canvas.saveState()
+        page_canvas.setStrokeColorRGB(0.82, 0.86, 0.91)
+        page_canvas.line(margin_left, page_height - 37, page_width - margin_right, page_height - 37)
+        page_canvas.setFont('Helvetica-Bold', 8)
+        page_canvas.setFillColorRGB(0.20, 0.29, 0.43)
+        page_canvas.drawString(margin_left, page_height - 29, 'IMPORTADORA MORALES  |  INVENTARIO')
+        page_canvas.setStrokeColorRGB(0.82, 0.86, 0.91)
+        page_canvas.line(margin_left, 27, page_width - margin_right, 27)
+        page_canvas.setFont('Helvetica', 7)
+        page_canvas.setFillColorRGB(0.39, 0.45, 0.54)
+        page_canvas.drawString(margin_left, 16, 'Reporte de movimientos de inventario')
+        page_canvas.drawRightString(page_width - margin_right, 16, f'Página {document.page}')
+        page_canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_page_chrome, onLaterPages=draw_page_chrome)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name='reporte_movimientos.pdf', mimetype='application/pdf')
 
@@ -1533,6 +1760,8 @@ def inventario_movimientos_report_data():
     tipo = request.args.get('tipo', '').strip()
     usuario = request.args.get('usuario', '').strip()
     search = request.args.get('search', '').strip()
+    page = int(request.args.get('movimientos_page', 1))
+    per_page = 17
 
     movimientos = get_movimientos_reporte(
         from_date=from_date or None,
@@ -1542,17 +1771,28 @@ def inventario_movimientos_report_data():
         search=search or None,
     )
 
+    # Apply pagination
+    total = len(movimientos)
+    start = (page - 1) * per_page
+    end = start + per_page
+    movimientos_paginated = movimientos[start:end]
+
     filters = {
         'from_date': from_date,
         'to_date': to_date,
         'tipo': tipo,
         'usuario': usuario,
         'search': search,
+        'movimientos_page': page,
     }
 
     return jsonify({
-        'movimientos': movimientos,
-        'filters': filters
+        'movimientos': movimientos_paginated,
+        'filters': filters,
+        'page': page,
+        'total': total,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page,
     })
 
 
@@ -1833,6 +2073,61 @@ def eliminar_usuario(id_usuario):
 
     return redirect(url_for('usuarios'))
 
+@app.route('/usuario/get/<int:id_usuario>')
+def usuario_get(id_usuario):
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        return jsonify({'error': 'No tienes permisos'}), 403
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT u.id_usuario, u.username, u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido, u.correo, u.telefono, u.id_rol, u.id_estado, r.nombre as rol_nombre "
+            "FROM usuario u LEFT JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ?",
+            (id_usuario,)
+        )
+        row = cursor.fetchone()
+        
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
+        
+        columns = [col[0] for col in cursor.description]
+        usuario = dict(zip(columns, row))
+        
+        cursor.close()
+        conn.close()
+        
+        # Format for frontend
+        full_name = ' '.join(filter(None, [
+            usuario.get('primer_nombre'),
+            usuario.get('segundo_nombre'),
+            usuario.get('primer_apellido'),
+            usuario.get('segundo_apellido')
+        ]))
+        
+        return jsonify({
+            'success': True,
+            'usuario': {
+                'id': usuario['id_usuario'],
+                'username': usuario['username'],
+                'primer_nombre': usuario['primer_nombre'] or '',
+                'segundo_nombre': usuario['segundo_nombre'] or '',
+                'primer_apellido': usuario['primer_apellido'] or '',
+                'segundo_apellido': usuario['segundo_apellido'] or '',
+                'full_name': full_name,
+                'email': usuario['correo'] or '',
+                'telefono': usuario['telefono'] or '',
+                'role_id': usuario['id_rol'],
+                'rol': usuario['rol_nombre'] or '',
+                'activo': '1' if usuario['id_estado'] == 1 else '2'
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/usuario/roles/save', methods=['POST'])
 def guardar_rol_usuario():
     if 'user' not in session:
@@ -2036,6 +2331,406 @@ def dashboard():
     return render_template('menu_principal.html', user_name=user_name)
 
 
+def _analytics_days(raw_value):
+    try:
+        days = int(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError('Selecciona un período de 7, 30 o 90 días.') from error
+    if days not in {7, 30, 90}:
+        raise ValueError('Selecciona un período de 7, 30 o 90 días.')
+    return days
+
+
+def _analytics_quote(identifier):
+    return f'[{str(identifier).replace("]", "]]")}]'
+
+
+def _get_openai_api_key():
+    api_key = os.getenv('OPENAI_API_KEY', '').strip()
+    if api_key:
+        return api_key
+    env_values = dotenv_values(os.path.join(base_dir, '.env'))
+    return str(env_values.get('OPENAI_API_KEY') or '').strip()
+
+
+def _analytics_dashboard_data(cursor, days):
+    inventory_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'dbo.repuesto')
+    }
+    sale_columns = {
+        column.lower() for column in get_table_columns(cursor, 'dbo.venta')
+    }
+    sale_detail_columns = {
+        column.lower() for column in get_table_columns(cursor, 'dbo.detalle_venta')
+    }
+    required_inventory = {
+        'id_repuesto', 'codigo_repuesto', 'stock', 'stock_minimo',
+        'precio_venta', 'precio_compra',
+    }
+    required_sales = {'id_venta', 'fecha_venta', 'total'}
+    required_sale_details = {'id_venta', 'id_repuesto', 'cantidad', 'precio_unitario'}
+    if not required_inventory.issubset(inventory_columns):
+        raise ValueError('Faltan columnas necesarias en dbo.repuesto para generar Analytics.')
+    if not required_sales.issubset(sale_columns) or not required_sale_details.issubset(sale_detail_columns):
+        raise ValueError('Faltan columnas necesarias en las tablas de ventas para generar Analytics.')
+
+    type_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'dbo.tipo_repuesto')
+    }
+    type_id_column = type_columns.get('id_tipo_repuesto') or next(
+        (column for key, column in type_columns.items() if key.startswith('id')),
+        None,
+    )
+    type_name_column = choose_display_column(list(type_columns.values()))
+    has_type_join = bool(
+        type_id_column and type_name_column
+        and 'id_tipo_repuesto' in inventory_columns
+    )
+    type_label = (
+        f'COALESCE(CONVERT(NVARCHAR(120), t.{_analytics_quote(type_name_column)}), '
+        "N'Sin categoría')"
+        if has_type_join else "N'Sin categoría'"
+    )
+    type_join = (
+        f'LEFT JOIN dbo.tipo_repuesto t ON '
+        f'r.{_analytics_quote(inventory_columns["id_tipo_repuesto"])} = '
+        f't.{_analytics_quote(type_id_column)}'
+        if has_type_join else ''
+    )
+    revenue_expression = 'COALESCE(dv.subtotal, dv.precio_unitario * dv.cantidad)'
+    if 'subtotal' not in sale_detail_columns:
+        revenue_expression = 'dv.precio_unitario * dv.cantidad'
+
+    cursor.execute(
+        'SELECT COUNT_BIG(1), COALESCE(SUM(CONVERT(BIGINT, COALESCE(stock, 0))), 0), '
+        'COALESCE(SUM(CONVERT(DECIMAL(19,2), COALESCE(stock, 0)) * '
+        'COALESCE(precio_compra, 0)), 0) '
+        'FROM dbo.repuesto'
+    )
+    inventory_row = cursor.fetchone()
+    cursor.execute(
+        'SELECT COALESCE(SUM(total), 0), COUNT_BIG(1) '
+        'FROM dbo.venta WHERE fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE()))',
+        (days,),
+    )
+    sales_row = cursor.fetchone()
+
+    cursor.execute(
+        'WITH unidades_por_venta AS ('
+        'SELECT id_venta, SUM(cantidad) AS unidades '
+        'FROM dbo.detalle_venta GROUP BY id_venta) '
+        'SELECT CONVERT(date, v.fecha_venta) AS fecha, '
+        'SUM(COALESCE(v.total, 0)) AS ingresos, '
+        'SUM(COALESCE(uv.unidades, 0)) AS unidades '
+        'FROM dbo.venta v LEFT JOIN unidades_por_venta uv ON uv.id_venta = v.id_venta '
+        'WHERE v.fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE())) '
+        'GROUP BY CONVERT(date, v.fecha_venta) ORDER BY fecha',
+        (days,),
+    )
+    temporal_rows = cursor.fetchall()
+    temporal_by_date = {
+        row[0].date() if hasattr(row[0], 'date') else row[0]: {
+            'ingresos': float(row[1] or 0),
+            'ventas': int(row[2] or 0),
+        }
+        for row in temporal_rows
+    }
+    today = datetime.now().date()
+    temporal = []
+    for offset in range(days - 1, -1, -1):
+        date_value = today - timedelta(days=offset)
+        values = temporal_by_date.get(date_value, {'ingresos': 0, 'ventas': 0})
+        temporal.append({
+            'fecha': date_value.isoformat(),
+            'ingresos': values['ingresos'],
+            'ventas': values['ventas'],
+        })
+
+    cursor.execute(
+        f'SELECT {type_label} AS categoria, '
+        'COALESCE(SUM(dv.cantidad), 0) AS unidades, '
+        f'COALESCE(SUM({revenue_expression}), 0) AS ingresos, '
+        'COALESCE(SUM((dv.precio_unitario - COALESCE(r.precio_compra, 0)) '
+        '* dv.cantidad), 0) AS margen '
+        'FROM dbo.detalle_venta dv '
+        'INNER JOIN dbo.venta v ON v.id_venta = dv.id_venta '
+        'LEFT JOIN dbo.repuesto r ON r.id_repuesto = dv.id_repuesto '
+        f'{type_join} '
+        'WHERE v.fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE())) '
+        f'GROUP BY {type_label} ORDER BY ingresos DESC',
+        (days,),
+    )
+    category_rows = cursor.fetchall()
+    categories = []
+    for row in category_rows:
+        revenue = float(row[2] or 0)
+        margin = float(row[3] or 0)
+        categories.append({
+            'nombre': str(row[0] or 'Sin categoría'),
+            'unidades': int(row[1] or 0),
+            'ingresos': revenue,
+            'margen': margin,
+            'margen_porcentaje': (margin / revenue * 100) if revenue > 0 else 0,
+        })
+
+    status_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'dbo.estado_repuesto')
+    }
+    status_id_column = status_columns.get('id_estado_repuesto') or next(
+        (column for key, column in status_columns.items() if key.startswith('id')),
+        None,
+    )
+    status_name_column = choose_display_column(list(status_columns.values()))
+    if (
+        'id_estado_repuesto' in inventory_columns
+        and status_id_column
+        and status_name_column
+    ):
+        cursor.execute(
+            'SELECT COALESCE(CONVERT(NVARCHAR(100), e.'
+            f'{_analytics_quote(status_name_column)}), N\'Sin estado\'), '
+            'COUNT_BIG(1), COALESCE(SUM(CONVERT(BIGINT, COALESCE(r.'
+            f'{_analytics_quote(inventory_columns["stock"])}, 0))), 0) '
+            'FROM dbo.repuesto r LEFT JOIN dbo.estado_repuesto e ON '
+            f'r.{_analytics_quote(inventory_columns["id_estado_repuesto"])} = '
+            f'e.{_analytics_quote(status_id_column)} '
+            f'GROUP BY e.{_analytics_quote(status_name_column)} '
+            f'ORDER BY e.{_analytics_quote(status_name_column)}'
+        )
+        status_rows = cursor.fetchall()
+    else:
+        cursor.execute(
+            'SELECT CASE WHEN COALESCE(stock, 0) <= 0 THEN N\'Agotado\' '
+            'WHEN COALESCE(stock, 0) <= COALESCE(stock_minimo, 0) THEN N\'Bajo mínimo\' '
+            'ELSE N\'Disponible\' END, COUNT_BIG(1), '
+            'COALESCE(SUM(CONVERT(BIGINT, COALESCE(stock, 0))), 0) '
+            'FROM dbo.repuesto GROUP BY CASE WHEN COALESCE(stock, 0) <= 0 '
+            'THEN N\'Agotado\' WHEN COALESCE(stock, 0) <= COALESCE(stock_minimo, 0) '
+            'THEN N\'Bajo mínimo\' ELSE N\'Disponible\' END'
+        )
+        status_rows = cursor.fetchall()
+    inventory_distribution = [
+        {'nombre': str(row[0] or 'Sin estado'), 'repuestos': int(row[1] or 0), 'unidades': int(row[2] or 0)}
+        for row in status_rows
+    ]
+
+    stock_column = _analytics_quote(inventory_columns['stock'])
+    stock_threshold_column = _analytics_quote(inventory_columns['stock_minimo'])
+    inventory_id_column = _analytics_quote(inventory_columns['id_repuesto'])
+    inventory_code_column = _analytics_quote(inventory_columns['codigo_repuesto'])
+    cursor.execute(
+        f'SELECT r.{inventory_id_column}, r.{inventory_code_column}, '
+        f'COALESCE(r.{stock_column}, 0), COALESCE(r.{stock_threshold_column}, 0), '
+        f'{type_label}, COALESCE(ventas.vendidas, 0) AS vendidas '
+        'FROM dbo.repuesto r '
+        f'{type_join} '
+        'LEFT JOIN ('
+        'SELECT dv.id_repuesto, SUM(dv.cantidad) AS vendidas '
+        'FROM dbo.detalle_venta dv '
+        'INNER JOIN dbo.venta v ON v.id_venta = dv.id_venta '
+        'WHERE v.fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE())) '
+        'GROUP BY dv.id_repuesto'
+        ') ventas ON ventas.id_repuesto = r.'
+        f'{inventory_id_column} ORDER BY COALESCE(r.{stock_column}, 0) ASC',
+        (days,),
+    )
+    prediction_rows = cursor.fetchall()
+    predictions = []
+    low_stock_count = 0
+    total_margin = sum(item['margen'] for item in categories)
+    total_category_revenue = sum(item['ingresos'] for item in categories)
+    for row in prediction_rows:
+        stock = float(row[2] or 0)
+        minimum = float(row[3] or 0)
+        average_daily_sales = float(row[5] or 0) / days
+        days_remaining = stock / average_daily_sales if average_daily_sales > 0 else None
+        needs_restock = stock <= minimum or (days_remaining is not None and days_remaining <= 14)
+        if needs_restock:
+            low_stock_count += 1
+        if stock <= 0:
+            urgency = 'Agotado'
+        elif stock <= minimum or (days_remaining is not None and days_remaining <= 7):
+            urgency = 'Reabastecer urgente'
+        elif days_remaining is not None and days_remaining <= 14:
+            urgency = 'Vigilar inventario'
+        else:
+            urgency = 'Stock en niveles óptimos'
+        if needs_restock or len(predictions) < 6:
+            predictions.append({
+                'codigo': str(row[1] or f'REP-{int(row[0]):06d}'),
+                'nombre': f"Repuesto {row[1] or int(row[0])}",
+                'categoria': str(row[4] or 'Sin categoría'),
+                'stock': stock,
+                'minimo': minimum,
+                'dias_agotamiento': round(days_remaining, 1) if days_remaining is not None else None,
+                'tendencia_diaria': round(average_daily_sales, 2),
+                'urgencia': urgency,
+                'requiere_reabastecimiento': needs_restock,
+            })
+            predictions = predictions[:6]
+
+    return {
+        'periodo_dias': days,
+        'metricas': {
+            'repuestos': int(inventory_row[0] or 0),
+            'unidades_inventario': int(inventory_row[1] or 0),
+            'valor_inventario': float(inventory_row[2] or 0),
+            'ingresos': float(sales_row[0] or 0),
+            'ventas': int(sales_row[1] or 0),
+            'margen_porcentaje': (
+                total_margin / total_category_revenue * 100
+                if total_category_revenue > 0 else 0
+            ),
+        },
+        'temporal': temporal,
+        'categorias': categories,
+        'distribucion': inventory_distribution,
+        'predicciones': predictions,
+        'repuestos_urgentes': low_stock_count,
+    }
+
+
+@app.route('/analytics')
+def analytics():
+    if not has_permission_in_session('analytics', 'read'):
+        flash('No tienes permisos para acceder a Analytics IA.', 'error')
+        return redirect(url_for('dashboard'))
+    try:
+        days = _analytics_days(request.args.get('dias', '30'))
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            analytics_data = _analytics_dashboard_data(cursor, days)
+        finally:
+            cursor.close()
+            conn.close()
+        data_error = None
+    except ValueError as error:
+        days = 30
+        analytics_data = None
+        data_error = str(error)
+    except Exception:
+        app.logger.exception('No se pudieron cargar las métricas de Analytics IA.')
+        days = 30
+        analytics_data = None
+        data_error = 'No fue posible consultar los datos de Analytics en SQL Server.'
+    sidebar_user = get_current_sidebar_user()
+    return render_template(
+        'analytics.html',
+        user_name=sidebar_user['name'],
+        user_role=sidebar_user['role'],
+        analytics_data=analytics_data,
+        data_error=data_error,
+        selected_days=days,
+    )
+
+
+@app.route('/api/analytics/dashboard')
+def analytics_dashboard_api():
+    try:
+        days = _analytics_days(request.args.get('dias', '30'))
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            dashboard_data = _analytics_dashboard_data(cursor, days)
+        finally:
+            cursor.close()
+            conn.close()
+        return jsonify({'success': True, 'data': dashboard_data})
+    except ValueError as error:
+        return jsonify({'success': False, 'error': str(error)}), 400
+    except Exception:
+        app.logger.exception('No se pudieron consultar las métricas de Analytics IA.')
+        return jsonify({
+            'success': False,
+            'error': 'No fue posible consultar los datos de Analytics en SQL Server.',
+        }), 503
+
+
+@app.route('/api/analytics/stock', methods=['POST'])
+def analizar_inventario_analytics():
+    try:
+        request_data = request.get_json(silent=True) or {}
+        days = _analytics_days(request_data.get('dias', 30))
+    except ValueError as error:
+        return jsonify({'success': False, 'error': str(error)}), 400
+
+    api_key = _get_openai_api_key()
+    if not api_key:
+        return jsonify({
+            'success': False,
+            'error': 'Configura OPENAI_API_KEY en el archivo .env para habilitar las recomendaciones de IA.',
+        }), 503
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            analytics_data = _analytics_dashboard_data(cursor, days)
+        finally:
+            cursor.close()
+            conn.close()
+    except Exception:
+        app.logger.exception('No se pudieron preparar los datos para las recomendaciones de IA.')
+        return jsonify({
+            'success': False,
+            'error': 'No fue posible consultar el inventario y las ventas en SQL Server.',
+        }), 503
+
+    try:
+        from openai import OpenAI, OpenAIError
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {
+                    'role': 'system',
+                    'content': (
+                        'Eres un analista experto en inventario de repuestos. '
+                        'Responde en español con recomendaciones concretas, concisas y '
+                        'priorizadas. Usa únicamente los datos proporcionados; aclara '
+                        'cuando una conclusión sea una estimación. No solicites ni '
+                        'incluyas datos personales.'
+                    ),
+                },
+                {
+                    'role': 'user',
+                    'content': (
+                        'Analiza estos indicadores agregados de inventario y ventas. '
+                        'Identifica reabastecimientos urgentes, productos con riesgo de '
+                        'agotamiento, categorías más rentables y tres acciones recomendadas. '
+                        'Período analizado: '
+                        f'{days} días. Datos: {json.dumps(analytics_data, ensure_ascii=False)}'
+                    ),
+                },
+            ],
+            temperature=0.3,
+        )
+        analysis = response.choices[0].message.content
+        if not analysis:
+            raise RuntimeError('La API de IA devolvió una respuesta vacía.')
+        return jsonify({'success': True, 'analisis': analysis})
+    except ImportError:
+        app.logger.exception('El paquete OpenAI no está instalado.')
+        return jsonify({
+            'success': False,
+            'error': 'Falta instalar el paquete OpenAI. Ejecuta pip install -r requirements.txt.',
+        }), 503
+    except OpenAIError:
+        app.logger.exception('No se pudo generar el análisis con OpenAI.')
+        return jsonify({
+            'success': False,
+            'error': 'No se pudo generar la recomendación de IA. Revisa la clave y la conexión con OpenAI.',
+        }), 502
+    except RuntimeError:
+        app.logger.exception('OpenAI devolvió una respuesta sin contenido.')
+        return jsonify({
+            'success': False,
+            'error': 'OpenAI no devolvió recomendaciones. Inténtalo nuevamente.',
+        }), 502
+
+
 # Catálogos que se administran desde el módulo de mantenimiento.  Se prueban
 # nombres alternos porque hay instalaciones antiguas de la base de datos con
 # una nomenclatura ligeramente distinta.
@@ -2045,16 +2740,11 @@ MANTENIMIENTO_CATALOGOS = [
     ('modelos', 'Modelos', 'fa-chevron-right', ['modelo_vehiculo', 'modelo']),
     ('colores', 'Colores', 'fa-palette', ['color', 'color_repuesto']),
     ('tipos', 'Tipos de Repuesto', 'fa-screwdriver-wrench', ['tipo_repuesto']),
-    ('estados', 'Estados', 'fa-tag', ['estado_general', 'estado_repuesto']),
     ('origenes', 'Origen Vehículo', 'fa-location-dot', ['vehiculo_origen']),
     ('transmisiones', 'Transmisiones', 'fa-gears', ['transmision', 'transmision_vehiculo']),
     ('ubicaciones', 'Ubicaciones', 'fa-map-pin', ['ubicacion', 'bodega', 'ubicacion_bodega']),
     ('metodos_pago', 'Métodos de Pago', 'fa-credit-card', ['metodo_pago']),
     ('roles', 'Roles', 'fa-book-open', ['rol']),
-    ('estado_desarme', 'Estado de Desarme', 'fa-truck-ramp-box', ['estado_desarme']),
-    ('estado_pieza_desarme', 'Estado Pieza Desarme', 'fa-boxes-stacked', ['estado_pieza_desarme']),
-    ('motivo_devolucion', 'Motivo Devolución', 'fa-arrow-rotate-left', ['motivo_devolucion']),
-    ('estado_prestamo', 'Estado Préstamo', 'fa-handshake', ['estado_prestamo']),
     ('tipo_desarme', 'Tipo de Desarme', 'fa-hammer', ['tipo_desarme']),
     ('estado_pieza', 'Estado de Pieza', 'fa-box-open', ['estado_pieza']),
     ('motivo_incidencia', 'Motivo de Incidencia', 'fa-circle-exclamation', ['motivo_incidencia']),
@@ -2064,22 +2754,30 @@ MANTENIMIENTO_CATALOGOS = [
 # habilitan si la columna existe, para conservar compatibilidad con bases
 # anteriores a la migración incluida en database/mantenimiento_catalogos.sql.
 CATALOGO_CAMPOS_ADICIONALES = {
-    'marcas': [('descripcion', 'Descripción')],
-    'colores': [('descripcion', 'Descripción')],
+    'marcas': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'colores': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'anios': [('id_estado', 'Estado')],
+    'modelos': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
     # La tabla tipo_repuesto define la ubicación sugerida para cada tipo. Se
     # usan las mismas columnas que el esquema actual de Sistema_repuestos.
     'tipos': [
         ('descripcion', 'Descripción'),
-        ('id_estado', 'Estado (ID)'),
+        ('id_estado', 'Estado'),
         ('id_ubicacion', 'Ubicación (ID)'),
     ],
-    'estados': [('descripcion', 'Descripción')],
-    'origenes': [('descripcion', 'Descripción')],
-    'transmisiones': [('descripcion', 'Descripción')],
-    'ubicaciones': [('descripcion', 'Descripción')],
-    'roles': [('descripcion', 'Descripción')],
-    'estado_desarme': [('descripcion', 'Descripción')],
-    'estado_pieza_desarme': [('descripcion', 'Descripción'), ('id_estado', 'Estado (ID)')],
+    'estados': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'origenes': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'transmisiones': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'ubicaciones': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'metodos_pago': [('id_estado', 'Estado')],
+    'roles': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'estado_desarme': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'estado_pieza_desarme': [('descripcion', 'Descripción'), ('id_estado', 'Estado')],
+    'motivo_devolucion': [('id_estado', 'Estado')],
+    'estado_prestamo': [('id_estado', 'Estado')],
+    'tipo_desarme': [('id_estado', 'Estado')],
+    'estado_pieza': [('id_estado', 'Estado')],
+    'motivo_incidencia': [('id_estado', 'Estado')],
 }
 
 # Campos que son llaves foráneas dentro de los catálogos.  Además de evitar
@@ -2121,7 +2819,8 @@ def get_mantenimiento_catalogo(key, cursor):
                                 ],
                             }
                             for field_name, field_label in CATALOGO_CAMPOS_ADICIONALES.get(catalogo_key, [])
-                            if any(column.lower() == field_name for column in columns)
+                            if field_name.lower() != id_column.lower()
+                            and any(column.lower() == field_name.lower() for column in columns)
                         ]}
     return None
 
@@ -2175,6 +2874,278 @@ def get_tipo_ubicacion(cursor, id_tipo_repuesto):
     return row[0] if row else None
 
 
+MANTENIMIENTO_BITACORAS = {
+    'clientes': {'label': 'Clientes', 'tables': ('bitacora_cliente',)},
+    'repuestos': {'label': 'Repuestos', 'tables': ('bitacora_repuesto',)},
+    'ventas': {'label': 'Ventas', 'tables': ('bitacora_venta', 'bitacora_detalle_venta')},
+    'prestamos': {'label': 'Préstamos', 'tables': ('bitacora_prestamo', 'bitacora_detalle_prestamo')},
+}
+
+
+def _audit_column(columns, candidates):
+    indexed = {str(column).casefold(): column for column in columns}
+    return next((indexed[candidate.casefold()] for candidate in candidates if candidate.casefold() in indexed), None)
+
+
+def _audit_text(value):
+    if value is None:
+        return ''
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _audit_user_display(cursor, user_id):
+    """Resolve an audit user ID using the exact usuario.id_usuario key."""
+    if user_id is None:
+        return None
+    try:
+        cursor.execute(
+            'SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, username '
+            'FROM usuario WHERE id_usuario = ?',
+            (user_id,),
+        )
+        row = cursor.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    full_name = ' '.join(str(part).strip() for part in row[:4] if part and str(part).strip())
+    return full_name or (str(row[4]).strip() if row[4] else None)
+
+
+def _audit_state_display(cursor, column, value):
+    """Translate state foreign keys found in audit snapshots to catalog labels."""
+    if value is None or not str(column).casefold().startswith('id_estado'):
+        return None
+    column_key = str(column).casefold()
+    candidates = {
+        'id_estado_venta': ('estado_venta',),
+        'id_estado_repuesto': ('estado_repuesto',),
+        'id_estado_prestamo': ('estado_prestamo',),
+        'id_estado_cliente': ('estado_cliente', 'estado_general'),
+        'id_estado': ('estado_general', 'estado_cliente', 'estado_venta', 'estado_repuesto'),
+    }.get(column_key, ())
+    for table in candidates:
+        columns = get_table_columns(cursor, f'dbo.{table}')
+        by_lower = {str(item).casefold(): item for item in columns}
+        id_candidates = {
+            'estado_general': ('id_estado_general', 'id_estado', 'id_estado_cliente'),
+            'estado_cliente': ('id_estado_cliente', 'id_estado'),
+            'estado_venta': ('id_estado_venta', 'id_estado'),
+            'estado_repuesto': ('id_estado_repuesto', 'id_estado'),
+            'estado_prestamo': ('id_estado_prestamo', 'id_estado'),
+        }.get(table, (column_key,))
+        id_column = next((by_lower[name] for name in id_candidates if name in by_lower), None)
+        label_column = next((by_lower[name] for name in ('estado', 'nombre', 'descripcion') if name in by_lower), None)
+        if not id_column or not label_column:
+            continue
+        try:
+            cursor.execute(
+                f'SELECT [{label_column}] FROM [dbo].[{table}] WHERE [{id_column}] = ?',
+                (value,),
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                return str(row[0])
+        except Exception:
+            continue
+    return None
+
+
+REPUESTO_BITACORA_COLUMNS = [
+    'id_bitacora', 'id_repuesto', 'codigo_repuesto', 'id_vehiculo_origen',
+    'id_tipo_repuesto', 'id_marca', 'id_modelo', 'id_anio', 'id_color',
+    'id_lado', 'id_posicion', 'id_estado_repuesto', 'id_ubicacion',
+    'precio_compra', 'precio_venta', 'observaciones', 'stock',
+    'id_transmision', 'stock_minimo', 'stock_maximo',
+    'fecha_eliminacion', 'usuario_eliminacion',
+]
+
+
+def _mantenimiento_auditoria_rows(module_key, filters=None):
+    module = MANTENIMIENTO_BITACORAS.get(module_key)
+    if module is None:
+        raise ValueError('El módulo de bitácora solicitado no existe.')
+
+    filters = filters or {}
+    query = str(filters.get('q') or '').strip().casefold()
+    from_date = str(filters.get('from_date') or '').strip()
+    to_date = str(filters.get('to_date') or '').strip()
+    selected_user = str(filters.get('usuario') or '').strip().casefold()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    records = []
+    users = set()
+    unavailable_tables = []
+    table_columns_map = {}
+    try:
+        loan_state_names = {}
+        if module_key == 'prestamos':
+            loan_state_names = {'1': 'Pendiente / Activo', '2': 'Devuelto / Pagado', '3': 'Vencido'}
+            try:
+                cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo')
+                loan_state_names.update({str(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]})
+            except Exception:
+                pass
+        for table in module['tables']:
+            columns = get_table_columns(cursor, f'dbo.{table}')
+            if not columns:
+                unavailable_tables.append(table)
+                continue
+
+            date_column = _audit_column(columns, (
+                'fecha_eliminacion', 'fecha_borrado', 'fecha_accion',
+                'fecha_bitacora', 'fecha_registro', 'fecha', 'created_at',
+            ))
+            action_column = _audit_column(columns, (
+                'accion', 'tipo_accion', 'accion_realizada', 'operacion', 'evento',
+            ))
+            user_column = _audit_column(columns, (
+                'id_usuario_cambio', 'id_usuario_accion', 'usuario_eliminacion',
+                'eliminado_por', 'id_usuario', 'usuario', 'nombre_usuario', 'username',
+            ))
+            record_column = _audit_column(columns, (
+                'id_detalle_venta', 'id_detalle_prestamo',
+                'id_cliente', 'id_repuesto', 'id_venta', 'id_prestamo',
+                'id_registro', 'id_registro_eliminado',
+            ))
+            audit_id_column = _audit_column(columns, (
+                f'id_{table}', 'id_bitacora', 'id_auditoria',
+            ))
+
+            def quote(column):
+                return f'[{str(column).replace("]", "]]")}]'
+
+            order_column = date_column or audit_id_column
+            sql = f"SELECT * FROM [dbo].[{table}]"
+            if order_column:
+                sql += f' ORDER BY {quote(order_column)} DESC'
+            cursor.execute(sql)
+            result_columns = [column[0] for column in cursor.description]
+            table_columns_map[table] = result_columns
+
+            for raw_row in cursor.fetchall():
+                data = dict(zip(result_columns, raw_row))
+                date_value = _audit_text(data.get(date_column)) if date_column else ''
+                date_key = date_value[:10]
+                if from_date and (not date_key or date_key < from_date):
+                    continue
+                if to_date and (not date_key or date_key > to_date):
+                    continue
+
+                raw_user = data.get(user_column) if user_column else None
+                if user_column and user_column.casefold().startswith('id_usuario') and raw_user is not None:
+                    user_value = (
+                        _audit_user_display(cursor, raw_user)
+                        or str(raw_user)
+                    )
+                else:
+                    user_value = _audit_text(raw_user) or 'No identificado'
+                action = _audit_text(data.get(action_column)) if action_column else ''
+                loan_id_column = _audit_column(result_columns, ('id_prestamo',)) if table == 'bitacora_prestamo' else None
+                loan_id = data.get(loan_id_column) if loan_id_column else None
+                observation_column = _audit_column(result_columns, ('observaciones', 'detalle', 'descripcion'))
+                observation = _audit_text(data.get(observation_column)) if observation_column else ''
+                audit_user_note = ''
+                if module_key == 'clientes':
+                    audit_user_note = ' '.join((action, _audit_text(raw_user), observation)).casefold()
+                    if re.search(r'creaci[o\u00f3]n|cread[oa]|nuevo cliente|registro de cliente', audit_user_note):
+                        action = 'Creaci\u00f3n'
+                        if user_value.casefold() in audit_user_note:
+                            user_value = 'No identificado'
+                    elif re.search(r'actualizaci[o\u00f3]n|modificaci[o\u00f3]n|actualizad[oa]', audit_user_note):
+                        action = 'Modificaci\u00f3n'
+                        if user_value.casefold() in audit_user_note:
+                            user_value = 'No identificado'
+                    elif re.search(r'eliminaci[o\u00f3]n|eliminad[oa]', audit_user_note):
+                        action = 'Eliminaci\u00f3n'
+                        if user_value.casefold() in audit_user_note:
+                            user_value = 'No identificado'
+                    else:
+                        action = action or 'Modificación'
+                if table == 'bitacora_prestamo':
+                    if 'cambio de estado' in observation.casefold():
+                        action = 'Cambio de estado'
+                    elif not action:
+                        action = 'Actualización'
+                users.add(user_value)
+                if selected_user and user_value.casefold() != selected_user:
+                    continue
+                if observation:
+                    state_column = {
+                        'prestamos': 'id_estado_prestamo',
+                        'ventas': 'id_estado_venta',
+                        'repuestos': 'id_estado_repuesto',
+                        'clientes': 'id_estado_cliente',
+                    }.get(module_key, 'id_estado')
+
+                    def state_transition_label(match):
+                        old_id, new_id = match.group(2), match.group(4)
+                        old_label = loan_state_names.get(old_id) if module_key == 'prestamos' else None
+                        new_label = loan_state_names.get(new_id) if module_key == 'prestamos' else None
+                        old_label = old_label or _audit_state_display(cursor, state_column, old_id) or old_id
+                        new_label = new_label or _audit_state_display(cursor, state_column, new_id) or new_id
+                        return f'{match.group(1)}{old_label}{match.group(3)}{new_label}'
+
+                    observation = re.sub(
+                        r'(Anterior:\s*)(\d+)(\s*->\s*Nuevo:\s*)(\d+)',
+                        state_transition_label,
+                        observation,
+                        flags=re.IGNORECASE,
+                    )
+                excluded_columns = {
+                    column for column in
+                    (date_column, action_column, user_column, audit_id_column, record_column)
+                    if column is not None
+                }
+                detail_columns = [
+                    column for column in result_columns
+                    if column not in excluded_columns
+                    and not str(column).casefold().startswith('id_bitacora')
+                ]
+                detail_parts = []
+                for column in detail_columns:
+                    value = data.get(column)
+                    if value is None or not _audit_text(value):
+                        continue
+                    column_key = str(column).casefold()
+                    state_label = _audit_state_display(cursor, column, value)
+                    if column_key.startswith('id_estado'):
+                        label = state_label or (loan_state_names.get(str(value)) if table == 'bitacora_prestamo' else None) or _audit_text(value)
+                        detail_parts.append(f'Estado: {label}')
+                    elif table == 'bitacora_prestamo' and column == observation_column:
+                        detail_parts.append(f'{column.replace("_", " ").capitalize()}: {observation}')
+                    else:
+                        detail_parts.append(f'{column.replace("_", " ").capitalize()}: {_audit_text(value)}')
+                detail = ' · '.join(detail_parts)
+                searchable = ' '.join(
+                    _audit_text(value) for value in data.values() if value is not None
+                ).casefold()
+                if query and query not in searchable:
+                    continue
+
+                record = {
+                    'fecha': date_value or '—',
+                    'usuario': user_value,
+                    'accion': action or ('Actualización' if table == 'bitacora_prestamo' else 'Eliminación'),
+                    'registro': _audit_text(loan_id) if loan_id is not None else (_audit_text(data.get(record_column)) if record_column else '—'),
+                    'detalle': detail or f'Registro eliminado de {table.replace("_", " ")}',
+                    'tabla': 'prestamo' if table == 'bitacora_prestamo' else ('cliente' if module_key == 'clientes' else table),
+                }
+                if table == 'bitacora_repuesto':
+                    record['raw_data'] = {col: _audit_text(data.get(col)) for col in REPUESTO_BITACORA_COLUMNS if col in data}
+                records.append(record)
+    finally:
+        cursor.close()
+        conn.close()
+
+    records.sort(key=lambda row: row['fecha'], reverse=True)
+    return records, sorted(users, key=str.casefold), unavailable_tables, table_columns_map
+
+
 @app.route('/mantenimiento')
 def mantenimiento():
     if 'user' not in session:
@@ -2204,12 +3175,15 @@ def mantenimiento():
                 for raw_row in cursor.fetchall():
                     item = dict(zip(column_names, raw_row))
                     marca_id = item.get(marca_column) if marca_column else None
+                    estado_id = item.get('id_estado')
                     rows.append({
                         'id': item.get(catalogo['id_column']),
                         'nombre': item.get(catalogo['display_column']),
                         'marca_id': marca_id,
                         'marca': get_display_name_by_id(cursor, ['marca_vehiculo', 'marca'], marca_id) or 'Sin marca',
                         'descripcion': item.get(descripcion_column) if descripcion_column else '',
+                        'extra': {'id_estado': estado_id},
+                        'extra_display': {'id_estado': 'Activo' if estado_id == 1 else ('Inactivo' if estado_id == 2 else '—')},
                     })
                 catalogo['marcas'] = [
                     {'id': row[0], 'nombre': row[1]}
@@ -2221,7 +3195,8 @@ def mantenimiento():
                 # Motivo de devolución debe conservar el orden definido en la
                 # tabla (id_motivo), no el alfabético de la descripción.
                 order_column = catalogo['id_column']
-                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {order_column} DESC")
+                order_direction = 'ASC' if key == 'motivo_devolucion' else 'DESC'
+                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {order_column} {order_direction}")
                 column_names = [column[0] for column in cursor.description]
                 rows = []
                 for raw_row in cursor.fetchall():
@@ -2235,6 +3210,10 @@ def mantenimiento():
                             get_display_name_by_id(cursor, related_tables, value)
                             if related_tables and value is not None else value
                         )
+                    # Include id_estado for the edit modal checkbox
+                    estado_id = item.get('id_estado')
+                    extra['id_estado'] = estado_id
+                    extra_display['id_estado'] = 'Activo' if estado_id == 1 else ('Inactivo' if estado_id == 2 else '—')
                     search = ' '.join(str(value or '') for value in [item.get(catalogo['display_column'])] + list(extra.values()))
                     rows.append({'id': item.get(catalogo['id_column']),
                                  'nombre': item.get(catalogo['display_column']),
@@ -2280,8 +3259,153 @@ def mantenimiento():
     except Exception:
         pass
     sidebar_user = get_current_sidebar_user()
-    return render_template('mantenimiento.html', catalogos=catalogos, active_catalog=active_catalog, total_registros=total_registros,
-                           tablas_sistema=tablas_sistema, user_name=sidebar_user['name'], user_role=sidebar_user['role'])
+    return render_template(
+        'mantenimiento.html', catalogos=catalogos, active_catalog=active_catalog,
+        total_registros=total_registros, tablas_sistema=tablas_sistema,
+        user_name=sidebar_user['name'], user_role=sidebar_user['role'],
+        initial_view='audit' if request.args.get('vista') == 'audit' else 'database',
+    )
+
+
+@app.route('/mantenimiento/auditoria')
+def mantenimiento_auditoria():
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        return jsonify({'error': 'No tienes permisos para consultar las bitácoras.'}), 403
+
+    module_key = request.args.get('modulo', 'clientes').strip()
+    filters = {
+        'q': request.args.get('q', ''),
+        'from_date': request.args.get('from_date', ''),
+        'to_date': request.args.get('to_date', ''),
+        'usuario': request.args.get('usuario', ''),
+    }
+    try:
+        rows, users, unavailable_tables, table_columns_map = _mantenimiento_auditoria_rows(module_key, filters)
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        page_size = 10
+        total_pages = max(1, (len(rows) + page_size - 1) // page_size)
+        page = min(page, total_pages)
+        start = (page - 1) * page_size
+        response = {
+            'success': True,
+            'modulo': module_key,
+            'label': MANTENIMIENTO_BITACORAS[module_key]['label'],
+            'registros': rows[start:start + page_size],
+            'total': len(rows),
+            'pagina': page,
+            'total_paginas': total_pages,
+            'usuarios': users,
+            'tablas_no_disponibles': unavailable_tables,
+        }
+        if module_key == 'repuestos':
+            response['columnas'] = REPUESTO_BITACORA_COLUMNS
+        return jsonify(response)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except Exception:
+        app.logger.exception('No fue posible consultar las bitácoras del módulo %s.', module_key)
+        return jsonify({'error': 'No fue posible consultar las bitácoras. Verifica la conexión y el esquema de la base de datos.'}), 500
+
+
+@app.route('/mantenimiento/auditoria/exportar/<file_format>')
+def exportar_mantenimiento_auditoria(file_format):
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        return jsonify({'error': 'No tienes permisos para exportar las bitácoras.'}), 403
+    if file_format not in {'csv', 'pdf'}:
+        return jsonify({'error': 'Formato de exportación no válido.'}), 400
+
+    module_key = request.args.get('modulo', 'clientes').strip()
+    filters = {
+        'q': request.args.get('q', ''),
+        'from_date': request.args.get('from_date', ''),
+        'to_date': request.args.get('to_date', ''),
+        'usuario': request.args.get('usuario', ''),
+    }
+    try:
+        rows, _, _, _ = _mantenimiento_auditoria_rows(module_key, filters)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except Exception:
+        app.logger.exception('No fue posible exportar las bitácoras del módulo %s.', module_key)
+        return jsonify({'error': 'No fue posible generar la exportación de bitácoras.'}), 500
+
+    module_label = MANTENIMIENTO_BITACORAS[module_key]['label']
+    if module_key == 'repuestos':
+        headers = [col.replace('_', ' ').capitalize() for col in REPUESTO_BITACORA_COLUMNS]
+        export_rows = [
+            [row.get('raw_data', {}).get(col, '—') for col in REPUESTO_BITACORA_COLUMNS]
+            for row in rows
+        ]
+    else:
+        headers = ['Fecha', 'Acción', 'Registro', 'Detalle', 'Usuario', 'Tabla']
+        export_rows = [
+            [row['fecha'], row['accion'], row['registro'], row['detalle'], row['usuario'], row['tabla']]
+            for row in rows
+        ]
+    filename_base = f'bitacora_{module_key}'
+    if file_format == 'csv':
+        output = io.StringIO(newline='')
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        for row in export_rows:
+            writer.writerow([
+                f"'{value}" if isinstance(value, str) and value.startswith(('=', '+', '-', '@')) else value
+                for value in row
+            ])
+        buffer = io.BytesIO(('\ufeff' + output.getvalue()).encode('utf-8'))
+        return send_file(
+            buffer, as_attachment=True, download_name=f'{filename_base}.csv',
+            mimetype='text/csv; charset=utf-8',
+        )
+
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(
+        buffer, pagesize=letter, leftMargin=36, rightMargin=36,
+        topMargin=42, bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    cell_style = styles['BodyText']
+    cell_style.fontName = 'Helvetica'
+    cell_style.fontSize = 7
+    cell_style.leading = 9
+    cell_style.wordWrap = 'CJK'
+    table_data = [[Paragraph(escape(value), cell_style) for value in headers]]
+    table_data.extend([
+        [Paragraph(escape(str(value or '—')), cell_style) for value in row]
+        for row in export_rows
+    ])
+    table = Table(
+        table_data,
+        colWidths=[62, 58, 52, 200, 90, 42],
+        repeatRows=1,
+        splitByRow=1,
+    )
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), (0.90, 0.94, 1.00)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), (0, 0, 0)),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 0.4, (0.72, 0.76, 0.82)),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [(1, 1, 1), (0.97, 0.98, 1.0)]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    document.build([
+        Paragraph(f'Auditoría y Bitácoras — {escape(module_label)}', styles['Title']),
+        Spacer(1, 12),
+        table,
+    ])
+    buffer.seek(0)
+    return send_file(
+        buffer, as_attachment=True, download_name=f'{filename_base}.pdf',
+        mimetype='application/pdf',
+    )
 
 
 @app.route('/mantenimiento/catalogo/<key>', methods=['POST'])
@@ -2303,15 +3427,25 @@ def guardar_catalogo_mantenimiento(key):
         if not catalogo:
             raise ValueError('El catálogo seleccionado no está disponible.')
         table, id_column, display_column = catalogo['table'], catalogo['id_column'], catalogo['display_column']
+        columns = get_table_columns(cursor, table)
+        # Some catalogs (notably estado_general) use id_estado as their
+        # identity primary key. It must never be treated as the optional
+        # active/inactive flag, otherwise edits generate UPDATE id_estado =
+        # ... and SQL Server rejects the identity-column update.
+        has_estado = any(
+            c.lower() == 'id_estado' and c.lower() != id_column.lower()
+            for c in columns
+        )
         if key == 'modelos' and action != 'delete':
             marca_id = request.form.get('id_marca', '').strip()
             if not marca_id:
                 raise ValueError('Selecciona la marca del modelo.')
-            columns = get_table_columns(cursor, table)
             descripcion_column = next((c for c in columns if 'descripcion' in c.lower() or 'observacion' in c.lower()), None)
             model_data = {display_column: value, 'id_marca': marca_id}
             if descripcion_column:
                 model_data[descripcion_column] = request.form.get('descripcion', '').strip() or None
+            if has_estado:
+                model_data['id_estado'] = 1 if request.form.get('id_estado') else 2
             if action == 'add':
                 insert_columns = [column for column in model_data if column in columns]
                 cursor.execute(
@@ -2329,11 +3463,12 @@ def guardar_catalogo_mantenimiento(key):
             else:
                 raise ValueError('La operación solicitada no es válida.')
         elif action in ('add', 'edit'):
-            columns = get_table_columns(cursor, table)
             extra_data = {
                 field['name']: request.form.get(field['name'], '').strip() or None
                 for field in catalogo['fields'] if field['name'] in columns
             }
+            if has_estado:
+                extra_data['id_estado'] = 1 if request.form.get('id_estado') else 2
             data = {display_column: value, **extra_data}
             if action == 'add':
                 insert_columns = list(data)
@@ -2369,6 +3504,194 @@ def guardar_catalogo_mantenimiento(key):
             pass
         flash(f'No se pudo guardar el cambio. Puede estar relacionado con otros registros: {error}', 'error')
     return redirect(url_for('mantenimiento', catalogo=key))
+
+
+@app.route('/mantenimiento/backup/descargar')
+def mantenimiento_backup_descargar():
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        return jsonify({'error': 'No tienes permisos para crear backups.'}), 403
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Obtener TODAS las tablas de usuario de la base de datos
+        cursor.execute("""
+            SELECT TABLE_NAME 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE = 'BASE TABLE' 
+            AND TABLE_SCHEMA = 'dbo'
+            ORDER BY TABLE_NAME
+        """)
+        tablas_backup = [row[0] for row in cursor.fetchall()]
+
+        import zipfile
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for tabla in tablas_backup:
+                try:
+                    columns = get_table_columns(cursor, tabla)
+                    if not columns:
+                        continue
+
+                    cursor.execute(f'SELECT * FROM [{tabla}]')
+                    rows = cursor.fetchall()
+
+                    if not rows:
+                        # Crear CSV solo con headers aunque esté vacío
+                        csv_buffer = io.StringIO()
+                        writer = csv.writer(csv_buffer)
+                        writer.writerow(columns)
+                        csv_content = csv_buffer.getvalue()
+                        zipf.writestr(f'{tabla}.csv', csv_content.encode('utf-8'))
+                        continue
+
+                    # Crear CSV en memoria
+                    csv_buffer = io.StringIO()
+                    writer = csv.writer(csv_buffer)
+                    writer.writerow(columns)  # Header
+                    
+                    for row in rows:
+                        writer.writerow([str(val) if val is not None else '' for val in row])
+                    
+                    # Agregar al ZIP
+                    csv_content = csv_buffer.getvalue()
+                    zipf.writestr(f'{tabla}.csv', csv_content.encode('utf-8'))
+
+                except Exception as e:
+                    # Continuar con otras tablas si una falla
+                    continue
+
+        cursor.close()
+        conn.close()
+
+        zip_buffer.seek(0)
+        filename = f'backup_importadora_morales_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+
+    except Exception as e:
+        return jsonify({'error': f'Error al crear backup: {str(e)}'}), 500
+
+
+@app.route('/mantenimiento/backup/restaurar', methods=['POST'])
+def mantenimiento_backup_restaurar():
+    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+        return jsonify({'error': 'No tienes permisos para restaurar backups.'}), 403
+
+    if 'archivo' not in request.files:
+        return jsonify({'error': 'No se seleccionó ningún archivo.'}), 400
+
+    file = request.files['archivo']
+    if file.filename == '':
+        return jsonify({'error': 'No se seleccionó ningún archivo.'}), 400
+
+    if not file.filename.endswith('.zip'):
+        return jsonify({'error': 'El archivo debe ser formato .zip con archivos CSV'}), 400
+
+    try:
+        import zipfile
+        zip_content = file.read()
+        zip_buffer = io.BytesIO(zip_content)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Obtener todas las tablas de la BD para ordenarlas por dependencias
+        cursor.execute("""
+            SELECT TABLE_NAME 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE = 'BASE TABLE' 
+            AND TABLE_SCHEMA = 'dbo'
+        """)
+        all_tables = [row[0] for row in cursor.fetchall()]
+
+        # Ordenar tablas: primero las que no tienen FKs (catálogos), luego las que sí
+        # Usamos una heurística simple: tablas con "id_" en muchas columnas van al final
+        def table_sort_key(t):
+            cols = get_table_columns(cursor, t)
+            fk_count = sum(1 for c in cols if c.lower().startswith('id_') and c.lower() != 'id')
+            return (fk_count, t)
+
+        tablas_orden = sorted(all_tables, key=table_sort_key)
+
+        restored_tables = 0
+        total_rows = 0
+        errors = []
+
+        with zipfile.ZipFile(zip_buffer, 'r') as zipf:
+            for tabla in tablas_orden:
+                csv_filename = f'{tabla}.csv'
+                if csv_filename not in zipf.namelist():
+                    continue
+
+                try:
+                    with zipf.open(csv_filename) as csv_file:
+                        # Leer CSV
+                        content = csv_file.read().decode('utf-8')
+                        reader = csv.reader(io.StringIO(content))
+                        rows = list(reader)
+
+                    if not rows:
+                        continue
+
+                    columns = rows[0]
+                    data_rows = rows[1:]
+
+                    # Verificar que la tabla existe
+                    table_columns = get_table_columns(cursor, tabla)
+                    if not table_columns:
+                        errors.append(f'Tabla {tabla} no existe en BD')
+                        continue
+
+                    # Filtrar columnas que existen en la BD
+                    valid_columns = [c for c in columns if c in table_columns]
+                    if not valid_columns:
+                        errors.append(f'Ninguna columna válida en {tabla}')
+                        continue
+
+                    # Limpiar tabla
+                    cursor.execute(f'DELETE FROM [{tabla}]')
+
+                    # Insertar datos
+                    placeholders = ', '.join(['?'] * len(valid_columns))
+                    cols_sql = ', '.join(f'[{c}]' for c in valid_columns)
+                    sql = f'INSERT INTO [{tabla}] ({cols_sql}) VALUES ({placeholders})'
+
+                    col_indices = [columns.index(c) for c in valid_columns]
+
+                    for row in data_rows:
+                        values = [row[i] if row[i] != '' else None for i in col_indices]
+                        cursor.execute(sql, values)
+                        total_rows += 1
+
+                    restored_tables += 1
+
+                except Exception as e:
+                    errors.append(f'Error en {tabla}: {str(e)}')
+
+        if errors:
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return jsonify({'error': f'Errores al restaurar: {len(errors)} tablas fallaron', 'detalles': errors[:5]}), 500
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Backup restaurado: {restored_tables} tablas, {total_rows} registros.'})
+
+    except zipfile.BadZipFile:
+        return jsonify({'error': 'Archivo ZIP inválido o corrupto'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error al restaurar backup: {str(e)}'}), 500
+
 
 def clean_duplicate_movements():
     """Limpia movimientos duplicados de la BD. Elimina movimientos automáticos si existen movimientos iniciales del mismo repuesto."""
@@ -2440,6 +3763,7 @@ def inventario():
         tipo_repuestos = fetch_catalog_for_candidates(cursor, ['tipo_repuesto']) or []
         selected_tipo_id = request.args.get('tipo_repuesto', '').strip()
         search_query = request.args.get('q', '').strip()
+        stock_bajo_filter = request.args.get('stock_bajo', '').strip()
 
         # Report filters
         report_from_date = request.args.get('from_date', '').strip()
@@ -2449,17 +3773,25 @@ def inventario():
         report_estado = request.args.get('estado_repuesto', '').strip()
         report_ubicacion = request.args.get('ubicacion', '').strip()
 
-        # Note: some schemas used to have an `id_estado` column which was removed in
-        # newer schemas. We avoid referencing that non-existent column here and
-        # prefer `id_estado_repuesto` which exists on current installations.
+        # The general active/inactive status is separate from the physical part status.
         repuesto_columns = get_table_columns(cursor, 'repuesto')
         photo_select = ', fotografia' if any(column.lower() == 'fotografia' for column in repuesto_columns) else ''
+        estado_general_select = (
+            ', id_estado_general'
+            if any(column.lower() == 'id_estado_general' for column in repuesto_columns)
+            else ', NULL AS id_estado_general'
+        )
+        transmision_select = (
+            ', id_transmision'
+            if any(column.lower() == 'id_transmision' for column in repuesto_columns)
+            else ', NULL AS id_transmision'
+        )
         base_sql = (
             "SELECT id_repuesto, codigo_repuesto, id_vehiculo_origen, id_tipo_repuesto, "
             "id_marca, id_modelo, id_anio, id_color, id_lado, id_posicion, id_estado_repuesto, "
             "id_ubicacion, precio_compra, precio_venta, observaciones, fecha_ingreso, "
             "id_usuario_registro, stock, stock_minimo, stock_maximo "
-            f"{photo_select} FROM repuesto"
+            f"{photo_select}{estado_general_select}{transmision_select} FROM repuesto"
         )
         params = []
         if selected_tipo_id:
@@ -2524,8 +3856,9 @@ def inventario():
             # legacy `id_estado` if it exists in the schema (some installs may
             # still have it). This avoids SQL errors when `id_estado` column
             # is not present in the `repuesto` table.
-            estado_fk = data.get('id_estado_repuesto') or data.get('id_estado')
-            estado_general = get_display_name_by_id(cursor, ['estado_general', 'estado_repuesto'], estado_fk) or '-'
+            estado_general = get_display_name_by_id(
+                cursor, ['estado_general'], data.get('id_estado_general')
+            ) or '-'
             transmision = get_display_name_by_id(cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'], data.get('id_transmision')) or data.get('transmision') or data.get('transmision_repuesto') or '-'
             stock_minimo = data.get('stock_minimo') or data.get('min_stock') or data.get('stock_min') or data.get('stock_minimo') or ''
             stock_maximo = data.get('stock_maximo') or data.get('max_stock') or data.get('stock_max') or data.get('stock_maximo') or ''
@@ -2611,6 +3944,9 @@ def inventario():
                     ]
                 )
             lista_repuestos = [r for r in lista_repuestos if matches_search(r)]
+
+        if stock_bajo_filter:
+            lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
     except Exception as e:
         print(f"\n⚠️ ERROR EN CONSULTA DE INVENTARIO: {e}\n")
         flash(f"Error al conectar con la base de datos: {e}", "error")
@@ -2641,7 +3977,7 @@ def inventario():
         movimientos_page = max(1, int(request.args.get('movimientos_page', 1)))
     except (TypeError, ValueError):
         movimientos_page = 1
-    movimientos_page_size = 10
+    movimientos_page_size = 17
     movimientos_total = len(movimientos)
     movimientos_total_pages = max(1, (movimientos_total + movimientos_page_size - 1) // movimientos_page_size)
     movimientos_page = min(movimientos_page, movimientos_total_pages)
@@ -2668,11 +4004,15 @@ def inventario():
 
     page_size = 10
     total_items = len(lista_repuestos)
-    total_pages = max(1, (total_items + page_size - 1) // page_size)
-    if current_page < 1:
-        current_page = 1
-    if current_page > total_pages:
-        current_page = total_pages
+    repuestos_activos, repuestos_inactivos = split_repuestos_por_estado(lista_repuestos)
+    activos_total = len(repuestos_activos)
+    inactivos_total = len(repuestos_inactivos)
+    activos_total_pages = max(1, (activos_total + page_size - 1) // page_size)
+    inactivos_total_pages = max(1, (inactivos_total + page_size - 1) // page_size)
+    current_page = max(1, current_page)
+    total_pages = max(activos_total_pages, inactivos_total_pages)
+    activos_page = min(current_page, activos_total_pages)
+    inactivos_page = min(current_page, inactivos_total_pages)
 
     stock_bajo = sum(1 for repuesto in lista_repuestos if repuesto.get('stock', 0) <= 5)
 
@@ -2724,14 +4064,23 @@ def inventario():
         for repuesto in lista_repuestos
     )
 
-    start_index = (current_page - 1) * page_size
-    end_index = start_index + page_size
-    repuestos_paginados = lista_repuestos[start_index:end_index]
+    activos_start = (activos_page - 1) * page_size
+    inactivos_start = (inactivos_page - 1) * page_size
+    repuestos_activos_paginados = repuestos_activos[activos_start:activos_start + page_size]
+    repuestos_inactivos_paginados = repuestos_inactivos[inactivos_start:inactivos_start + page_size]
 
     sidebar_user = get_current_sidebar_user()
     return render_template(
         'inventario.html',
-        repuestos=repuestos_paginados,
+        repuestos=repuestos_activos_paginados,
+        repuestos_activos=repuestos_activos_paginados,
+        repuestos_inactivos=repuestos_inactivos_paginados,
+        activos_total=activos_total,
+        inactivos_total=inactivos_total,
+        activos_page=activos_page,
+        inactivos_page=inactivos_page,
+        activos_total_pages=activos_total_pages,
+        inactivos_total_pages=inactivos_total_pages,
         report_repuestos=report_repuestos,
         total_items=total_items,
         stock_bajo=stock_bajo,
@@ -2762,6 +4111,7 @@ def inventario():
         devoluciones_count=devoluciones_count,
         selected_tipo_id=selected_tipo_id,
         search_query=search_query,
+        stock_bajo_filter=stock_bajo_filter,
         user_name=sidebar_user['name'],
         user_role=sidebar_user['role']
     )
@@ -2776,6 +4126,8 @@ def inventario_list_data():
 
     search_query = request.args.get('q', '').strip()
     selected_tipo_id = request.args.get('tipo_repuesto', '').strip()
+    estado_filter = request.args.get('estado', 'todos').strip().casefold()
+    stock_bajo_filter = request.args.get('stock_bajo', '').strip()
     page = request.args.get('page', 1, type=int)
 
     conn = get_db_connection()
@@ -2786,12 +4138,22 @@ def inventario_list_data():
 
         repuesto_columns = get_table_columns(cursor, 'repuesto')
         photo_select = ', fotografia' if any(column.lower() == 'fotografia' for column in repuesto_columns) else ''
+        estado_general_select = (
+            ', id_estado_general'
+            if any(column.lower() == 'id_estado_general' for column in repuesto_columns)
+            else ', NULL AS id_estado_general'
+        )
+        transmision_select = (
+            ', id_transmision'
+            if any(column.lower() == 'id_transmision' for column in repuesto_columns)
+            else ', NULL AS id_transmision'
+        )
         base_sql = (
             "SELECT id_repuesto, codigo_repuesto, id_vehiculo_origen, id_tipo_repuesto, "
             "id_marca, id_modelo, id_anio, id_color, id_lado, id_posicion, id_estado_repuesto, "
             "id_ubicacion, precio_compra, precio_venta, observaciones, fecha_ingreso, "
             "id_usuario_registro, stock, stock_minimo, stock_maximo "
-            f"{photo_select} FROM repuesto"
+            f"{photo_select}{estado_general_select}{transmision_select} FROM repuesto"
         )
         params = []
         if selected_tipo_id:
@@ -2838,8 +4200,9 @@ def inventario_list_data():
             loc_id = data.get('id_ubicacion') or data.get('id_bodega')
             ubicacion_bodega = get_display_name_by_id(cursor, ['bodega', 'ubicacion', 'ubicacion_bodega'], loc_id) or '-'
             usuario_registro = get_display_name_by_id(cursor, ['usuario'], data.get('id_usuario_registro')) or '-'
-            estado_fk = data.get('id_estado_repuesto') or data.get('id_estado')
-            estado_general = get_display_name_by_id(cursor, ['estado_general', 'estado_repuesto'], estado_fk) or '-'
+            estado_general = get_display_name_by_id(
+                cursor, ['estado_general'], data.get('id_estado_general')
+            ) or '-'
             transmision = get_display_name_by_id(cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'], data.get('id_transmision')) or data.get('transmision') or data.get('transmision_repuesto') or '-'
             stock_minimo = data.get('stock_minimo') or data.get('min_stock') or data.get('stock_min') or data.get('stock_minimo') or ''
             stock_maximo = data.get('stock_maximo') or data.get('max_stock') or data.get('stock_max') or data.get('stock_maximo') or ''
@@ -2919,6 +4282,20 @@ def inventario_list_data():
                 )
             lista_repuestos = [r for r in lista_repuestos if matches_search(r)]
 
+        if stock_bajo_filter:
+            lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
+
+        if estado_filter == 'activo':
+            lista_repuestos = [
+                repuesto for repuesto in lista_repuestos
+                if str(repuesto.get('estado') or '').strip().casefold() != 'inactivo'
+            ]
+        elif estado_filter == 'inactivo':
+            lista_repuestos = [
+                repuesto for repuesto in lista_repuestos
+                if str(repuesto.get('estado') or '').strip().casefold() == 'inactivo'
+            ]
+
     except Exception as e:
         print(f"\n⚠️ ERROR EN CONSULTA DE INVENTARIO LIST DATA: {e}\n")
         lista_repuestos = []
@@ -2946,6 +4323,7 @@ def inventario_list_data():
         'tipo_repuestos': tipo_repuestos_json,
         'selected_tipo_id': selected_tipo_id,
         'search_query': search_query,
+        'stock_bajo_filter': stock_bajo_filter,
     })
 
 
@@ -2995,6 +4373,7 @@ def agregar_repuesto():
                 return redirect(url_for('agregar_repuesto'))
             id_anio = request.form.get('id_anio')
             id_estado_repuesto = request.form.get('id_estado_repuesto')
+            id_estado_general = get_estado_general_id(cursor, activo=True)
             # La ubicación se define por el tipo para evitar asignaciones
             # manuales inconsistentes desde el formulario.
             id_ubicacion = get_tipo_ubicacion(cursor, id_tipo_repuesto)
@@ -3046,7 +4425,8 @@ def agregar_repuesto():
                 'fotografia': fotografia,
                 'fecha_ingreso': fecha_ingreso,
                 'id_usuario_registro': id_usuario_registro,
-                'id_estado': id_estado
+                'id_estado': id_estado,
+                'id_estado_general': id_estado_general,
             }
 
             insert_row_filtered(cursor, 'repuesto', insert_data)
@@ -3147,15 +4527,11 @@ def agregar_repuesto():
                                        anios=anios,
                                        colores=colores, 
                                        lados=lados, 
-                               posiciones=posiciones,
-                               estados_repuesto=estados_repuesto,
-                               bodegas=bodegas,
-repuesto_registrado_por=(
-                                    get_user_full_name_by_id(session.get('user_id'))
-                                    or session.get('full_name', session.get('user', 'Usuario'))
-                                ),
-                               repuestos_registrados=repuestos_registrados)
-
+                                       posiciones=posiciones,
+                                       estados_repuesto=estados_repuesto,
+                                       bodegas=bodegas,
+                                       repuestos_registrados=repuestos_registrados)
+        
         except Exception as e:
             flash(f'Error al cargar los catálogos: {str(e)}', 'error')
             return render_template('agregar_repuesto.html', tipos=[], transmisiones=[], marcas=[], modelos=[], anios=[], colores=[], lados=[], posiciones=[], estados_repuesto=[], bodegas=[], vehiculos_origen=[], repuestos_registrados=[])
@@ -3232,6 +4608,9 @@ def modificar_repuesto(id_repuesto):
                 'precio_venta': request.form.get('precio_venta'),
                 'stock': request.form.get('stock'),
                 'observaciones': request.form.get('observaciones') or None,
+                'id_estado_general': get_estado_general_id(
+                    cursor, activo=request.form.get('activo') == 'on'
+                ),
             }
             photo_file = get_uploaded_repuesto_photo()
             if photo_file and photo_file.filename:
@@ -3287,6 +4666,8 @@ def modificar_repuesto(id_repuesto):
         posicion_candidates = ['posicion', 'posicion_repuesto']
         posiciones = fetch_catalog_for_candidates(cursor, posicion_candidates) or []
 
+        estado_activo_id = get_estado_general_id(cursor, activo=True)
+
         estado_repuesto_candidates = ['estado_repuesto']
         estados_repuesto = fetch_catalog_for_candidates(cursor, estado_repuesto_candidates) or []
 
@@ -3305,6 +4686,7 @@ def modificar_repuesto(id_repuesto):
                                colores=colores, 
                                lados=lados, 
                                posiciones=posiciones,
+                               estado_activo_id=estado_activo_id,
                                estados_repuesto=estados_repuesto,
                                bodegas=bodegas,
                                repuestos_registrados=repuestos_registrados)
@@ -3367,6 +4749,55 @@ def cliente_display_from_row(data):
     )
 
 
+def _clientes_activos(cursor):
+    columns = get_table_columns(cursor, 'cliente')
+    id_column = cliente_field(columns, 'id_cliente') or next(
+        (column for column in columns if column.lower().startswith('id')), None
+    )
+    if not id_column:
+        raise ValueError('La tabla cliente no tiene una columna identificadora.')
+
+    status_column = cliente_field(columns, 'id_estado_general', 'id_estado')
+    params = ()
+    status_filter = ''
+    if status_column:
+        status_filter = f' WHERE [{status_column}] = ?'
+        params = (get_estado_general_id(cursor, activo=True),)
+
+    cursor.execute(
+        f'SELECT * FROM cliente{status_filter} ORDER BY [{id_column}]',
+        params,
+    )
+    column_names = [column[0] for column in cursor.description]
+    return [
+        dict(zip(column_names, row))
+        for row in cursor.fetchall()
+    ]
+
+
+def _cliente_esta_activo(cursor, client_id):
+    if client_id is None:
+        return True
+
+    columns = get_table_columns(cursor, 'cliente')
+    id_column = cliente_field(columns, 'id_cliente') or next(
+        (column for column in columns if column.lower().startswith('id')), None
+    )
+    if not id_column:
+        raise ValueError('La tabla cliente no tiene una columna identificadora.')
+
+    status_column = cliente_field(columns, 'id_estado_general', 'id_estado')
+    if not status_column:
+        return True
+
+    active_status_id = get_estado_general_id(cursor, activo=True)
+    cursor.execute(
+        f'SELECT 1 FROM cliente WHERE [{id_column}] = ? AND [{status_column}] = ?',
+        (client_id, active_status_id),
+    )
+    return cursor.fetchone() is not None
+
+
 @app.route('/clientes', methods=['GET', 'POST'])
 def clientes():
     if 'user' not in session:
@@ -3387,9 +4818,10 @@ def clientes():
             if column.lower() in {
                 'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
                 'nombre_cliente', 'nombre_completo', 'nombre', 'nit', 'telefono',
-                'correo', 'email', 'direccion', 'id_estado'
+                'correo', 'email', 'direccion'
             }
         ]
+        status_column = cliente_field(columns, 'id_estado_general', 'id_estado')
 
         if request.method == 'POST':
             action = request.form.get('action')
@@ -3400,9 +4832,11 @@ def clientes():
                 flash('Cliente eliminado correctamente.', 'success')
             else:
                 values = {column: request.form.get(column, '').strip() or None for column in editable}
-                # El estado activo se asigna sólo si esa columna existe.
-                if 'id_estado' in values and not values['id_estado']:
-                    values['id_estado'] = 1
+                if status_column:
+                    values[status_column] = get_estado_general_id(
+                        cursor,
+                        activo=action == 'create' or request.form.get('activo') == 'on',
+                    )
                 usable = {key: value for key, value in values.items() if key in columns}
                 if action == 'edit' and client_id:
                     assignments = ', '.join(f'[{key}] = ?' for key in usable)
@@ -3425,6 +4859,9 @@ def clientes():
 
         cursor.execute(f"SELECT * FROM cliente ORDER BY [{id_column}] DESC")
         rows = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        active_status_id = (
+            get_estado_general_id(cursor, activo=True) if status_column else None
+        )
         client_data = []
         for data in rows:
             client_data.append({
@@ -3435,6 +4872,10 @@ def clientes():
                 'correo': data.get(cliente_field(columns, 'correo', 'email')) or '-',
                 'direccion': data.get(cliente_field(columns, 'direccion')) or '-',
                 'fecha': data.get(cliente_field(columns, 'fecha_registro', 'fecha_creacion')),
+                'activo': (
+                    str(data.get(status_column)) == str(active_status_id)
+                    if status_column else True
+                ),
                 'data': data,
             })
         total_clientes = len(client_data)
@@ -3448,13 +4889,16 @@ def clientes():
         start = (current_page - 1) * page_size
         return render_template(
             'clientes.html', clientes=client_data[start:start + page_size],
+            report_clientes=client_data,
             total_clientes=total_clientes, current_page=current_page,
-            total_pages=total_pages, editable=editable
+            total_pages=total_pages, editable=editable,
+            has_client_status=bool(status_column), active_status_id=active_status_id,
         )
     except Exception as e:
         flash(f'No se pudo cargar clientes: {str(e)}', 'error')
-        return render_template('clientes.html', clientes=[], total_clientes=0,
-                       current_page=1, total_pages=1, editable=[])
+        return render_template('clientes.html', clientes=[], report_clientes=[], total_clientes=0,
+                       current_page=1, total_pages=1, editable=[],
+                       has_client_status=False, active_status_id=1)
     finally:
         cursor.close()
         conn.close()
@@ -3475,9 +4919,13 @@ def exportar_pdf_clientes():
         if not id_column:
             raise ValueError('No se encontró el identificador de clientes.')
 
+        query = request.args.get('q', '').strip().lower()
+        from_date = request.args.get('from_date', '').strip()
+        to_date = request.args.get('to_date', '').strip()
+        estado = request.args.get('estado', '').strip().lower()
+
         cursor.execute(f"SELECT * FROM cliente ORDER BY [{id_column}]")
         records = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
-        query = request.args.get('q', '').strip().lower()
         rows = []
         for data in records:
             nombre = cliente_display_from_row(data)
@@ -3488,14 +4936,35 @@ def exportar_pdf_clientes():
             searchable = f'{nombre} {nit} {telefono} {correo}'.lower()
             if query and query not in searchable:
                 continue
-            rows.append([nombre, nit, telefono, correo, direccion])
+            # Filter by estado
+            cliente_activo = data.get(cliente_field(columns, 'activo')) or data.get('id_estado_general') == 1
+            estado_str = 'activo' if cliente_activo else 'inactivo'
+            if estado and estado != estado_str:
+                continue
+            # Filter by date
+            fecha_registro = data.get('fecha_registro') or data.get('fecha')
+            if from_date:
+                try:
+                    fecha = str(fecha_registro).split(' ')[0] if fecha_registro else ''
+                    if fecha and fecha < from_date:
+                        continue
+                except Exception:
+                    pass
+            if to_date:
+                try:
+                    fecha = str(fecha_registro).split(' ')[0] if fecha_registro else ''
+                    if fecha and fecha > to_date:
+                        continue
+                except Exception:
+                    pass
+            rows.append([nombre, nit, telefono, correo, direccion, estado_str, fecha_registro or '-'])
 
         buffer = io.BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=letter)
         pdf.setTitle('Reporte de Clientes - Importadora Morales')
         draw_table_pdf(
             pdf, 'Reporte de Clientes — Importadora Morales',
-            ['Nombre completo', 'NIT', 'Teléfono', 'Correo', 'Dirección'], rows
+            ['Nombre completo', 'NIT', 'Teléfono', 'Correo', 'Dirección', 'Estado', 'Fecha registro'], rows
         )
         pdf.showPage()
         pdf.save()
@@ -3534,7 +5003,7 @@ def ventas():
 
         cursor.execute(
             "SELECT id_venta, fecha_venta, id_cliente, id_usuario, total, "
-            "observaciones, id_metodo_pago, descuento "
+            "observaciones, id_metodo_pago, descuento, id_estado_venta "
             "FROM venta ORDER BY fecha_venta DESC"
         )
         sale_rows = cursor.fetchall()
@@ -3584,6 +5053,8 @@ def ventas():
                     'descuento': data.get('descuento') or 0.0,
                     'observaciones': data.get('observaciones') or '-',
                     'metodo_pago': metodo_pago,
+                    'id_estado_venta': int(data.get('id_estado_venta') or 1),
+                    'estado': 'Devuelta' if int(data.get('id_estado_venta') or 1) == 2 else 'Completada',
                     'items': detalles_por_venta.get(id_venta, []),
                 }
 
@@ -3602,11 +5073,12 @@ def ventas():
                 })
 
         ventas = list(ventas_por_id.values())
-        ingresos_totales = sum(float(venta['total'] or 0) for venta in ventas)
+        ingresos_totales = sum(float(venta['total'] or 0) for venta in ventas if venta['id_estado_venta'] == 1)
         hoy = datetime.now().date()
         ventas_hoy = sum(
-            1 for venta in ventas
-            if getattr(venta['fecha_venta'], 'date', lambda: venta['fecha_venta'])() == hoy
+            float(venta['total'] or 0) for venta in ventas
+            if venta['id_estado_venta'] == 1
+            and getattr(venta['fecha_venta'], 'date', lambda: venta['fecha_venta'])() == hoy
         )
         total_transacciones = len(ventas)
         report_ventas = get_ventas_reporte()
@@ -3633,9 +5105,7 @@ def ventas():
         show_edit_sale = request.args.get('modal') == 'editar'
         edit_sale = None
         if request.args.get('modal') in ('nueva', 'editar'):
-            cursor.execute('SELECT id_cliente, nit, correo, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido FROM cliente ORDER BY id_cliente')
-            for row in cursor.fetchall():
-                data = dict(zip([column[0] for column in cursor.description], row))
+            for data in _clientes_activos(cursor):
                 clientes.append({
                     'id': data['id_cliente'],
                     'nombre': cliente_display_from_row(data),
@@ -3644,7 +5114,13 @@ def ventas():
                 })
             cursor.execute('SELECT id_metodo_pago, metodo FROM metodo_pago ORDER BY id_metodo_pago')
             metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
-            cursor.execute('SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto WHERE stock > 0 ORDER BY codigo_repuesto')
+            estado_activo_id = get_estado_general_id(cursor, activo=True)
+            cursor.execute(
+                'SELECT id_repuesto, codigo_repuesto, precio_venta, stock '
+                'FROM repuesto WHERE stock > 0 AND id_estado_general = ? '
+                'ORDER BY codigo_repuesto',
+                (estado_activo_id,),
+            )
             product_rows = cursor.fetchall()
             for row in product_rows:
                 repuestos.append({
@@ -3745,20 +5221,28 @@ def exportar_pdf_ventas():
     to_date = request.args.get('to_date', '').strip()
     cliente = request.args.get('cliente', '').strip()
     vendedor = request.args.get('vendedor', '').strip()
+    repuesto = request.args.get('repuesto', '').strip()
     metodo_pago = request.args.get('metodo_pago', '').strip()
+    estado = request.args.get('estado', '').strip()
+    min_total = request.args.get('min_total', '').strip()
+    max_total = request.args.get('max_total', '').strip()
     rows = filter_ventas_reporte(
         get_ventas_reporte(),
         from_date=from_date or None,
         to_date=to_date or None,
         cliente=cliente or None,
         vendedor=vendedor or None,
+        repuesto=repuesto or None,
         metodo_pago=metodo_pago or None,
+        estado=estado or None,
+        min_total=float(min_total) if min_total else None,
+        max_total=float(max_total) if max_total else None,
     )
 
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle('Reporte de Ventas - Importadora Morales')
-    headers = ['N° Venta', 'Fecha', 'Cliente', 'Vendedor', 'Pago', 'Repuestos vendidos', 'Unidades', 'Total']
+    headers = ['N? Venta', 'Fecha', 'Cliente', 'Vendedor', 'Pago', 'Estado', 'Repuestos vendidos', 'Unidades', 'Total']
     pdf_rows = [
         [
             row['numero'],
@@ -3766,6 +5250,7 @@ def exportar_pdf_ventas():
             row['cliente'],
             row['vendedor'],
             row['metodo_pago'],
+            row['estado'],
             row['detalle_repuestos'],
             str(row['unidades']),
             f"Q {row['total']:,.2f}",
@@ -3802,6 +5287,8 @@ def nueva_venta():
 
             if not id_metodo_pago:
                 raise ValueError('Selecciona un metodo de pago.')
+            if id_cliente and not _cliente_esta_activo(cursor, id_cliente):
+                raise ValueError('El cliente seleccionado está inactivo y no se puede vender.')
 
             items = []
             total = 0.0
@@ -3816,13 +5303,17 @@ def nueva_venta():
                 if quantity < 1 or discount < 0:
                     raise ValueError('Las cantidades deben ser mayores que cero y el descuento no puede ser negativo.')
 
+                estado_activo_id = get_estado_general_id(cursor, activo=True)
                 cursor.execute(
-                    'SELECT id_repuesto, precio_venta, stock FROM repuesto WHERE id_repuesto = ?',
+                    'SELECT id_repuesto, precio_venta, stock, id_estado_general '
+                    'FROM repuesto WHERE id_repuesto = ?',
                     (repuesto_id,)
                 )
                 repuesto = cursor.fetchone()
                 if not repuesto:
                     raise ValueError('Uno de los repuestos seleccionados ya no existe.')
+                if repuesto.id_estado_general != estado_activo_id:
+                    raise ValueError(f'El repuesto {repuesto_id} está inactivo y no se puede vender.')
                 if repuesto.stock < quantity:
                     raise ValueError(f'El repuesto {repuesto_id} no tiene stock suficiente.')
 
@@ -3850,10 +5341,8 @@ def nueva_venta():
             flash('Venta registrada correctamente.', 'success')
             return redirect(url_for('ventas'))
 
-        cursor.execute('SELECT id_cliente, nit, correo, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido FROM cliente ORDER BY id_cliente')
         clientes = []
-        for row in cursor.fetchall():
-            data = dict(zip([column[0] for column in cursor.description], row))
+        for data in _clientes_activos(cursor):
             clientes.append({
                 'id': data['id_cliente'],
                 'nombre': cliente_display_from_row(data),
@@ -3863,7 +5352,13 @@ def nueva_venta():
 
         cursor.execute('SELECT id_metodo_pago, metodo FROM metodo_pago ORDER BY id_metodo_pago')
         metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
-        cursor.execute('SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto WHERE stock > 0 ORDER BY codigo_repuesto')
+        estado_activo_id = get_estado_general_id(cursor, activo=True)
+        cursor.execute(
+            'SELECT id_repuesto, codigo_repuesto, precio_venta, stock '
+            'FROM repuesto WHERE stock > 0 AND id_estado_general = ? '
+            'ORDER BY codigo_repuesto',
+            (estado_activo_id,),
+        )
         repuestos = []
         for row in cursor.fetchall():
             repuestos.append({
@@ -3900,6 +5395,8 @@ def modificar_venta(id_venta):
 
             if not id_metodo_pago:
                 raise ValueError('Selecciona un método de pago.')
+            if id_cliente and not _cliente_esta_activo(cursor, id_cliente):
+                raise ValueError('El cliente seleccionado está inactivo y no se puede vender.')
 
             items = []
             total = 0.0
@@ -3914,10 +5411,17 @@ def modificar_venta(id_venta):
                 if quantity < 1 or discount < 0:
                     raise ValueError('Las cantidades deben ser mayores que cero y el descuento no puede ser negativo.')
 
-                cursor.execute('SELECT id_repuesto, precio_venta, stock FROM repuesto WHERE id_repuesto = ?', (repuesto_id,))
+                estado_activo_id = get_estado_general_id(cursor, activo=True)
+                cursor.execute(
+                    'SELECT id_repuesto, precio_venta, stock, id_estado_general '
+                    'FROM repuesto WHERE id_repuesto = ?',
+                    (repuesto_id,),
+                )
                 repuesto = cursor.fetchone()
                 if not repuesto:
                     raise ValueError('Uno de los repuestos seleccionados ya no existe.')
+                if repuesto.id_estado_general != estado_activo_id:
+                    raise ValueError(f'El repuesto {repuesto_id} está inactivo y no se puede vender.')
                 if repuesto.stock < quantity:
                     raise ValueError(f'El repuesto {repuesto_id} no tiene stock suficiente.')
                 price = float(repuesto.precio_venta or 0)
@@ -4002,10 +5506,14 @@ def devoluciones():
             'ORDER BY d.fecha_devolucion DESC, d.id_devolucion DESC'
         )
         grouped = {}
+        devolucion_columns = [column[0] for column in cursor.description]
         for row in cursor.fetchall():
-            cols = [column[0] for column in cursor.description]
-            data = dict(zip(cols, row))
-            id_devolucion = data.get('id_devolucion') or data.get('id_devolucion_1') or (row[0] if row else None)
+            data = dict(zip(devolucion_columns, row))
+            id_devolucion = data.get('id_devolucion')
+            if id_devolucion is None:
+                id_devolucion = data.get('id_devolucion_1')
+            if id_devolucion is None and row:
+                id_devolucion = row[0]
             if id_devolucion is None:
                 continue
             current = grouped.setdefault(id_devolucion, {
@@ -4074,13 +5582,11 @@ def devoluciones():
             for item_row in cursor.fetchall():
                 cantidad_disponible = item_row[1] or 0
                 cantidad_devuelta = item_row[4] or 0
-                precio_unitario = Decimal(str(item_row[2] or 0)).quantize(Decimal('0.01'))
                 sale['items'].append({
                     'id': item_row[0], 'cantidad': cantidad_disponible,
                     'cantidad_vendida': cantidad_disponible + cantidad_devuelta,
                     'cantidad_devuelta': cantidad_devuelta,
-                    'precio': float(precio_unitario),
-                    'precio_centavos': int(precio_unitario * 100),
+                    'precio': float(item_row[2] or 0),
                     'codigo': item_row[3] or str(item_row[0]),
                     'nombre': get_repuesto_display_name(cursor, item_row[0]) or item_row[3] or str(item_row[0]),
                 })
@@ -4106,7 +5612,185 @@ def devoluciones():
     )
 
 
-@app.route('/desarme')
+def _desarme_form_int(form, name, label, required=True):
+    value = str(form.get(name) or '').strip()
+    if not value and not required:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'Selecciona un valor válido para {label}.')
+
+
+def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
+    vehicle_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'vehiculo_desarme')
+    }
+    required_vehicle_columns = {
+        'id_vehiculo_desarme', 'id_marca', 'id_modelo', 'id_anio',
+    }
+    if not required_vehicle_columns.issubset(vehicle_columns):
+        raise ValueError('La tabla vehiculo_desarme no tiene las columnas requeridas.')
+    if not process_link_ready:
+        raise ValueError(
+            'Falta la relación entre desarme y vehiculo_desarme. '
+            'Ejecuta la migración database/desarme_vehiculos.sql.'
+        )
+
+    brand_id = _desarme_form_int(form, 'id_marca', 'la marca')
+    model_id = _desarme_form_int(form, 'id_modelo', 'el modelo')
+    year_id = _desarme_form_int(form, 'id_anio', 'el año')
+    color_id = _desarme_form_int(form, 'id_color', 'el color', required=False)
+    transmission_id = _desarme_form_int(
+        form, 'id_transmision', 'la transmisión', required=False
+    )
+    state_id = _desarme_form_int(form, 'id_estado_desarme', 'el estado')
+
+    def catalog_contains(rows, value):
+        return any(str(row[0]) == str(value) for row in rows)
+
+    if not catalog_contains(catalogs['marcas'], brand_id):
+        raise ValueError('La marca seleccionada no existe.')
+    if not catalog_contains(fetch_modelos_by_marca(cursor, brand_id) or [], model_id):
+        raise ValueError('El modelo seleccionado no corresponde a la marca.')
+    if not catalog_contains(catalogs['anios'], year_id):
+        raise ValueError('El año seleccionado no existe.')
+    if color_id is not None and not catalog_contains(catalogs['colores'], color_id):
+        raise ValueError('El color seleccionado no existe.')
+    if transmission_id is not None and not catalog_contains(
+        catalogs['transmisiones'], transmission_id
+    ):
+        raise ValueError('La transmisión seleccionada no existe.')
+    if transmission_id is not None and 'id_transmision' not in vehicle_columns:
+        raise ValueError('La tabla vehiculo_desarme no permite guardar la transmisión.')
+    if not catalog_contains(catalogs['estados'], state_id):
+        raise ValueError('El estado seleccionado no existe.')
+
+    acquired_date = str(form.get('fecha_adquisicion') or '').strip() or None
+    if acquired_date:
+        try:
+            datetime.strptime(acquired_date, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('La fecha de adquisición no es válida.')
+
+    values = {
+        'id_marca': brand_id,
+        'id_modelo': model_id,
+        'id_anio': year_id,
+        'id_color': color_id,
+        'id_transmision': transmission_id,
+        'vin_chasis': str(form.get('vin_chasis') or '').strip() or None,
+        'placa': str(form.get('placa') or '').strip() or None,
+        'fecha_adquisicion': acquired_date,
+        'origen_adquisicion': str(form.get('origen_adquisicion') or '').strip() or None,
+        'id_estado': 1,
+    }
+    if 'fecha_registro' in vehicle_columns:
+        values['fecha_registro'] = datetime.now()
+
+    action = str(form.get('action') or 'create').strip()
+    vehicle_id = _desarme_form_int(
+        form, 'id_vehiculo_desarme', 'el vehículo', required=action == 'edit'
+    )
+
+    if action == 'create':
+        insert_values = [
+            (vehicle_columns[key], value)
+            for key, value in values.items()
+            if key in vehicle_columns
+        ]
+        id_column = vehicle_columns['id_vehiculo_desarme']
+        cursor.execute(
+            'SET NOCOUNT ON; '
+            'DECLARE @inserted_vehicle TABLE (id INT); '
+            'INSERT INTO dbo.vehiculo_desarme '
+            f'({", ".join(f"[{column}]" for column, _ in insert_values)}) '
+            f'OUTPUT INSERTED.[{id_column}] INTO @inserted_vehicle '
+            f'VALUES ({", ".join("?" for _ in insert_values)}); '
+            'SELECT id FROM @inserted_vehicle;',
+            tuple(value for _, value in insert_values),
+        )
+        inserted = cursor.fetchone()
+        if not inserted or inserted[0] is None:
+            raise ValueError('No se pudo recuperar el identificador del vehículo registrado.')
+        vehicle_id = int(inserted[0])
+    elif action == 'edit':
+        cursor.execute(
+            'SELECT id_vehiculo_desarme FROM dbo.vehiculo_desarme '
+            'WHERE id_vehiculo_desarme = ?',
+            (vehicle_id,),
+        )
+        if not cursor.fetchone():
+            raise ValueError('No se encontró el vehículo que deseas modificar.')
+        update_values = [
+            (vehicle_columns[key], value)
+            for key, value in values.items()
+            if key in vehicle_columns and key != 'fecha_registro'
+        ]
+        cursor.execute(
+            'UPDATE dbo.vehiculo_desarme SET '
+            + ', '.join(f'[{column}] = ?' for column, _ in update_values)
+            + ' WHERE [id_vehiculo_desarme] = ?',
+            tuple(value for _, value in update_values) + (vehicle_id,),
+        )
+    else:
+        raise ValueError('La operación solicitada no es válida.')
+
+    cursor.execute(
+        'SELECT TOP 1 id_desarme FROM dbo.desarme '
+        'WHERE id_vehiculo_desarme = ? ORDER BY id_desarme DESC',
+        (vehicle_id,),
+    )
+    process = cursor.fetchone()
+    process_id = process[0] if process else None
+    if process_id is None:
+        process_columns = {
+            column.lower(): column for column in get_table_columns(cursor, 'desarme')
+        }
+        user_column = next(
+            (
+                column
+                for column in ('id_usuario_responsable', 'id_usuario')
+                if column in process_columns
+            ),
+            None,
+        )
+        if user_column and user_id is None:
+            raise ValueError('No se pudo identificar al usuario responsable del desarme.')
+        process_values = {
+            'id_vehiculo_desarme': vehicle_id,
+            'id_estado_desarme': state_id,
+            'fecha_inicio': datetime.now() if str(
+                next((name for value, name in catalogs['estados'] if str(value) == str(state_id)), '')
+            ).strip().casefold().startswith('en proceso') else None,
+            'id_vehiculo_origen': None,
+            'id_estado': 1,
+        }
+        if user_column:
+            process_values[user_column] = user_id
+        process_insert_values = [
+            (process_columns[key], value)
+            for key, value in process_values.items()
+            if key in process_columns and value is not None
+        ]
+        if not {'id_vehiculo_desarme', 'id_estado_desarme'}.issubset(process_columns):
+            raise ValueError('La tabla desarme no tiene las columnas necesarias para crear el proceso.')
+        cursor.execute(
+            'INSERT INTO dbo.desarme '
+            f'({", ".join(f"[{column}]" for column, _ in process_insert_values)}) '
+            f'VALUES ({", ".join("?" for _ in process_insert_values)})',
+            tuple(value for _, value in process_insert_values),
+        )
+    else:
+        cursor.execute(
+            'UPDATE dbo.desarme SET id_estado_desarme = ? WHERE id_desarme = ?',
+            (state_id, process_id),
+        )
+
+    return vehicle_id
+
+
+@app.route('/desarme', methods=['GET', 'POST'])
 def desarme():
     if 'user' not in session:
         return redirect(url_for('login'))
@@ -4116,6 +5800,13 @@ def desarme():
     page_error = None
     estados = []
     origenes = []
+    marcas = []
+    anios = []
+    colores = []
+    transmisiones = []
+    pending_state_id = None
+    process_link_ready = False
+    schema_ready = False
     vehicles = []
     summary = {'pending': 0, 'in_progress': 0, 'completed': 0, 'parts': 0}
     filters = {
@@ -4127,7 +5818,6 @@ def desarme():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
         estados = [
             {'id': row[0], 'nombre': row[1]}
             for row in (fetch_catalog_for_candidates(cursor, ['estado_desarme']) or [])
@@ -4136,63 +5826,173 @@ def desarme():
             {'id': row[0], 'nombre': row[1]}
             for row in (fetch_catalog_for_candidates(cursor, ['vehiculo_origen']) or [])
         ]
+        marcas = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['marca_vehiculo', 'marca']) or [])
+        ]
+        anios = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['anio_vehiculo', 'anio']) or [])
+        ]
+        colores = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['color', 'color_repuesto']) or [])
+        ]
+        transmisiones = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(
+                cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision']
+            ) or [])
+        ]
+        pending_state_id = next(
+            (
+                state['id'] for state in estados
+                if str(state['nombre']).strip().casefold().startswith('pendiente')
+            ),
+            None,
+        )
 
+        desarme_columns = {
+            column.lower() for column in get_table_columns(cursor, 'desarme')
+        }
+        vehicle_columns = {
+            column.lower() for column in get_table_columns(cursor, 'vehiculo_desarme')
+        }
+        process_link_ready = 'id_vehiculo_desarme' in desarme_columns
+        schema_ready = (
+            {'id_vehiculo_desarme', 'id_marca', 'id_modelo', 'id_anio'}.issubset(vehicle_columns)
+            and {'id_vehiculo_desarme', 'id_estado_desarme'}.issubset(desarme_columns)
+            and process_link_ready
+            and bool(marcas)
+            and bool(anios)
+            and bool(estados)
+            and pending_state_id is not None
+        )
+        if request.method == 'POST':
+            if not has_permission_in_session('desarme', 'write'):
+                flash('No tienes permisos para registrar o modificar vehículos de desarme.', 'error')
+                return redirect(url_for('desarme'))
+            if not schema_ready:
+                raise ValueError(
+                    'El módulo de desarme no tiene el esquema o los catálogos requeridos.'
+                )
+            vehicle_id = _desarme_save_vehicle(
+                cursor,
+                request.form,
+                session.get('user_id'),
+                {
+                    'marcas': [(item['id'], item['nombre']) for item in marcas],
+                    'anios': [(item['id'], item['nombre']) for item in anios],
+                    'colores': [(item['id'], item['nombre']) for item in colores],
+                    'transmisiones': [(item['id'], item['nombre']) for item in transmisiones],
+                    'estados': [(item['id'], item['nombre']) for item in estados],
+                },
+                process_link_ready,
+            )
+            conn.commit()
+            flash(
+                'Vehículo registrado correctamente.' if request.form.get('action') != 'edit'
+                else 'Vehículo actualizado correctamente.',
+                'success',
+            )
+            return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+        process_join = (
+            '(d.id_vehiculo_desarme = vd.id_vehiculo_desarme OR '
+            '(d.id_vehiculo_desarme IS NULL '
+            'AND d.id_desarme = vd.id_vehiculo_desarme '
+            'AND NOT EXISTS (SELECT 1 FROM dbo.desarme linked '
+            'WHERE linked.id_vehiculo_desarme = vd.id_vehiculo_desarme)))'
+            if process_link_ready
+            else 'd.id_desarme = vd.id_vehiculo_desarme'
+        )
         cursor.execute(
-            'SELECT d.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'SELECT vd.id_vehiculo_desarme, vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, '
+            'vd.vin_chasis, vd.placa, vd.fecha_adquisicion, vd.origen_adquisicion, '
+            'd.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
             'd.id_estado_desarme, ed.nombre AS estado, d.id_vehiculo_origen, vo.origen, '
-            'COALESCE(SUM(dd.cantidad), 0) AS piezas '
-            'FROM dbo.desarme d '
+            'COALESCE(SUM(dd.cantidad), 0) AS piezas, vd.id_transmision '
+            'FROM dbo.vehiculo_desarme vd '
+            'LEFT JOIN dbo.desarme d ON ' + process_join + ' '
             'LEFT JOIN dbo.estado_desarme ed ON ed.id_estado_desarme = d.id_estado_desarme '
             'LEFT JOIN dbo.vehiculo_origen vo ON vo.id_origen = d.id_vehiculo_origen '
             'LEFT JOIN dbo.detalle_desarme dd ON dd.id_desarme = d.id_desarme '
-            'GROUP BY d.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
-            'd.id_estado_desarme, ed.nombre, d.id_vehiculo_origen, vo.origen '
-            'ORDER BY d.fecha_inicio DESC, d.id_desarme DESC'
+            'GROUP BY vd.id_vehiculo_desarme, vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, '
+            'vd.vin_chasis, vd.placa, vd.fecha_adquisicion, vd.origen_adquisicion, '
+            'd.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre, d.id_vehiculo_origen, vo.origen, vd.id_transmision '
+            'ORDER BY vd.id_vehiculo_desarme DESC'
         )
         columns = [column[0] for column in cursor.description]
         for row in cursor.fetchall():
             item = dict(zip(columns, row))
-            label = item.get('estado') or 'Sin estado'
-            normalized_state = _normalize_catalog_label(label)
+            label = item.get('estado') or 'Pendiente'
+            normalized_state = str(label).strip().casefold()
             pieces = int(item.get('piezas') or 0)
-            state_class = (
-                'pending' if normalized_state == 'pendiente' else
-                'in-progress' if normalized_state == 'en proceso' else
-                'completed' if normalized_state in {'finalizado', 'desarmado', 'desarmados'} else
-                ''
-            )
             vehicle = {
-                'id': item.get('id_desarme'),
+                'id': item.get('id_vehiculo_desarme'),
+                'id_marca': item.get('id_marca'),
+                'id_modelo': item.get('id_modelo'),
+                'id_anio': item.get('id_anio'),
+                'id_color': item.get('id_color'),
+                'id_transmision': item.get('id_transmision'),
+                'marca': get_display_name_by_id(
+                    cursor, ['marca_vehiculo', 'marca'], item.get('id_marca')
+                ) or '—',
+                'modelo': get_display_name_by_id(
+                    cursor, ['modelo_vehiculo', 'modelo'], item.get('id_modelo')
+                ) or '—',
+                'anio': get_display_name_by_id(
+                    cursor, ['anio_vehiculo', 'anio'], item.get('id_anio')
+                ) or '—',
+                'color': get_display_name_by_id(
+                    cursor, ['color', 'color_repuesto'], item.get('id_color')
+                ) or '—',
+                'transmision': get_display_name_by_id(
+                    cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'],
+                    item.get('id_transmision'),
+                ) or '—',
+                'vin_chasis': item.get('vin_chasis'),
+                'placa': item.get('placa'),
+                'fecha_adquisicion': item.get('fecha_adquisicion'),
+                'process_id': item.get('id_desarme'),
                 'fecha_inicio': item.get('fecha_inicio'),
                 'fecha_finalizacion': item.get('fecha_finalizacion'),
                 'observaciones': item.get('observaciones'),
-                'state_id': item.get('id_estado_desarme'),
+                'state_id': item.get('id_estado_desarme') or pending_state_id,
                 'estado': label,
-                'state_class': state_class,
-                'origen': item.get('origen') or 'Sin origen',
-                'id_origen': item.get('id_vehiculo_origen'),
+                'state_class': _desarme_state_class(label),
+                'origen': item.get('origen_adquisicion') or item.get('origen') or 'Sin especificar',
+                'id_origen': item.get('origen_adquisicion') or item.get('origen') or '',
                 'piezas': pieces,
             }
             if filters['estado'] and str(vehicle['state_id']) != filters['estado']:
                 continue
-            if filters['origen'] and str(vehicle['id_origen']) != filters['origen']:
+            if filters['origen'] and str(vehicle['id_origen']).strip().casefold() != filters['origen'].strip().casefold():
                 continue
             search_value = ' '.join(str(value or '') for value in (
-                vehicle['id'], vehicle['origen'], vehicle['estado'], vehicle['observaciones'],
+                vehicle['id'], vehicle['marca'], vehicle['modelo'], vehicle['anio'],
+                vehicle['placa'], vehicle['vin_chasis'], vehicle['origen'],
+                vehicle['estado'], vehicle['observaciones'],
             )).casefold()
             if filters['q'] and filters['q'].casefold() not in search_value:
                 continue
 
-            if normalized_state == 'pendiente':
+            if normalized_state.startswith('pendiente'):
                 summary['pending'] += 1
-            elif normalized_state == 'en proceso':
+            elif normalized_state.startswith('en proceso'):
                 summary['in_progress'] += 1
-            elif normalized_state in {'finalizado', 'desarmado', 'desarmados'}:
+            elif _desarme_state_class(label) == 'completed':
                 summary['completed'] += 1
             summary['parts'] += pieces
             vehicles.append(vehicle)
-    except Exception:
+    except Exception as error:
         app.logger.exception('No se pudo cargar el módulo de desarme.')
+        if request.method == 'POST':
+            if conn is not None:
+                conn.rollback()
+            flash(f'No se pudo guardar el vehículo de desarme: {error}', 'error')
+            return redirect(url_for('desarme', open_modal=1))
         page_error = 'No fue posible cargar los datos del desarme. Intenta actualizar la página.'
     finally:
         if cursor is not None:
@@ -4219,44 +6019,1130 @@ def desarme():
         filters=filters,
         has_filters=any(filters.values()),
         page_error=page_error,
+        marcas=marcas,
+        anios=anios,
+        colores=colores,
+        transmisiones=transmisiones,
+        today=datetime.now().strftime('%Y-%m-%d'),
+        pending_state_id=pending_state_id,
+        process_link_ready=process_link_ready,
+        schema_ready=schema_ready,
     )
+
+
+@app.route('/desarme/<int:vehicle_id>')
+def desarme_detalle(vehicle_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        vehicle_columns = get_table_columns(cursor, 'vehiculo_desarme')
+        if not vehicle_columns or 'id_vehiculo_desarme' not in {
+            column.lower() for column in vehicle_columns
+        }:
+            flash('No está disponible el detalle del vehículo para desarme.', 'error')
+            return redirect(url_for('desarme'))
+
+        desarme_columns = {
+            column.lower() for column in get_table_columns(cursor, 'desarme')
+        }
+        process_link_ready = 'id_vehiculo_desarme' in desarme_columns
+        process_join = (
+            '(d.id_vehiculo_desarme = vd.id_vehiculo_desarme OR '
+            '(d.id_vehiculo_desarme IS NULL '
+            'AND d.id_desarme = vd.id_vehiculo_desarme '
+            'AND NOT EXISTS (SELECT 1 FROM dbo.desarme linked '
+            'WHERE linked.id_vehiculo_desarme = vd.id_vehiculo_desarme)))'
+            if process_link_ready
+            else 'd.id_desarme = vd.id_vehiculo_desarme'
+        )
+        cursor.execute(
+            'SELECT d.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre AS estado, d.id_vehiculo_origen, vo.origen, '
+            'vd.id_vehiculo_desarme, vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, '
+            'vd.vin_chasis, vd.placa, vd.fecha_adquisicion, vd.origen_adquisicion, '
+            'COALESCE((SELECT SUM(dd.cantidad) FROM dbo.detalle_desarme dd '
+            'WHERE dd.id_desarme = d.id_desarme), 0) AS piezas, vd.id_transmision '
+            'FROM dbo.vehiculo_desarme vd '
+            'LEFT JOIN dbo.desarme d ON ' + process_join + ' '
+            'LEFT JOIN dbo.estado_desarme ed ON ed.id_estado_desarme = d.id_estado_desarme '
+            'LEFT JOIN dbo.vehiculo_origen vo ON vo.id_origen = d.id_vehiculo_origen '
+            'WHERE vd.id_vehiculo_desarme = ?',
+            (vehicle_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            flash('No se encontró el vehículo para desarme solicitado.', 'error')
+            return redirect(url_for('desarme'))
+
+        state = row[5] or 'Pendiente'
+        normalized_state = str(state).strip().casefold()
+        vehicle = {
+            'id': row[8] or vehicle_id,
+            'marca': get_display_name_by_id(cursor, ['marca_vehiculo', 'marca'], row[9]) or '—',
+            'modelo': get_display_name_by_id(cursor, ['modelo_vehiculo', 'modelo'], row[10]) or '—',
+            'anio': get_display_name_by_id(cursor, ['anio_vehiculo', 'anio'], row[11]) or '—',
+            'color': get_display_name_by_id(cursor, ['color', 'color_repuesto'], row[12]) or '—',
+            'id_transmision': row[18],
+            'transmision': get_display_name_by_id(
+                cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'], row[18]
+            ) or '—',
+            'vin_chasis': row[13],
+            'placa': row[14],
+            'fecha_adquisicion': row[15],
+            'origen': row[16] or row[7] or 'Sin especificar',
+            'piezas': int(row[17] or 0),
+            'estado': state,
+            'state_class': _desarme_state_class(state),
+            'process_id': row[0],
+            'has_process': row[0] is not None,
+            'process_code': f"DSR-{int(row[0]):06d}" if row[0] is not None else '—',
+            'fecha_inicio': row[1],
+            'fecha_finalizacion': row[2],
+            'responsable': 'No asignado',
+        }
+        pieces = []
+        process_id = row[0]
+        detail_columns = {
+            column.lower(): column for column in get_table_columns(cursor, 'detalle_desarme')
+        }
+        detail_process_column = next(
+            (
+                detail_columns[name]
+                for name in ('id_desarme', 'id_proceso_desarme')
+                if name in detail_columns
+            ),
+            None,
+        )
+        if process_id is not None and detail_process_column:
+            detail_id_column = next(
+                (
+                    detail_columns[name]
+                    for name in ('id_detalle_desarme', 'id_detalle')
+                    if name in detail_columns
+                ),
+                None,
+            )
+            detail_order = f' ORDER BY [{detail_id_column}]' if detail_id_column else ''
+            cursor.execute(
+                f'SELECT * FROM dbo.detalle_desarme '
+                f'WHERE [{detail_process_column}] = ?{detail_order}',
+                (process_id,),
+            )
+            detail_names = [column[0].lower() for column in cursor.description]
+            for detail_row in cursor.fetchall():
+                data = dict(zip(detail_names, detail_row))
+                id_tipo = data.get('id_tipo_repuesto')
+                id_estado_pieza = data.get('id_estado_pieza')
+                id_repuesto = data.get('id_repuesto')
+                estado_pieza = (
+                    data.get('estado_pieza')
+                    or get_display_name_by_id(
+                        cursor, ['estado_pieza_desarme', 'estado_pieza'], id_estado_pieza
+                    )
+                    or 'Sin estado'
+                )
+                tipo_repuesto = (
+                    data.get('tipo_repuesto')
+                    or get_display_name_by_id(cursor, ['tipo_repuesto'], id_tipo)
+                    or '—'
+                )
+                codigo_repuesto = data.get('codigo_repuesto')
+                if id_repuesto is not None and codigo_repuesto is None:
+                    cursor.execute(
+                        'SELECT codigo_repuesto FROM dbo.repuesto WHERE id_repuesto = ?',
+                        (id_repuesto,),
+                    )
+                    repuesto_row = cursor.fetchone()
+                    codigo_repuesto = repuesto_row[0] if repuesto_row else None
+                lado = (
+                    data.get('lado')
+                    or get_display_name_by_id(
+                        cursor, ['lado_repuesto', 'lado'], data.get('id_lado')
+                    )
+                    or 'No aplica'
+                )
+                posicion = (
+                    data.get('posicion')
+                    or get_display_name_by_id(
+                        cursor, ['posicion_repuesto', 'posicion'], data.get('id_posicion')
+                    )
+                    or 'No aplica'
+                )
+                pieces.append({
+                    'id_detalle_desarme': (
+                        data.get('id_detalle_desarme')
+                        or data.get('id_detalle')
+                        or len(pieces) + 1
+                    ),
+                    'id_tipo_repuesto': id_tipo,
+                    'id_lado': data.get('id_lado'),
+                    'id_posicion': data.get('id_posicion'),
+                    'precio_venta': data.get('precio_venta') or data.get('precio') or 0,
+                    'observaciones': data.get('observaciones'),
+                    'tipo_repuesto': tipo_repuesto,
+                    'lado': lado,
+                    'posicion': posicion,
+                    'cantidad': data.get('cantidad') or 0,
+                    'estado_pieza': estado_pieza,
+                    'state_class': (
+                        'is-damaged'
+                        if any(token in str(estado_pieza).strip().casefold() for token in ('dañad', 'damag'))
+                        else ''
+                    ),
+                    'ruta_fotografia': (
+                        data.get('ruta_fotografia')
+                        or data.get('fotografia')
+                        or data.get('foto')
+                    ),
+                    'id_repuesto': id_repuesto,
+                    'codigo_repuesto': codigo_repuesto,
+                })
+        vehicle['piezas'] = sum(int(piece['cantidad'] or 0) for piece in pieces)
+        result_counts, finalization_pieces = _desarme_result_summary(pieces)
+        result = None
+        result_error = None
+        result_columns = {
+            column.lower() for column in get_table_columns(cursor, 'resultado_desarme')
+        }
+        required_result_columns = {
+            'id_resultado_desarme', 'id_desarme', 'piezas_obtenidas',
+            'piezas_aptas', 'piezas_danadas', 'piezas_no_aptas',
+            'observaciones', 'fecha_registro', 'id_usuario', 'id_estado',
+        }
+        if required_result_columns.issubset(result_columns) and process_id is not None:
+            cursor.execute(
+                'SELECT TOP 1 id_resultado_desarme, piezas_obtenidas, piezas_aptas, '
+                'piezas_danadas, piezas_no_aptas, observaciones, fecha_registro, '
+                'id_usuario, id_estado FROM dbo.resultado_desarme '
+                'WHERE id_desarme = ? ORDER BY id_resultado_desarme DESC',
+                (process_id,),
+            )
+            result_row = cursor.fetchone()
+            if result_row:
+                result = {
+                    'id': result_row[0],
+                    'piezas_obtenidas': result_row[1],
+                    'piezas_aptas': result_row[2],
+                    'piezas_danadas': result_row[3],
+                    'piezas_no_aptas': result_row[4],
+                    'observaciones': result_row[5],
+                    'fecha_registro': result_row[6],
+                    'usuario': lookup_foreign_key_display(
+                        cursor, 'id_usuario', result_row[7], ['usuario']
+                    ) or '—',
+                    'estado': _desarme_result_state_name(cursor, result_row[8]) or '—',
+                }
+                vehicle['responsable'] = result['usuario']
+        elif process_id is not None:
+            result_error = (
+                'No está configurada la tabla resultado_desarme con las columnas requeridas.'
+            )
+        incidents = []
+        incidents_error = None
+        incident_statuses = []
+        incident_columns = {
+            column.lower() for column in get_table_columns(cursor, 'incidencia_desarme')
+        }
+        required_incident_columns = {
+            'id_incidencia', 'id_desarme', 'id_detalle_desarme',
+            'descripcion', 'fecha_incidencia', 'id_usuario', 'id_estado',
+        }
+        if required_incident_columns.issubset(incident_columns) and process_id is not None:
+            incident_statuses = _desarme_incident_statuses(cursor)
+            incident_status_names = {
+                int(status['id']): status['nombre']
+                for status in incident_statuses
+            }
+            cursor.execute(
+                'SELECT id_incidencia, id_detalle_desarme, descripcion, '
+                'fecha_incidencia, id_usuario, id_estado '
+                'FROM dbo.incidencia_desarme WHERE id_desarme = ? '
+                'ORDER BY id_incidencia DESC',
+                (process_id,),
+            )
+            pieces_by_id = {
+                int(piece['id_detalle_desarme']): piece
+                for piece in pieces
+                if piece.get('id_detalle_desarme') is not None
+            }
+            for incident_row in cursor.fetchall():
+                associated_piece = pieces_by_id.get(int(incident_row[1] or 0))
+                incidents.append({
+                    'id': incident_row[0],
+                    'pieza': (
+                        f"DTD-{int(incident_row[1]):06d} — {associated_piece['tipo_repuesto']}"
+                        if associated_piece else '—'
+                    ),
+                    'descripcion': incident_row[2],
+                    'fecha_incidencia': incident_row[3],
+                    'usuario': lookup_foreign_key_display(
+                        cursor, 'id_usuario', incident_row[4], ['usuario']
+                    ) or '—',
+                    'estado': incident_status_names.get(
+                        int(incident_row[5]) if incident_row[5] is not None else -1,
+                        str(incident_row[5]) if incident_row[5] is not None else '—',
+                    ),
+                })
+            if not incident_statuses:
+                incidents_error = (
+                    'No se encontró el catálogo asociado a id_estado de '
+                    'incidencia_desarme.'
+                )
+        else:
+            incidents_error = (
+                'No está configurada la tabla de incidencias de Desarme. '
+                'Ejecuta la migración database/desarme_vehiculos.sql y vuelve a cargar.'
+            )
+        return render_template(
+            'desarme_detalle.html',
+            vehicle=vehicle,
+            pieces=pieces,
+            incidents=incidents,
+            incidents_error=incidents_error,
+            incident_statuses=incident_statuses,
+            result=result,
+            result_error=result_error,
+            result_counts=result_counts,
+            finalization_pieces=finalization_pieces,
+            can_create=has_permission_in_session('desarme', 'write'),
+            registered_by=session.get('full_name') or session.get('user', 'Usuario'),
+            registered_at=datetime.now().strftime('%d/%m/%Y %H:%M'),
+            today_iso=datetime.now().strftime('%Y-%m-%d'),
+            piece_types=fetch_catalog_for_candidates(cursor, ['tipo_repuesto']) or [],
+            piece_states=fetch_catalog_for_candidates(cursor, ['estado_pieza_desarme', 'estado_pieza']) or [],
+            piece_sides=fetch_catalog_for_candidates(cursor, ['lado_repuesto', 'lado']) or [],
+            piece_positions=fetch_catalog_for_candidates(cursor, ['posicion_repuesto', 'posicion']) or [],
+            piece_form_values={},
+        )
+    except Exception:
+        app.logger.exception('No se pudo cargar el detalle del vehículo para desarme.')
+        flash('No fue posible cargar el detalle del vehículo. Intenta actualizar la página.', 'error')
+        return redirect(url_for('desarme'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.route('/desarme/<int:vehicle_id>/incidencias', methods=['POST'])
+def registrar_incidencia_desarme(vehicle_id):
+    if not has_permission_in_session('desarme', 'write'):
+        flash('No tienes permisos para registrar incidencias.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+    description = request.form.get('descripcion', '').strip()
+    detail_id_raw = request.form.get('id_detalle_desarme', '').strip()
+    status_id_raw = request.form.get('id_estado', '').strip()
+    date_raw = request.form.get('fecha_incidencia', '').strip()
+    if not description or len(description) > 1000:
+        flash('La descripción es obligatoria y no puede superar 1000 caracteres.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id) + '?open_incident=1')
+    try:
+        detail_id = int(detail_id_raw)
+        status_id = int(status_id_raw)
+        incident_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        flash('Selecciona una pieza, un estado y una fecha válidos para la incidencia.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id) + '?open_incident=1')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        process_id = _desarme_process_id(cursor, vehicle_id)
+        if process_id is None:
+            raise ValueError('No se encontró el proceso de desarme de este vehículo.')
+        incident_columns = {
+            column.lower() for column in get_table_columns(cursor, 'incidencia_desarme')
+        }
+        required_incident_columns = {
+            'id_incidencia', 'id_desarme', 'id_detalle_desarme',
+            'descripcion', 'fecha_incidencia', 'id_usuario', 'id_estado',
+        }
+        if not required_incident_columns.issubset(incident_columns):
+            raise ValueError(
+                'No está configurada la tabla de incidencias. '
+                'Ejecuta la migración database/desarme_vehiculos.sql.'
+            )
+        valid_status_ids = {
+            int(status['id'])
+            for status in _desarme_incident_statuses(cursor)
+        }
+        if status_id not in valid_status_ids:
+            raise ValueError('El estado seleccionado no existe en el catálogo de incidencias.')
+        cursor.execute(
+            'SELECT COUNT(*) FROM dbo.detalle_desarme '
+            'WHERE id_detalle_desarme = ? AND id_desarme = ?',
+            (detail_id, process_id),
+        )
+        if not cursor.fetchone()[0]:
+            raise ValueError('La pieza seleccionada no pertenece a este proceso de desarme.')
+        cursor.execute(
+            'INSERT INTO dbo.incidencia_desarme '
+            '(id_desarme, id_detalle_desarme, descripcion, fecha_incidencia, id_usuario, id_estado) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            (process_id, detail_id, description, incident_date, session.get('user_id'), status_id),
+        )
+        conn.commit()
+        flash('La incidencia se registró correctamente.', 'success')
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception(
+            'No se pudo registrar la incidencia del vehículo %s.', vehicle_id
+        )
+        flash(f'No se pudo registrar la incidencia: {error}', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id) + '?open_incident=1')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id) + '#tab-incidents')
+
+
+def _desarme_incident_statuses(cursor):
+    """Load valid incidence states, preferring the table referenced by id_estado."""
+    cursor.execute(
+        'SELECT TOP 1 rs.name, rt.name, rc.name '
+        'FROM sys.foreign_key_columns fkc '
+        'JOIN sys.tables st ON st.object_id = fkc.parent_object_id '
+        'JOIN sys.schemas ss ON ss.schema_id = st.schema_id '
+        'JOIN sys.columns sc ON sc.object_id = st.object_id '
+        ' AND sc.column_id = fkc.parent_column_id '
+        'JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id '
+        'JOIN sys.schemas rs ON rs.schema_id = rt.schema_id '
+        'JOIN sys.columns rc ON rc.object_id = rt.object_id '
+        ' AND rc.column_id = fkc.referenced_column_id '
+        'WHERE ss.name = ? AND st.name = ? AND sc.name = ?',
+        ('dbo', 'incidencia_desarme', 'id_estado'),
+    )
+    foreign_key_target = cursor.fetchone()
+    if foreign_key_target:
+        status_tables = [(foreign_key_target[0], foreign_key_target[1])]
+        referenced_id = foreign_key_target[2]
+    else:
+        status_tables = [
+            ('dbo', 'estado_incidencia_desarme'),
+            ('dbo', 'estado_incidencia'),
+            ('dbo', 'estado_general'),
+            ('dbo', 'estado_repuesto'),
+        ]
+        referenced_id = None
+
+    for schema_name, table_name in status_tables:
+        table_ref = f'[{schema_name.replace("]", "]]")}].[{table_name.replace("]", "]]")}]'
+        columns = get_table_columns(cursor, table_ref)
+        id_column = next(
+            (column for column in columns if column.lower() == referenced_id.lower()),
+            None,
+        ) if referenced_id else next(
+            (column for column in columns if column.lower().startswith('id')),
+            None,
+        )
+        display_column = choose_display_column(columns)
+        if not id_column or not display_column:
+            continue
+        cursor.execute(
+            f'SELECT [{id_column.replace("]", "]]")}] AS id, '
+            f'[{display_column.replace("]", "]]")}] AS nombre '
+            f'FROM {table_ref} ORDER BY [{display_column.replace("]", "]]")}]'
+        )
+        return [
+            {'id': row[0], 'nombre': row[1]}
+            for row in cursor.fetchall()
+        ]
+    return []
+
+
+def _desarme_process_id(cursor, vehicle_id):
+    columns = {column.lower() for column in get_table_columns(cursor, 'desarme')}
+    if 'id_vehiculo_desarme' in columns:
+        cursor.execute(
+            'SELECT TOP 1 id_desarme FROM dbo.desarme '
+            'WHERE id_vehiculo_desarme = ? ORDER BY id_desarme DESC',
+            (vehicle_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+    cursor.execute(
+        'SELECT TOP 1 id_desarme FROM dbo.desarme WHERE id_desarme = ?',
+        (vehicle_id,),
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
+def _desarme_state_id(cursor, label_prefix):
+    rows = fetch_catalog_for_candidates(cursor, ['estado_desarme']) or []
+    target = label_prefix.strip().casefold()
+    for state_id, name in rows:
+        if str(name or '').strip().casefold().startswith(target):
+            return state_id
+    return None
+
+
+def _desarme_state_class(state_name):
+    normalized = str(state_name or '').strip().casefold()
+    if normalized.startswith('pendiente'):
+        return 'pending'
+    if normalized.startswith('en proceso'):
+        return 'in-progress'
+    if normalized.startswith(('finaliz', 'desarmad')):
+        return 'completed'
+    return ''
+
+
+def _desarme_final_state_id(cursor):
+    return (
+        _desarme_state_id(cursor, 'desarmado')
+        or _desarme_state_id(cursor, 'finalizado')
+    )
+
+
+def _desarme_piece_category(state_name):
+    normalized = str(state_name or '').strip().casefold()
+    if any(token in normalized for token in ('incompleta', 'no apt', 'inutil', 'rechaz')):
+        return 'no-aptas'
+    if any(token in normalized for token in ('dañad', 'danad', 'damage')):
+        return 'danadas'
+    if any(token in normalized for token in ('apta', 'apto', 'aprovech', 'buen')):
+        return 'aptas'
+    return 'no-aptas'
+
+
+def _desarme_result_summary(pieces):
+    counts = {
+        'piezas_obtenidas': 0,
+        'piezas_aptas': 0,
+        'piezas_danadas': 0,
+        'piezas_no_aptas': 0,
+    }
+    summary_pieces = []
+    for piece in pieces:
+        category = _desarme_piece_category(piece.get('estado_pieza'))
+        quantity = int(piece.get('cantidad') or 0)
+        counts['piezas_obtenidas'] += quantity
+        counts[
+            'piezas_aptas' if category == 'aptas'
+            else 'piezas_danadas' if category == 'danadas'
+            else 'piezas_no_aptas'
+        ] += quantity
+        summary_pieces.append({
+            'nombre': f"{piece.get('tipo_repuesto') or 'Pieza'} — {piece.get('lado') or 'No aplica'}",
+            'estado': piece.get('estado_pieza') or 'Sin estado',
+            'categoria': category,
+            'cantidad': quantity,
+        })
+    return counts, summary_pieces
+
+
+def _desarme_fk_target(cursor, table_name, column_name):
+    cursor.execute(
+        'SELECT rs.name, rt.name, rc.name '
+        'FROM sys.foreign_key_columns fkc '
+        'JOIN sys.tables st ON st.object_id = fkc.parent_object_id '
+        'JOIN sys.schemas ss ON ss.schema_id = st.schema_id '
+        'JOIN sys.columns sc ON sc.object_id = st.object_id '
+        ' AND sc.column_id = fkc.parent_column_id '
+        'JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id '
+        'JOIN sys.schemas rs ON rs.schema_id = rt.schema_id '
+        'JOIN sys.columns rc ON rc.object_id = rt.object_id '
+        ' AND rc.column_id = fkc.referenced_column_id '
+        'WHERE ss.name = ? AND st.name = ? AND sc.name = ?',
+        ('dbo', table_name, column_name),
+    )
+    return cursor.fetchone()
+
+
+def _desarme_result_state_id(cursor):
+    target = _desarme_fk_target(cursor, 'resultado_desarme', 'id_estado')
+    candidates = (
+        [(target[0], target[1], target[2])]
+        if target else [
+            ('dbo', 'estado_resultado_desarme', None),
+            ('dbo', 'estado_resultado', None),
+            ('dbo', 'estado_general', None),
+            ('dbo', 'estado_repuesto', None),
+        ]
+    )
+    for schema_name, table_name, referenced_id in candidates:
+        table_ref = f'[{schema_name.replace("]", "]]")}].[{table_name.replace("]", "]]")}]'
+        columns = get_table_columns(cursor, table_ref)
+        id_column = next(
+            (
+                column for column in columns
+                if column.lower() == referenced_id.lower()
+            ),
+            None,
+        ) if referenced_id else next(
+            (column for column in columns if column.lower().startswith('id')),
+            None,
+        )
+        display_column = choose_display_column(columns)
+        if not id_column or not display_column:
+            continue
+        cursor.execute(
+            f'SELECT [{id_column.replace("]", "]]")}], '
+            f'[{display_column.replace("]", "]]")}] FROM {table_ref}'
+        )
+        statuses = cursor.fetchall()
+        for state_id, label in statuses:
+            normalized = str(label or '').strip().casefold()
+            if normalized in {'activo', 'activa', 'registrado', 'registrada', 'finalizado', 'finalizada'}:
+                return state_id
+    return None
+
+
+def _desarme_result_state_name(cursor, state_id):
+    if state_id is None:
+        return None
+    target = _desarme_fk_target(cursor, 'resultado_desarme', 'id_estado')
+    candidates = (
+        [(target[0], target[1], target[2])]
+        if target else [
+            ('dbo', 'estado_resultado_desarme', None),
+            ('dbo', 'estado_resultado', None),
+            ('dbo', 'estado_general', None),
+            ('dbo', 'estado_repuesto', None),
+        ]
+    )
+    for schema_name, table_name, referenced_id in candidates:
+        table_ref = f'[{schema_name.replace("]", "]]")}].[{table_name.replace("]", "]]")}]'
+        columns = get_table_columns(cursor, table_ref)
+        id_column = next(
+            (column for column in columns if column.lower() == referenced_id.lower()),
+            None,
+        ) if referenced_id else next(
+            (column for column in columns if column.lower().startswith('id')),
+            None,
+        )
+        display_column = choose_display_column(columns)
+        if not id_column or not display_column:
+            continue
+        cursor.execute(
+            f'SELECT [{display_column.replace("]", "]]")}] FROM {table_ref} '
+            f'WHERE [{id_column.replace("]", "]]")}] = ?',
+            (state_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+    return None
+
+
+def _desarme_available_inventory_state_id(cursor):
+    target = _desarme_fk_target(cursor, 'repuesto', 'id_estado_repuesto')
+    candidates = (
+        [(target[0], target[1], target[2])]
+        if target else [
+            ('dbo', 'estado_repuesto', None),
+            ('dbo', 'estado_general', None),
+        ]
+    )
+    for schema_name, table_name, referenced_id in candidates:
+        table_ref = f'[{schema_name.replace("]", "]]")}].[{table_name.replace("]", "]]")}]'
+        columns = get_table_columns(cursor, table_ref)
+        id_column = next(
+            (
+                column for column in columns
+                if column.lower() == referenced_id.lower()
+            ),
+            None,
+        ) if referenced_id else next(
+            (column for column in columns if column.lower().startswith('id')),
+            None,
+        )
+        display_column = choose_display_column(columns)
+        if not id_column or not display_column:
+            continue
+        cursor.execute(
+            f'SELECT [{id_column.replace("]", "]]")}], '
+            f'[{display_column.replace("]", "]]")}] FROM {table_ref}'
+        )
+        statuses = cursor.fetchall()
+        for state_id, label in statuses:
+            if str(label or '').strip().casefold() in {'disponible', 'activo', 'activa'}:
+                return state_id
+        # The inventory catalog uses ID 1 for parts with stock and ID 3 for
+        # parts without stock. Some databases label state 1 differently.
+        if table_name.lower() == 'estado_repuesto':
+            for state_id, _ in statuses:
+                if str(state_id) == '1':
+                    return state_id
+    return None
+
+
+def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece, user_id):
+    piece_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'detalle_desarme')
+    }
+    repuesto_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'repuesto')
+    }
+    detail_id = piece.get('id_detalle_desarme')
+    quantity = int(piece.get('cantidad') or 0)
+    if quantity <= 0 or not piece.get('id_tipo_repuesto') or not detail_id:
+        raise ValueError('Una pieza apta no tiene tipo, identificador o cantidad válida.')
+
+    # Calcular stock_minimo y stock_maximo automáticamente (10% / 3x)
+    stock_minimo = max(1, int(quantity * 0.10))
+    stock_maximo = quantity * 3
+
+    id_tipo_repuesto = piece.get('id_tipo_repuesto')
+    id_lado = piece.get('id_lado')
+    id_posicion = piece.get('id_posicion')
+    id_vehiculo_origen = vehicle_data.get('id_vehiculo_origen')
+    id_marca = vehicle_data.get('id_marca')
+    id_modelo = vehicle_data.get('id_modelo')
+    id_anio = vehicle_data.get('id_anio')
+    id_color = vehicle_data.get('id_color')
+    id_transmision = vehicle_data.get('id_transmision')
+
+    # Get photo from piece
+    photo_column = piece_columns.get('ruta_fotografia') or piece_columns.get('fotografia') or piece_columns.get('foto')
+    piece_photo = piece.get(photo_column) if photo_column else None
+
+    repuesto_id = None
+
+    if 'id_repuesto' in piece_columns and piece.get('id_repuesto'):
+        repuesto_id = int(piece['id_repuesto'])
+
+    if repuesto_id is not None:
+        if 'stock' not in repuesto_columns:
+            raise ValueError('La tabla repuesto no tiene la columna de stock requerida.')
+        update_columns = [repuesto_columns['stock']]
+        set_clause = f'[{update_columns[0]}] = COALESCE([{update_columns[0]}], 0) + ?'
+        params = [quantity]
+        # Actualizar también stock_minimo y stock_maximo
+        if 'stock_minimo' in repuesto_columns:
+            set_clause += f', [{repuesto_columns["stock_minimo"]}] = ?'
+            params.append(stock_minimo)
+        if 'stock_maximo' in repuesto_columns:
+            set_clause += f', [{repuesto_columns["stock_maximo"]}] = ?'
+            params.append(stock_maximo)
+        if 'id_transmision' in repuesto_columns and id_transmision is not None:
+            set_clause += f', [{repuesto_columns["id_transmision"]}] = ?'
+            params.append(id_transmision)
+        if 'id_estado_repuesto' in repuesto_columns:
+            available_state = _desarme_available_inventory_state_id(cursor)
+            if available_state is None:
+                raise ValueError('No se encontró el estado Disponible para registrar inventario.')
+            set_clause += f', [{repuesto_columns["id_estado_repuesto"]}] = ?'
+            params.append(available_state)
+        if 'id_estado_general' in repuesto_columns:
+            set_clause += f', [{repuesto_columns["id_estado_general"]}] = ?'
+            params.append(get_estado_general_id(cursor, activo=True))
+        # Update photo if piece has one
+        if piece_photo and 'fotografia' in repuesto_columns:
+            set_clause += f', [{repuesto_columns["fotografia"]}] = ?'
+            params.append(piece_photo)
+        params.append(repuesto_id)
+        cursor.execute(
+            f'UPDATE dbo.repuesto SET {set_clause} '
+            f'WHERE [{repuesto_columns["id_repuesto"]}] = ?',
+            tuple(params),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError('No se encontró el repuesto para actualizar stock.')
+    else:
+        if 'id_repuesto' not in repuesto_columns:
+            raise ValueError('La tabla repuesto no tiene identificador para crear inventario.')
+        detail_id_column = piece_columns.get('id_detalle_desarme') or piece_columns.get('id_detalle')
+        code = f'DSR-DEFAULT-{int(detail_id):06d}'
+        data = {
+            'codigo_repuesto': code,
+            'id_vehiculo_origen': id_vehiculo_origen,
+            'id_tipo_repuesto': id_tipo_repuesto,
+            'id_marca': id_marca,
+            'id_modelo': id_modelo,
+            'id_anio': id_anio,
+            'id_color': id_color,
+            'id_transmision': id_transmision,
+            'id_lado': id_lado,
+            'id_posicion': id_posicion,
+            'id_ubicacion': get_tipo_ubicacion(cursor, id_tipo_repuesto),
+            'id_bodega': get_tipo_ubicacion(cursor, id_tipo_repuesto),
+            'stock_minimo': stock_minimo,
+            'stock_maximo': stock_maximo,
+            'stock': quantity,
+            'precio_compra': 0,
+            'precio_venta': piece.get('precio_venta') or 0,
+            'observaciones': piece.get('observaciones') or f'Recuperado del desarme DSR-{int(process_id):06d}.',
+            'fecha_ingreso': datetime.now(),
+            'id_usuario_registro': user_id,
+            'id_estado': 1,
+        }
+        if piece_photo and 'fotografia' in repuesto_columns:
+            data['fotografia'] = piece_photo
+        if 'id_estado_general' in repuesto_columns:
+            data['id_estado_general'] = get_estado_general_id(cursor, activo=True)
+        if 'id_estado_repuesto' in repuesto_columns:
+            available_state = _desarme_available_inventory_state_id(cursor)
+            if available_state is None:
+                raise ValueError('No se encontró el estado Disponible para registrar inventario.')
+            data['id_estado_repuesto'] = available_state
+        insert_values = [
+            (repuesto_columns[key], value)
+            for key, value in data.items()
+            if key in repuesto_columns and value is not None
+        ]
+        if not any(column.lower() == 'codigo_repuesto' for column, _ in insert_values):
+            raise ValueError('La tabla repuesto requiere una columna codigo_repuesto.')
+        column_sql = ', '.join(f'[{column}]' for column, _ in insert_values)
+        value_sql = ', '.join('?' for _ in insert_values)
+        cursor.execute(
+            f'INSERT INTO dbo.repuesto ({column_sql}) '
+            f'VALUES ({value_sql})',
+            tuple(value for _, value in insert_values),
+        )
+        cursor.execute('SELECT CAST(SCOPE_IDENTITY() AS INT)')
+        row = cursor.fetchone()
+        if not row or row[0] is None:
+            raise ValueError('No se pudo recuperar el identificador del repuesto registrado.')
+        repuesto_id = int(row[0])
+        if detail_id_column and 'id_repuesto' in piece_columns:
+            cursor.execute(
+                f'UPDATE dbo.detalle_desarme SET [{piece_columns["id_repuesto"]}] = ? '
+                f'WHERE [{detail_id_column}] = ?',
+                (repuesto_id, detail_id),
+            )
+
+    movement_result = registrar_movimiento_inventario(
+        cursor,
+        repuesto_id,
+        1,
+        quantity,
+        f'Ingreso por desarme DSR-{int(process_id):06d}, DTD-{int(detail_id):06d}',
+        user_id,
+        1,
+    )
+    if movement_result is None:
+        raise ValueError('No se pudo registrar el movimiento de ingreso al inventario.')
+    cursor.execute(
+        "DELETE FROM dbo.movimiento_inventario "
+        "WHERE id_repuesto = ? AND detalle = 'Ingreso automático de repuesto'",
+        (repuesto_id,),
+    )
+
+
+@app.route('/desarme/<int:vehicle_id>/iniciar', methods=['POST'])
+def iniciar_desarme(vehicle_id):
+    if not has_permission_in_session('desarme', 'write'):
+        flash('No tienes permisos para iniciar un desarme.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        process_id = _desarme_process_id(cursor, vehicle_id)
+        state_id = _desarme_state_id(cursor, 'en proceso')
+        if process_id is None or state_id is None:
+            raise ValueError('No se encontró el proceso o el estado «En proceso» en los catálogos.')
+        cursor.execute(
+            'UPDATE dbo.desarme SET id_estado_desarme = ?, fecha_inicio = COALESCE(fecha_inicio, GETDATE()) '
+            'WHERE id_desarme = ?',
+            (state_id, process_id),
+        )
+        conn.commit()
+        flash('El desarme se inició correctamente.', 'success')
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception('No se pudo iniciar el desarme del vehículo %s.', vehicle_id)
+        flash(f'No se pudo iniciar el desarme: {error}', 'error')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+
+@app.route('/desarme/<int:vehicle_id>/finalizar', methods=['POST'])
+def finalizar_desarme(vehicle_id):
+    if not has_permission_in_session('desarme', 'write'):
+        flash('No tienes permisos para finalizar un desarme.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    finalization_failed = False
+    try:
+        process_id = _desarme_process_id(cursor, vehicle_id)
+        if process_id is None:
+            raise ValueError('No se encontró el proceso de desarme de este vehículo.')
+        cursor.execute(
+            'SELECT ed.nombre FROM dbo.desarme d WITH (UPDLOCK, HOLDLOCK) '
+            'LEFT JOIN dbo.estado_desarme ed ON ed.id_estado_desarme = d.id_estado_desarme '
+            'WHERE d.id_desarme = ?',
+            (process_id,),
+        )
+        process_state = cursor.fetchone()
+        if not process_state or not str(process_state[0] or '').strip().casefold().startswith('en proceso'):
+            raise ValueError('Solo se puede finalizar un proceso que esté En proceso.')
+        cursor.execute(
+            'SELECT TOP 1 r.id_resultado_desarme FROM dbo.resultado_desarme r '
+            'WHERE r.id_desarme = ? ORDER BY r.id_resultado_desarme DESC',
+            (process_id,),
+        )
+        if cursor.fetchone():
+            raise ValueError('Este proceso ya tiene un resultado registrado.')
+        result_columns = {
+            column.lower() for column in get_table_columns(cursor, 'resultado_desarme')
+        }
+        required_result_columns = {
+            'id_resultado_desarme', 'id_desarme', 'piezas_obtenidas',
+            'piezas_aptas', 'piezas_danadas', 'piezas_no_aptas',
+            'observaciones', 'fecha_registro', 'id_usuario', 'id_estado',
+        }
+        if not required_result_columns.issubset(result_columns):
+            raise ValueError('La tabla dbo.resultado_desarme no tiene las columnas requeridas.')
+        result_state_id = _desarme_result_state_id(cursor)
+        if result_state_id is None:
+            raise ValueError('No se encontró un estado válido en el catálogo de resultado_desarme.')
+
+        cursor.execute(
+            'SELECT vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, vd.id_transmision '
+            'FROM dbo.desarme d '
+            'LEFT JOIN dbo.vehiculo_desarme vd ON vd.id_vehiculo_desarme = ? '
+            'WHERE d.id_desarme = ?',
+            (vehicle_id, process_id),
+        )
+        vehicle_data_row = cursor.fetchone()
+        if not vehicle_data_row:
+            raise ValueError('No se encontraron los datos del vehículo para registrar inventario.')
+        desarme_columns = {
+            column.lower() for column in get_table_columns(cursor, 'desarme')
+        }
+        origin_id = None
+        if 'id_vehiculo_origen' in desarme_columns:
+            cursor.execute(
+                'SELECT id_vehiculo_origen FROM dbo.desarme WHERE id_desarme = ?',
+                (process_id,),
+            )
+            origin_row = cursor.fetchone()
+            origin_id = origin_row[0] if origin_row else None
+        vehicle_data = {
+            'id_marca': vehicle_data_row[0],
+            'id_modelo': vehicle_data_row[1],
+            'id_anio': vehicle_data_row[2],
+            'id_color': vehicle_data_row[3],
+            'id_transmision': vehicle_data_row[4],
+            'id_vehiculo_origen': origin_id,
+        }
+        detail_columns = {
+            column.lower(): column for column in get_table_columns(cursor, 'detalle_desarme')
+        }
+        process_column = detail_columns.get('id_desarme') or detail_columns.get('id_proceso_desarme')
+        detail_id_column = detail_columns.get('id_detalle_desarme') or detail_columns.get('id_detalle')
+        if not process_column or not detail_id_column:
+            raise ValueError('La tabla dbo.detalle_desarme no tiene las columnas requeridas.')
+        cursor.execute(
+            f'SELECT * FROM dbo.detalle_desarme WHERE [{process_column}] = ? '
+            f'ORDER BY [{detail_id_column}]',
+            (process_id,),
+        )
+        detail_names = [column[0].lower() for column in cursor.description]
+        pieces = [dict(zip(detail_names, row)) for row in cursor.fetchall()]
+        for piece in pieces:
+            quantity = int(piece.get('cantidad') or 0)
+            if quantity < 0:
+                raise ValueError('Una pieza tiene una cantidad negativa y no se puede finalizar.')
+            state_name = piece.get('estado_pieza')
+            if state_name is None:
+                state_name = get_display_name_by_id(
+                    cursor,
+                    ['estado_pieza_desarme', 'estado_pieza'],
+                    piece.get('id_estado_pieza') or piece.get('id_estado_pieza_desarme'),
+                )
+            piece['estado_pieza'] = state_name
+            piece['id_detalle_desarme'] = piece.get('id_detalle_desarme') or piece.get('id_detalle')
+            piece['precio_venta'] = piece.get('precio_venta') or piece.get('precio') or 0
+
+        counts, summary_pieces = _desarme_result_summary(pieces)
+        for piece, summary_piece in zip(pieces, summary_pieces):
+            if summary_piece['categoria'] == 'aptas':
+                _register_desarme_piece_in_inventory(
+                    cursor, process_id, vehicle_data, piece, session.get('user_id')
+                )
+
+        observations = request.form.get('observaciones', '').strip()
+        if len(observations) > 1000:
+            raise ValueError('Las observaciones no pueden superar 1000 caracteres.')
+        cursor.execute(
+            'INSERT INTO dbo.resultado_desarme '
+            '(id_desarme, piezas_obtenidas, piezas_aptas, piezas_danadas, '
+            'piezas_no_aptas, observaciones, fecha_registro, id_usuario, id_estado) '
+            'VALUES (?, ?, ?, ?, ?, ?, GETDATE(), ?, ?)',
+            (
+                process_id,
+                counts['piezas_obtenidas'],
+                counts['piezas_aptas'],
+                counts['piezas_danadas'],
+                counts['piezas_no_aptas'],
+                observations or None,
+                session.get('user_id'),
+                result_state_id,
+            ),
+        )
+        state_id = _desarme_final_state_id(cursor)
+        if state_id is None:
+            raise ValueError(
+                'No se encontró un estado finalizado (Desarmado o Finalizado) en el catálogo.'
+            )
+        cursor.execute(
+            'UPDATE dbo.desarme SET id_estado_desarme = ?, fecha_finalizacion = GETDATE() '
+            'WHERE id_desarme = ?',
+            (state_id, process_id),
+        )
+        conn.commit()
+        flash('El desarme finalizó correctamente; el resultado quedó guardado y las piezas aptas ingresaron al inventario.', 'success')
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception('No se pudo finalizar el desarme del vehículo %s.', vehicle_id)
+        flash(f'No se pudo finalizar el desarme: {error}', 'error')
+        finalization_failed = True
+    finally:
+        cursor.close()
+        conn.close()
+    suffix = '?open_finalize=1' if finalization_failed else ''
+    return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id) + suffix + '#tab-result')
+
+
+@app.route('/desarme/<int:vehicle_id>/piezas', methods=['POST'])
+def agregar_pieza_desarme(vehicle_id):
+    if not has_permission_in_session('desarme', 'write'):
+        flash('No tienes permisos para agregar piezas al desarme.', 'error')
+        return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        process_id = _desarme_process_id(cursor, vehicle_id)
+        if process_id is None:
+            raise ValueError('No se encontró el proceso de desarme de este vehículo.')
+
+        columns = {column.lower() for column in get_table_columns(cursor, 'detalle_desarme')}
+        process_column = next(
+            (name for name in ('id_desarme', 'id_proceso_desarme') if name in columns),
+            None,
+        )
+        detail_id_column = next(
+            (name for name in ('id_detalle_desarme', 'id_detalle') if name in columns),
+            None,
+        )
+        type_id = request.form.get('id_tipo_repuesto', '').strip()
+        detail_id = request.form.get('id_detalle_desarme', '').strip()
+        quantity_text = request.form.get('cantidad', '').strip()
+        price_text = request.form.get('precio_venta', '').strip()
+        if not process_column or not type_id:
+            raise ValueError('El formulario o el esquema de detalle de desarme está incompleto.')
+        quantity = int(quantity_text)
+        price = Decimal(price_text or '0')
+        if quantity < 1 or price < 0:
+            raise ValueError('La cantidad debe ser mayor a cero y el precio no puede ser negativo.')
+
+        values = {
+            'id_tipo_repuesto': int(type_id),
+            'cantidad': quantity,
+            'id_lado': int(request.form['id_lado']) if request.form.get('id_lado') else None,
+            'id_posicion': int(request.form['id_posicion']) if request.form.get('id_posicion') else None,
+            'observaciones': request.form.get('observaciones', '').strip() or None,
+            'estado_pieza': request.form.get('estado_pieza', '').strip() or None,
+        }
+        price_column = next(
+            (name for name in ('precio_venta', 'precio') if name in columns),
+            None,
+        )
+        if price_column:
+            values[price_column] = price
+        state_column = next(
+            (name for name in ('id_estado_pieza', 'id_estado_pieza_desarme') if name in columns),
+            None,
+        )
+        if state_column:
+            state_catalog = fetch_catalog_for_candidates(
+                cursor, ['estado_pieza_desarme', 'estado_pieza']
+            ) or []
+            wanted_state = request.form.get('estado_pieza', '').strip().casefold()
+            state_id = next(
+                (catalog_id for catalog_id, name in state_catalog
+                 if str(name or '').strip().casefold() == wanted_state),
+                None,
+            )
+            if state_id is not None:
+                values[state_column] = state_id
+
+        photo_column = next(
+            (name for name in ('ruta_fotografia', 'fotografia', 'foto') if name in columns),
+            None,
+        )
+        photo_file = get_uploaded_repuesto_photo()
+        if photo_file and photo_column:
+            values[photo_column] = save_repuesto_photo(photo_file)
+
+        update_values = [(name, value) for name, value in values.items() if name in columns]
+        if detail_id:
+            if not detail_id_column:
+                raise ValueError('La tabla de detalle no tiene un identificador de pieza editable.')
+            try:
+                detail_id_value = int(detail_id)
+            except ValueError as error:
+                raise ValueError('El identificador de la pieza no es válido.') from error
+            cursor.execute(
+                f'SELECT COUNT(*) FROM dbo.detalle_desarme '
+                f'WHERE [{detail_id_column}] = ? AND [{process_column}] = ?',
+                (detail_id_value, process_id),
+            )
+            if not cursor.fetchone()[0]:
+                raise ValueError('La pieza no pertenece al proceso de este vehículo.')
+            if not update_values:
+                raise ValueError('No se encontraron campos compatibles para actualizar la pieza.')
+            set_clause = ', '.join(f'[{name}] = ?' for name, _ in update_values)
+            cursor.execute(
+                f'UPDATE dbo.detalle_desarme SET {set_clause} '
+                f'WHERE [{detail_id_column}] = ? AND [{process_column}] = ?',
+                tuple(value for _, value in update_values) + (detail_id_value, process_id),
+            )
+            flash('La pieza se actualizó correctamente.', 'success')
+        else:
+            insert_values = [(process_column, process_id)] + update_values
+            if not insert_values:
+                raise ValueError('No se encontraron campos compatibles para guardar la pieza.')
+            column_list = ', '.join(f'[{name}]' for name, _ in insert_values)
+            placeholders = ', '.join('?' for _ in insert_values)
+            cursor.execute(
+                f'INSERT INTO dbo.detalle_desarme ({column_list}) VALUES ({placeholders})',
+                tuple(value for _, value in insert_values),
+            )
+            flash('La pieza se agregó correctamente.', 'success')
+        conn.commit()
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception('No se pudo agregar una pieza al vehículo %s.', vehicle_id)
+        flash(f'No se pudo agregar la pieza: {error}', 'error')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('desarme_detalle', vehicle_id=vehicle_id, open_piece=1))
 
 
 def _prestamos_write_allowed():
     return has_permission_in_session('prestamos', 'write')
 
 
-def _normalize_catalog_label(value):
-    decomposed = unicodedata.normalize('NFD', str(value or ''))
-    without_accents = ''.join(char for char in decomposed if unicodedata.category(char) != 'Mn')
-    return without_accents.strip().casefold()
-
-
-def _get_prestamo_estado_id(cursor, estado, create=False):
-    expected = _normalize_catalog_label(estado)
-    cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo')
-    for id_estado, label in cursor.fetchall():
-        if _normalize_catalog_label(label) == expected:
-            return id_estado
-    if not create:
-        return None
-    cursor.execute(
-        'INSERT INTO estado_prestamo (estado) OUTPUT INSERTED.id_estado_prestamo VALUES (?)',
-        (estado.capitalize(),),
-    )
-    row = cursor.fetchone()
-    if not row:
-        raise RuntimeError(f'No se pudo crear el estado de préstamo "{estado}".')
-    return row[0]
-
-
-def _get_inventory_movement_type_id(cursor, movement_name):
-    expected = _normalize_catalog_label(movement_name)
-    cursor.execute('SELECT id_tipo_movimiento, nombre FROM tipo_movimiento')
-    for id_tipo, label in cursor.fetchall():
-        if _normalize_catalog_label(label) == expected:
-            return id_tipo
-    raise ValueError(f'No está configurado el tipo de movimiento "{movement_name}".')
+def _prestamo_estado_id(cursor, objetivo):
+    cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo ORDER BY id_estado_prestamo')
+    rows = cursor.fetchall()
+    labels = [(row[0], str(row[1] or '').casefold()) for row in rows]
+    tokens = {
+        'activo': ('activo', 'pendiente'),
+        'vencido': ('vencido',),
+        'devuelto': ('devuelto',),
+        'pagado': ('pagado', 'transfe'),
+    }.get(objetivo, ())
+    for state_id, label in labels:
+        if any(token in label for token in tokens):
+            return state_id
+    fallback = {'activo': 1, 'vencido': 3, 'devuelto': 2, 'pagado': 2}.get(objetivo)
+    return fallback
 
 
 @app.route('/prestamos')
@@ -4269,24 +7155,23 @@ def prestamos():
     estados = []
     metodos_pago = []
     try:
-        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
-        overdue_state_id = _get_prestamo_estado_id(cursor, 'Vencido')
-        if active_state_id is not None and overdue_state_id is not None:
-            cursor.execute(
-                'UPDATE prestamo SET id_estado = ? '
-                'WHERE id_estado = ? AND fecha_devolucion_estimada < CAST(GETDATE() AS DATE)',
-                (overdue_state_id, active_state_id),
-            )
-            conn.commit()
+        estado_vencido_id = _prestamo_estado_id(cursor, 'vencido')
+        estado_activo_id = _prestamo_estado_id(cursor, 'activo')
+        cursor.execute(
+            'UPDATE prestamo SET id_estado = ? '
+            'WHERE id_estado = ? AND fecha_devolucion_estimada < CAST(GETDATE() AS DATE)',
+            (estado_vencido_id, estado_activo_id),
+        )
+        conn.commit()
         cursor.execute(
             'SELECT p.id_prestamo, p.fecha_prestamo, p.fecha_devolucion_estimada, p.id_cliente, p.id_usuario, '
             'p.observaciones, p.id_estado, ep.estado '
             'FROM prestamo p LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado '
             'ORDER BY p.fecha_prestamo DESC, p.id_prestamo DESC'
         )
+        loan_columns = [column[0] for column in cursor.description]
         for row in cursor.fetchall():
-            cols = [column[0] for column in cursor.description]
-            loan = dict(zip(cols, row))
+            loan = dict(zip(loan_columns, row))
             id_cliente = loan.get('id_cliente') or (row[3] if len(row) > 3 else None)
             id_usuario = loan.get('id_usuario') or (row[4] if len(row) > 4 else None)
             id_estado = loan.get('id_estado') or (row[6] if len(row) > 6 else None)
@@ -4297,6 +7182,7 @@ def prestamos():
                 continue
                 
             loan['id_prestamo'] = id_prestamo
+            loan['id_estado'] = id_estado
             loan['cliente'] = get_cliente_full_name(cursor, id_cliente) or 'Sin cliente frecuente'
             loan['usuario'] = lookup_foreign_key_display(cursor, 'id_usuario', id_usuario, ['usuario']) or 'Sistema'
             loan['estado'] = estado or 'Activo'
@@ -4320,9 +7206,7 @@ def prestamos():
                 loan['unidades'] += quantity
             prestamos_rows.append(loan)
 
-        cursor.execute('SELECT id_cliente, nit, correo, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido FROM cliente ORDER BY id_cliente')
-        for row in cursor.fetchall():
-            data = dict(zip([column[0] for column in cursor.description], row))
+        for data in _clientes_activos(cursor):
             clientes.append({'id': data['id_cliente'], 'nombre': cliente_display_from_row(data)})
         cursor.execute('SELECT id_estado_prestamo, estado FROM estado_prestamo ORDER BY id_estado_prestamo')
         estados = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
@@ -4345,10 +7229,11 @@ def prestamos():
     activos = sum(1 for loan in prestamos_rows if loan['estado'].lower() == 'activo')
     vencidos = sum(1 for loan in prestamos_rows if loan['estado'].lower() == 'vencido')
     valor_prestamo = sum(loan['total'] for loan in prestamos_rows if loan['estado'].lower() in {'activo', 'vencido'})
+    g.overdue_loan_count = vencidos
     return render_template(
         'prestamos.html', prestamos=prestamos_rows, clientes=clientes, repuestos=repuestos,
-        estados=estados, metodos_pago=metodos_pago, activos=activos, vencidos=vencidos,
-        valor_prestamo=valor_prestamo,
+        estados=estados, metodos_pago=metodos_pago,
+        activos=activos, vencidos=vencidos, valor_prestamo=valor_prestamo,
     )
 
 
@@ -4368,6 +7253,8 @@ def nuevo_prestamo():
         prices = request.form.getlist('precio[]')
         if not id_cliente or not fecha_devolucion:
             raise ValueError('Selecciona un cliente y una fecha estimada de devolución.')
+        if not _cliente_esta_activo(cursor, id_cliente):
+            raise ValueError('El cliente seleccionado está inactivo y no se puede prestar.')
         items = []
         requested_quantities = {}
         for index, repuesto_id in enumerate(repuesto_ids):
@@ -4401,13 +7288,10 @@ def nuevo_prestamo():
             if cursor.rowcount != 1:
                 raise ValueError('La cantidad solicitada supera el stock disponible.')
 
-        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
-        if active_state_id is None:
-            raise ValueError('No está configurado el estado Activo para préstamos.')
         cursor.execute(
             'INSERT INTO prestamo (fecha_prestamo, fecha_devolucion_estimada, id_cliente, id_usuario, observaciones, id_estado) '
-            'OUTPUT INSERTED.id_prestamo VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, ?)',
-            (fecha_devolucion, id_cliente, session.get('user_id'), observaciones, active_state_id)
+            'OUTPUT INSERTED.id_prestamo VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, 1)',
+            (fecha_devolucion, id_cliente, session.get('user_id'), observaciones)
         )
         id_prestamo = cursor.fetchone()[0]
         for id_repuesto, quantity, price in items:
@@ -4442,152 +7326,135 @@ def actualizar_estado_prestamo(id_prestamo):
     if not _prestamos_write_allowed():
         flash('No tienes permisos para actualizar préstamos.', 'error')
         return redirect(url_for('prestamos'))
-
     estado = request.form.get('estado', '').strip().lower()
-    if estado not in {'devuelto', 'pagado'}:
-        flash('El estado solicitado no es válido.', 'error')
-        return redirect(url_for('prestamos'))
-
-    id_metodo_pago = request.form.get('id_metodo_pago', type=int) if estado == 'pagado' else None
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Serializa solicitudes simultáneas sobre el mismo préstamo para que
-        # el stock, los movimientos y la venta solo puedan aplicarse una vez.
         cursor.execute(
             'SELECT p.id_estado, p.id_cliente, ep.estado '
-            'FROM prestamo p WITH (UPDLOCK, HOLDLOCK) '
-            'LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado '
+            'FROM prestamo p LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado '
             'WHERE p.id_prestamo = ?',
             (id_prestamo,),
         )
         current = cursor.fetchone()
         if not current:
             raise ValueError('No se encontró el préstamo.')
-
-        current_state_id, id_cliente = current[0], current[1]
-        active_state_id = _get_prestamo_estado_id(cursor, 'Activo')
-        overdue_state_id = _get_prestamo_estado_id(cursor, 'Vencido')
-        returned_state_id = _get_prestamo_estado_id(cursor, 'Devuelto', create=estado == 'devuelto')
-        paid_state_id = _get_prestamo_estado_id(cursor, 'Pagado', create=estado == 'pagado')
-        target_state_id = returned_state_id if estado == 'devuelto' else paid_state_id
-        terminal_state_ids = {state_id for state_id in (returned_state_id, paid_state_id) if state_id is not None}
-        target_state_name = 'devuelto' if estado == 'devuelto' else 'pagado'
-
-        if current_state_id == target_state_id:
-            success_message = f'El préstamo ya está {target_state_name}.'
-            success_category = 'info'
-        elif current_state_id in terminal_state_ids:
-            other_state = 'pagado' if current_state_id == paid_state_id else 'devuelto'
-            raise ValueError(f'El préstamo ya fue {other_state} y no se puede cambiar a {target_state_name}.')
-        elif current_state_id not in {active_state_id, overdue_state_id}:
-            raise ValueError(f'No se puede cerrar un préstamo en estado {current[2] or "desconocido"}.')
-        elif estado == 'devuelto':
-            cursor.execute(
-                'SELECT id_repuesto, SUM(cantidad) AS cantidad '
-                'FROM detalle_prestamo WHERE id_prestamo = ? GROUP BY id_repuesto',
-                (id_prestamo,),
-            )
-            items = cursor.fetchall()
-            if not items:
-                raise ValueError('El préstamo no tiene repuestos para reintegrar.')
-
-            movement_return_id = _get_inventory_movement_type_id(cursor, 'Devolucion')
-            movement_detail = f'Retorno de préstamo P-{id_prestamo:06d}'
-            for id_repuesto, quantity in items:
-                quantity = int(quantity or 0)
-                if quantity < 1:
-                    raise ValueError('La cantidad del préstamo no es válida.')
-                cursor.execute(
-                    'UPDATE repuesto '
-                    'SET stock = COALESCE(stock, 0) + ?, '
-                    'id_estado_repuesto = CASE WHEN COALESCE(stock, 0) + ? > 0 THEN 1 ELSE 3 END '
-                    'WHERE id_repuesto = ?',
-                    (quantity, quantity, id_repuesto),
-                )
-                if cursor.rowcount != 1:
-                    raise ValueError('No se encontró un repuesto para reintegrarlo al inventario.')
-                movement_result = registrar_movimiento_inventario(
-                    cursor, id_repuesto, movement_return_id, quantity, movement_detail, session.get('user_id')
-                )
-                if movement_result is None:
-                    raise RuntimeError('No se pudo registrar el movimiento de devolución en inventario.')
-
-            success_message = 'Préstamo marcado como devuelto. Repuestos reintegrados al inventario.'
-            success_category = 'success'
-        else:
-            if not id_metodo_pago:
-                raise ValueError('Selecciona un método de pago para registrar la venta.')
-            cursor.execute('SELECT id_metodo_pago FROM metodo_pago WHERE id_metodo_pago = ?', (id_metodo_pago,))
-            if not cursor.fetchone():
-                raise ValueError('El método de pago seleccionado no existe.')
-
-            cursor.execute(
-                'SELECT id_repuesto, cantidad, precio FROM detalle_prestamo WHERE id_prestamo = ?',
-                (id_prestamo,),
-            )
-            items = cursor.fetchall()
-            if not items:
-                raise ValueError('El préstamo no tiene repuestos para convertir en venta.')
-
-            sale_items = []
-            movement_quantities = {}
-            total = Decimal('0.00')
-            for id_repuesto, quantity, price in items:
-                quantity = int(quantity or 0)
-                price = Decimal(str(price or 0)).quantize(Decimal('0.01'))
-                if quantity < 1 or price < 0:
-                    raise ValueError('La cantidad o el precio del préstamo no son válidos.')
-                subtotal = (price * quantity).quantize(Decimal('0.01'))
-                total += subtotal
-                sale_items.append((id_repuesto, quantity, price, subtotal))
-                movement_quantities[id_repuesto] = movement_quantities.get(id_repuesto, 0) + quantity
-
-            # La venta normal descuenta stock y registra su movimiento mediante
-            # triggers de detalle_venta. Las unidades prestadas ya se apartaron
-            # del inventario al crear el préstamo: se liberan dentro de esta
-            # transacción para que los triggers hagan una única salida neta.
-            for id_repuesto, quantity in movement_quantities.items():
-                cursor.execute(
-                    'UPDATE repuesto '
-                    'SET stock = COALESCE(stock, 0) + ?, '
-                    'id_estado_repuesto = CASE WHEN COALESCE(stock, 0) + ? > 0 THEN 1 ELSE 3 END '
-                    'WHERE id_repuesto = ?',
-                    (quantity, quantity, id_repuesto),
-                )
-                if cursor.rowcount != 1:
-                    raise ValueError('No se encontró un repuesto del préstamo para convertirlo en venta.')
-
-            observation = f'Convertido de préstamo P-{id_prestamo:06d}'
-            cursor.execute(
-                'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
-                'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, 0)',
-                (id_cliente, session.get('user_id'), total, observation, id_metodo_pago),
-            )
-            id_venta = cursor.fetchone()[0]
-            for id_repuesto, quantity, price, subtotal in sale_items:
-                cursor.execute(
-                    'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
-                    'VALUES (?, ?, ?, ?, ?)',
-                    (id_venta, id_repuesto, price, subtotal, quantity),
-                )
-
-            # Los triggers asociados al detalle ya registran el movimiento de
-            # venta y descuentan exactamente las unidades recién liberadas.
-            success_message = f'Préstamo convertido en venta V-{id_venta:06d}.'
-            success_category = 'success'
-
-        cursor.execute(
-            'UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ? AND id_estado = ?',
-            (target_state_id, id_prestamo, current_state_id),
+        
+        current_estado = current[0]
+        id_cliente = current[1]
+        current_estado_label = str(current[2] or '').casefold()
+        finalized_label = any(
+            token in current_estado_label
+            for token in ('devuelto', 'pagado', 'transfe')
         )
-        if cursor.rowcount != 1:
-            raise ValueError('El estado del préstamo cambió durante la operación. Actualiza la página e inténtalo de nuevo.')
+        can_finalize = not finalized_label and (
+            current_estado in (1, 3)
+            or any(token in current_estado_label for token in ('activo', 'pendiente', 'vencido'))
+        )
+        
+        if estado == 'devuelto':
+            if can_finalize:
+                cursor.execute(
+                    'SELECT id_repuesto, cantidad FROM detalle_prestamo WHERE id_prestamo = ?', (id_prestamo,)
+                )
+                for id_repuesto, quantity in cursor.fetchall():
+                    cursor.execute(
+                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ?, id_estado_repuesto = 1 '
+                        'WHERE id_repuesto = ?',
+                        (quantity, id_repuesto),
+                    )
+                    if cursor.rowcount != 1:
+                        raise ValueError('No se encontró el repuesto original para reintegrarlo al inventario.')
+                    registrar_movimiento_inventario(cursor, id_repuesto, 4, quantity, f'Retorno de préstamo P-{id_prestamo:06d}', session.get('user_id'))
+                estado_final_id = _prestamo_estado_id(cursor, 'devuelto')
+                cursor.execute(
+                    'UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ?',
+                    (estado_final_id, id_prestamo),
+                )
+                if cursor.rowcount != 1:
+                    raise ValueError('No se pudo actualizar el estado del préstamo.')
+                flash('Préstamo marcado como devuelto. Repuestos reintegrados al inventario.', 'success')
+            elif 'devuelto' in current_estado_label:
+                flash('El préstamo ya está devuelto.', 'info')
+            else:
+                flash('Un préstamo pagado no puede marcarse como devuelto.', 'error')
+                
+        elif estado == 'pagado':
+            if can_finalize:
+                cursor.execute(
+                    'SELECT id_repuesto, cantidad, precio FROM detalle_prestamo WHERE id_prestamo = ?', (id_prestamo,)
+                )
+                items = cursor.fetchall()
+                if not items:
+                    raise ValueError('El préstamo no tiene repuestos para convertir en venta.')
+                
+                id_metodo_pago = request.form.get('id_metodo_pago', type=int)
+                cursor.execute(
+                    'SELECT id_metodo_pago FROM metodo_pago WHERE id_metodo_pago = ?',
+                    (id_metodo_pago,),
+                )
+                metodo_pago = cursor.fetchone()
+                if not metodo_pago:
+                    raise ValueError('Selecciona un metodo de pago valido.')
+
+                total = sum(float(detail[2] or 0) * (detail[1] or 0) for detail in items)
+                observaciones = f'Convertido de préstamo P-{id_prestamo:06d}'
+                
+                cursor.execute(
+                    'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
+                    'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, 0)',
+                    (id_cliente, session.get('user_id'), total, observaciones, id_metodo_pago)
+                )
+                id_venta = cursor.fetchone()[0]
+                
+                for id_repuesto, quantity, price in items:
+                    # El prestamo ya retiro estas unidades del inventario. El
+                    # trigger de detalle_venta vuelve a validar y descontar stock,
+                    # por eso se acredita la cantidad temporalmente en esta
+                    # transaccion; el trigger la descuenta al insertar el detalle.
+                    cursor.execute(
+                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ?, id_estado_repuesto = 1 '
+                        'WHERE id_repuesto = ?',
+                        (quantity, id_repuesto),
+                    )
+                    if cursor.rowcount != 1:
+                        raise ValueError('No se encontro el repuesto del prestamo para completar la venta.')
+                    cursor.execute(
+                        'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
+                        'VALUES (?, ?, ?, ?, ?)',
+                        (id_venta, id_repuesto, price, float(price or 0) * (quantity or 0), quantity)
+                    )
+                    cursor.execute(
+                        'UPDATE repuesto SET id_estado_repuesto = '
+                        'CASE WHEN COALESCE(stock, 0) > 0 THEN 1 ELSE 3 END '
+                        'WHERE id_repuesto = ?',
+                        (id_repuesto,),
+                    )
+                    registrar_movimiento_inventario(cursor, id_repuesto, 1, quantity, f'Venta por préstamo pagado P-{id_prestamo:06d}', session.get('user_id'))
+                
+                estado_final_id = _prestamo_estado_id(cursor, 'pagado')
+                cursor.execute(
+                    'UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ?',
+                    (estado_final_id, id_prestamo),
+                )
+                if cursor.rowcount != 1:
+                    raise ValueError('No se pudo actualizar el estado del préstamo.')
+                flash(f'Préstamo convertido en venta V-{id_venta:06d}.', 'success')
+            elif any(token in current_estado_label for token in ('pagado', 'transfe')):
+                flash('El préstamo ya está pagado.', 'info')
+            else:
+                flash('Un préstamo devuelto no puede convertirse en venta.', 'error')
+                
+        elif estado in ('activo', 'vencido'):
+            target = _prestamo_estado_id(cursor, estado)
+            cursor.execute('UPDATE prestamo SET id_estado = ? WHERE id_prestamo = ?', (target, id_prestamo))
+            flash('Estado del préstamo actualizado correctamente.', 'success')
+        else:
+            flash('El estado solicitado no es válido.', 'error')
+            return redirect(url_for('prestamos'))
+        
         conn.commit()
-        flash(success_message, success_category)
-    except (TypeError, ValueError) as error:
-        conn.rollback()
-        flash(str(error), 'error')
     except Exception as error:
         conn.rollback()
         flash(f'No fue posible actualizar el préstamo: {error}', 'error')
@@ -4627,25 +7494,33 @@ def exportar_pdf_prestamos():
         return redirect(url_for('dashboard'))
     from_date = request.args.get('from_date', '').strip()
     to_date = request.args.get('to_date', '').strip()
+    return_from = request.args.get('return_from', '').strip()
+    return_to = request.args.get('return_to', '').strip()
     estado_filter = request.args.get('estado', '').strip().lower()
     cliente_filter = request.args.get('cliente', '').strip().lower()
+    vendedor_filter = request.args.get('vendedor', '').strip().lower()
     repuesto_filter = request.args.get('repuesto', '').strip().lower()
+    metodo_pago_filter = request.args.get('metodo_pago', '').strip()
+    min_total = request.args.get('min_total', '').strip()
+    max_total = request.args.get('max_total', '').strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             'SELECT p.id_prestamo, p.fecha_prestamo, p.fecha_devolucion_estimada, p.id_cliente, ep.estado, '
-            'COALESCE(SUM(dp.cantidad * dp.precio), 0) '
+            'COALESCE(SUM(dp.cantidad * dp.precio), 0), p.id_usuario '
             'FROM prestamo p LEFT JOIN estado_prestamo ep ON ep.id_estado_prestamo = p.id_estado '
             'LEFT JOIN detalle_prestamo dp ON dp.id_prestamo = p.id_prestamo '
-            'GROUP BY p.id_prestamo, p.fecha_prestamo, p.fecha_devolucion_estimada, p.id_cliente, ep.estado '
+            'GROUP BY p.id_prestamo, p.fecha_prestamo, p.fecha_devolucion_estimada, p.id_cliente, ep.estado, p.id_usuario '
             'ORDER BY p.fecha_prestamo DESC'
         )
         rows = []
         for row in cursor.fetchall():
             loan_date = str(row[1] or '')[:10]
+            return_date = str(row[2] or '')[:10]
             loan_state = str(row[4] or 'Activo').strip().lower()
             client_name = get_cliente_full_name(cursor, row[3]) or 'Sin cliente frecuente'
+            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[6]) or 'Sistema'
             cursor.execute(
                 'SELECT dp.id_repuesto, r.codigo_repuesto '
                 'FROM detalle_prestamo dp LEFT JOIN repuesto r ON r.id_repuesto = dp.id_repuesto '
@@ -4656,24 +7531,37 @@ def exportar_pdf_prestamos():
                 + ' ' + str(get_repuesto_display_name(cursor, detail[0]) or '')
                 for detail in cursor.fetchall()
             ).lower()
+            total_amount = float(row[5] or 0)
             if from_date and loan_date < from_date:
                 continue
             if to_date and loan_date > to_date:
+                continue
+            if return_from and return_date < return_from:
+                continue
+            if return_to and return_date > return_to:
                 continue
             if estado_filter and loan_state != estado_filter:
                 continue
             if cliente_filter and cliente_filter not in client_name.lower():
                 continue
+            if vendedor_filter and vendedor_filter not in vendedor_name.lower():
+                continue
             if repuesto_filter and repuesto_filter not in repuesto_text:
                 continue
-            rows.append((row[0], row[1], row[2], row[4], row[5]))
+            if metodo_pago_filter and metodo_pago_filter != str(metodo_pago_filter):
+                continue
+            if min_total and total_amount < float(min_total):
+                continue
+            if max_total and total_amount > float(max_total):
+                continue
+            rows.append((row[0], row[1], row[2], row[4], row[5], vendedor_name))
     finally:
         cursor.close()
         conn.close()
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle('Reporte de Préstamos - Importadora Morales')
-    draw_table_pdf(pdf, 'Reporte de Préstamos — Importadora Morales', ['N° Préstamo', 'Fecha', 'Devolución estimada', 'Estado', 'Valor'], [[f'P-{r[0]:06d}', str(r[1])[:10], str(r[2])[:10], r[3] or '-', f'Q {float(r[4] or 0):,.2f}'] for r in rows])
+    draw_table_pdf(pdf, 'Reporte de Préstamos — Importadora Morales', ['N° Préstamo', 'Fecha', 'Devolución estimada', 'Estado', 'Vendedor', 'Valor'], [[f'P-{r[0]:06d}', str(r[1])[:10], str(r[2])[:10], r[3] or '-', r[5] or '-', f'Q {float(r[4] or 0):,.2f}'] for r in rows])
     pdf.showPage()
     pdf.save()
     buffer.seek(0)
@@ -4739,6 +7627,7 @@ def nueva_devolucion():
                 (quantity, quantity, id_venta, id_repuesto)
             )
             registrar_movimiento_inventario(cursor, id_repuesto, 4, quantity, f'Devolucion de venta V-{id_venta:06d}', session.get('user_id'))
+        cursor.execute('UPDATE venta SET id_estado_venta = 2 WHERE id_venta = ?', (id_venta,))
         conn.commit()
         flash('Devolución registrada correctamente.', 'success')
     except (TypeError, ValueError) as error:
@@ -4790,28 +7679,26 @@ def exportar_pdf_devoluciones():
         return redirect(url_for('dashboard'))
     from_date = request.args.get('from_date', '').strip()
     to_date = request.args.get('to_date', '').strip()
-    cliente = request.args.get('cliente', '').strip()
-    repuesto = request.args.get('repuesto', '').strip()
-
-    def normalize_report_text(value):
-        decomposed = unicodedata.normalize('NFD', str(value or ''))
-        without_accents = ''.join(char for char in decomposed if unicodedata.category(char) != 'Mn')
-        return without_accents.strip().casefold()
-
-    cliente_query = normalize_report_text(cliente)
-    repuesto_query = normalize_report_text(repuesto)
+    cliente = request.args.get('cliente', '').strip().lower()
+    vendedor = request.args.get('vendedor', '').strip().lower()
+    repuesto = request.args.get('repuesto', '').strip().lower()
+    motivo = request.args.get('motivo', '').strip()
+    estado_venta = request.args.get('estado_venta', '').strip()
+    min_total = request.args.get('min_total', '').strip()
+    max_total = request.args.get('max_total', '').strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             'SELECT d.id_devolucion, d.id_venta, d.fecha_devolucion, d.total_devuelto, '
             'dv.id_repuesto, dv.cantidad, dv.subtotal, r.codigo_repuesto, '
-            'v.id_cliente, c.primer_nombre, c.segundo_nombre, c.primer_apellido, c.segundo_apellido, '
-            'c.nit, c.correo, md.motivo '
+            'dv.id_motivo, m.motivo AS motivo_nombre, '
+            'v.id_cliente, v.id_usuario, v.id_estado_venta, '
+            'c.primer_nombre, c.segundo_nombre, c.primer_apellido, c.segundo_apellido, c.nit, c.correo '
             'FROM devolucion d '
             'LEFT JOIN detalle_devolucion dv ON dv.id_devolucion = d.id_devolucion '
             'LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto '
-            'LEFT JOIN motivo_devolucion md ON md.id_motivo = dv.id_motivo '
+            'LEFT JOIN motivo_devolucion m ON m.id_motivo = dv.id_motivo '
             'LEFT JOIN venta v ON v.id_venta = d.id_venta '
             'LEFT JOIN cliente c ON c.id_cliente = v.id_cliente '
             'ORDER BY d.fecha_devolucion DESC'
@@ -4819,38 +7706,39 @@ def exportar_pdf_devoluciones():
         raw_rows = cursor.fetchall()
         rows = []
         for row in raw_rows:
-            if row[4] is None:
-                continue
             dev_date = str(row[2] or '')[:10]
             if from_date and dev_date < from_date:
                 continue
             if to_date and dev_date > to_date:
                 continue
-            client_name = ' '.join(filter(None, [row[9], row[10], row[11], row[12]])).strip()
+            client_name = ' '.join(filter(None, [row[12], row[13], row[14], row[15]])).strip()
             if not client_name:
-                client_name = row[14] or row[13] or (f'Cliente #{row[8]}' if row[8] else 'Sin cliente frecuente')
-            if cliente_query and cliente_query not in normalize_report_text(client_name):
+                client_name = row[16] or row[17] or f'Cliente #{row[11] or "-" }'
+            if cliente and cliente not in client_name.lower():
                 continue
-            part_name = get_repuesto_display_name(cursor, row[4]) or row[7] or str(row[4])
-            part_text = normalize_report_text(f'{row[7] or ""} {part_name}')
-            if repuesto_query and repuesto_query not in part_text:
+            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[12]) or 'Sistema'
+            if vendedor and vendedor not in vendedor_name.lower():
                 continue
-            rows.append((
-                f'V-{int(row[1] or 0):06d}', dev_date, part_name, row[7] or '-', client_name,
-                int(row[5] or 0), f'Q {float(row[6] or 0):,.2f}', row[15] or 'Otro',
-            ))
+            repuesto_text = f'{row[7] or ""} {get_repuesto_display_name(cursor, row[4]) or ""}'.lower()
+            if repuesto and repuesto not in repuesto_text:
+                continue
+            if motivo and str(row[8] or '') != str(motivo):
+                continue
+            if estado_venta and str(row[13] or '1') != estado_venta:
+                continue
+            subtotal = float(row[6] or 0)
+            if min_total and subtotal < float(min_total):
+                continue
+            if max_total and subtotal > float(max_total):
+                continue
+            rows.append((row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9]))
     finally:
         cursor.close()
         conn.close()
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle('Reporte de Devoluciones - Importadora Morales')
-    draw_table_pdf(
-        pdf,
-        'Reporte de Devoluciones — Importadora Morales',
-        ['# Venta', 'Fecha', 'Repuesto', 'Código', 'Cliente', 'Cantidad', 'Total (Q)', 'Motivo'],
-        rows,
-    )
+    draw_table_pdf(pdf, 'Reporte de Devoluciones — Importadora Morales', ['N° Devolución', 'N° Venta', 'Fecha', 'Repuesto', 'Código', 'Cliente', 'Vendedor', 'Cantidad', 'Total (Q)', 'Motivo'], [[f'D-{r[0]:06d}', f'V-{r[1]:06d}', str(r[2])[:10], get_repuesto_display_name(None, r[4]) or '-', r[7] or '-', 'Cliente', 'Vendedor', str(r[5]), f'Q {float(r[6] or 0):,.2f}', r[9] or '-'] for r in rows])
     pdf.showPage()
     pdf.save()
     buffer.seek(0)

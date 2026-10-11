@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de Desarme - Importadora Morales</title>
+    <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='desarme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='desarme-detail.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+</head>
+<body class="module-theme dismantling-page dismantling-detail-page min-h-screen flex flex-col md:flex-row">
+    <div class="mobile-menu-trigger">
+        <button id="mobile-menu-button" type="button" aria-label="Abrir menú" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-72 max-w-[18rem] -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:w-64 bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen">
+        <div>
+            <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
+            <nav aria-label="Navegación principal">
+                <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
+                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
+                {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
+                {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake" aria-hidden="true"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
+                {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Devoluciones</a>{% endif %}
+                {% if has_permission('desarme', 'read') %}<a class="active" href="{{ url_for('desarme') }}" aria-current="page"><i class="fa-solid fa-car-side" aria-hidden="true"></i> Desarme de Vehículos</a>{% endif %}
+                {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Usuarios</a>{% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears" aria-hidden="true"></i> Mantenimiento</a>{% endif %}
+            </nav>
+        </div>
+        <div class="session-panel">
+            <small>Sesión activa</small><strong>{{ user_name }}</strong><span>{{ user_role }}</span>
+            <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Cerrar Sesión</a>
+        </div>
+    </aside>
+
+    <main class="disassembly-main detail-main">
+        {% if request.args.get('open_piece') != '1' %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}<div class="disassembly-flash {{ category }}" role="status"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i><span>{{ message }}</span><button type="button" aria-label="Cerrar notificación" class="flash-close" data-close-flash><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>{% endfor %}
+            {% endwith %}
+        {% endif %}
+        <header class="detail-page-header">
+            <div class="detail-title-group">
+                <a class="detail-back-link" href="{{ url_for('desarme') }}"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Volver</a>
+                <div>
+                    <h1>{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.anio }}</h1>
+                    <p>VEH-{{ '%06d'|format(vehicle.id|int) }}{% if vehicle.vin_chasis %} · {{ vehicle.vin_chasis }}{% endif %}</p>
+                </div>
+            </div>
+            <div class="detail-header-actions">
+                <span class="detail-status-badge {{ vehicle.state_class }}">{{ vehicle.estado }}</span>
+                {% if can_create %}
+                    {% if vehicle.state_class == 'pending' %}
+                    <form action="{{ url_for('iniciar_desarme', vehicle_id=vehicle.id) }}" method="post" class="detail-start-form" data-start-desarme data-vehicle-name="{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.anio }}">
+                        <button class="detail-start-button" type="submit"><i class="fa-regular fa-circle-play" aria-hidden="true"></i> Iniciar Desarme</button>
+                    </form>
+                    {% elif vehicle.state_class == 'in-progress' and not result %}
+                    <button class="detail-finalize-button" type="button" data-open-finalize-modal><i class="fa-regular fa-circle-check" aria-hidden="true"></i> Finalizar Desarme</button>
+                    {% endif %}
+                    <a class="detail-edit-button" href="{{ url_for('desarme', open_modal=1, edit_vehicle=vehicle.id) }}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Editar</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <section class="detail-vehicle-card" aria-labelledby="vehicle-information-title">
+            <h2 id="vehicle-information-title"><i class="fa-solid fa-car" aria-hidden="true"></i> Información del Vehículo</h2>
+            <dl class="detail-vehicle-grid">
+                <div><dt>Marca</dt><dd>{{ vehicle.marca }}</dd></div>
+                <div><dt>Modelo</dt><dd>{{ vehicle.modelo }}</dd></div>
+                <div><dt>Año</dt><dd>{{ vehicle.anio }}</dd></div>
+                <div><dt>Transmisión</dt><dd>{{ vehicle.transmision }}</dd></div>
+                <div><dt>Color</dt><dd>{{ vehicle.color }}</dd></div>
+                <div><dt>VIN / Chasis</dt><dd>{{ vehicle.vin_chasis or '—' }}</dd></div>
+                <div><dt>Placa</dt><dd>{{ vehicle.placa or '—' }}</dd></div>
+                <div><dt>Fecha Adquisición</dt><dd>{% if vehicle.fecha_adquisicion %}{{ vehicle.fecha_adquisicion.strftime('%d/%m/%Y') if vehicle.fecha_adquisicion.strftime else vehicle.fecha_adquisicion }}{% else %}—{% endif %}</dd></div>
+                <div><dt>Origen</dt><dd>{{ vehicle.origen }}</dd></div>
+                <div><dt>Piezas Registradas</dt><dd>{{ vehicle.piezas }}</dd></div>
+            </dl>
+        </section>
+
+        {% if vehicle.has_process %}
+        <section class="detail-process-card" aria-label="Proceso de desarme">
+            <h2><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i> PROCESO DE DESARME <small>{{ vehicle.process_code }}</small></h2>
+            <dl class="detail-process-grid">
+                <div><dt>Fecha Inicio</dt><dd>{% if vehicle.fecha_inicio %}{{ vehicle.fecha_inicio.day }}/{{ vehicle.fecha_inicio.month }}/{{ vehicle.fecha_inicio.year }}{% else %}—{% endif %}</dd></div>
+                <div><dt>Fecha Finalización</dt><dd>{% if vehicle.fecha_finalizacion %}{{ vehicle.fecha_finalizacion.day }}/{{ vehicle.fecha_finalizacion.month }}/{{ vehicle.fecha_finalizacion.year }}{% else %}—{% endif %}</dd></div>
+                <div><dt>Responsable</dt><dd>{{ vehicle.responsable }}</dd></div>
+                <div><dt>Estado Desarme</dt><dd>{{ vehicle.estado }}</dd></div>
+            </dl>
+        </section>
+        {% endif %}
+
+        <nav class="detail-tabs" role="tablist" aria-label="Información del proceso de desarme">
+            <button id="tab-pieces" class="detail-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-pieces" tabindex="0" data-desarme-tab="panel-pieces"><i class="fa-solid fa-wrench" aria-hidden="true"></i> Piezas{% if pieces %} <span>{{ pieces|length }}</span>{% endif %}</button>
+            <button id="tab-incidents" class="detail-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-incidents" tabindex="-1" data-desarme-tab="panel-incidents"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Incidencias{% if incidents %} <span>{{ incidents|length }}</span>{% endif %}</button>
+            <button id="tab-result" class="detail-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-result" tabindex="-1" data-desarme-tab="panel-result"><i class="fa-regular fa-clipboard" aria-hidden="true"></i> Resultado{% if result %} <span>1</span>{% endif %}</button>
+        </nav>
+
+        <section id="panel-pieces" class="detail-tab-panel" role="tabpanel" aria-labelledby="tab-pieces" tabindex="0">
+            <div class="detail-pieces-heading">
+                <h2>Piezas del desarme ({{ vehicle.process_code if vehicle.has_process else '—' }})</h2>
+                {% if vehicle.state_class == 'in-progress' and can_create %}<button class="detail-add-piece-button" type="button" aria-haspopup="dialog" aria-controls="piece-modal" data-open-piece-modal><i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar pieza</button>{% endif %}
+            </div>
+            {% if pieces %}
+            <div class="detail-record-table-wrap"><table class="detail-record-table detail-piece-table" data-pagination-page-size="10"><thead><tr><th>ID Detalle</th><th>Tipo Repuesto</th><th>Lado</th><th>Posición</th><th>Cant</th><th>Estado Pieza</th><th>Fotografía</th><th>ID Repuesto</th><th>Acciones</th></tr></thead><tbody>
+                {% for piece in pieces %}<tr>
+                    <td><span class="detail-piece-code">DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}</span></td>
+                    <td>{{ piece.tipo_repuesto or '—' }}</td>
+                    <td>{{ piece.lado or 'No aplica' }}</td>
+                    <td>{{ piece.posicion or 'No aplica' }}</td>
+                    <td>{{ piece.cantidad }}</td>
+                    <td><span class="detail-piece-state {{ piece.state_class }}">{{ piece.estado_pieza }}</span></td>
+                    <td>{% if piece.ruta_fotografia %}<button type="button" class="detail-piece-photo desarme-photo-trigger" data-image="{{ url_for('static', filename=piece.ruta_fotografia) }}" data-caption="DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }} — {{ piece.tipo_repuesto or 'Pieza' }}" aria-label="Ver fotografía de DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}"><img src="{{ url_for('static', filename=piece.ruta_fotografia) }}" alt="Fotografía de {{ piece.tipo_repuesto or 'la pieza' }}" loading="lazy"></button>{% else %}<span class="detail-piece-dash">—</span>{% endif %}</td>
+                    <td>{% if piece.codigo_repuesto %}<span class="detail-inventory-code">{{ piece.codigo_repuesto }}</span>{% elif piece.id_repuesto %}<span class="detail-inventory-code">REP-{{ '%06d'|format(piece.id_repuesto|int) }}</span>{% else %}<span class="detail-piece-dash">—</span>{% endif %}</td>
+                    <td class="detail-piece-actions">
+                        {% if can_create %}
+                        <button class="detail-piece-edit-button" type="button" data-edit-piece
+                            data-id="{{ piece.id_detalle_desarme }}"
+                            data-type="{{ piece.id_tipo_repuesto or '' }}"
+                            data-state="{{ piece.estado_pieza }}"
+                            data-side="{{ piece.id_lado or '' }}"
+                            data-position="{{ piece.id_posicion or '' }}"
+                            data-quantity="{{ piece.cantidad }}"
+                            data-price="{{ piece.precio_venta or 0 }}"
+                            data-observations="{{ piece.observaciones or '' }}"
+                            title="Editar pieza"
+                            aria-label="Editar pieza DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}">
+                            <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                        </button>
+                        {% endif %}
+                        <button class="detail-piece-incident-button" type="button" data-open-incident-modal
+                            data-piece-id="{{ piece.id_detalle_desarme }}"
+                            data-piece-label="DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }} — {{ piece.tipo_repuesto or 'Pieza' }}"
+                            title="Registrar incidencia para esta pieza"
+                            aria-label="Registrar incidencia para DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}">
+                            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        </button>
+                    </td>
+                </tr>{% endfor %}
+            </tbody></table></div>
+            {% else %}
+                {% if vehicle.state_class == 'in-progress' %}
+                <div class="detail-pieces-empty"><i class="fa-solid fa-wrench" aria-hidden="true"></i><span>No hay piezas registradas</span></div>
+                {% elif vehicle.state_class == 'pending' %}
+                <div class="detail-empty-notice">Inicia el proceso de desarme para poder registrar piezas.</div>
+                {% else %}
+                <div class="detail-pieces-empty"><i class="fa-solid fa-wrench" aria-hidden="true"></i><span>No se registraron piezas en este desarme</span></div>
+                {% endif %}
+            {% endif %}
+        </section>
+
+        <section id="panel-incidents" class="detail-tab-panel" role="tabpanel" aria-labelledby="tab-incidents" tabindex="0" hidden>
+            <div class="detail-incidents-heading">
+                <h2>Incidencias del proceso{% if incidents %} ({{ incidents|length }}){% endif %}</h2>
+                {% if can_create and vehicle.state_class == 'in-progress' %}
+                <button class="detail-add-incident-button" type="button" data-open-incident-modal>
+                    <i class="fa-solid fa-plus" aria-hidden="true"></i> Registrar incidencia
+                </button>
+                {% endif %}
+            </div>
+            {% if incidents_error %}
+            <div class="detail-empty-notice detail-incidents-error" role="alert">{{ incidents_error }}</div>
+            {% elif incidents %}
+            <div class="detail-record-table-wrap"><table class="detail-record-table detail-incidents-table" data-pagination-page-size="10">
+                <thead><tr><th>ID Incidencia</th><th>ID Desarme</th><th>Pieza (detalle)</th><th>Descripción</th><th>Fecha</th><th>Usuario</th><th>Estado</th></tr></thead>
+                <tbody>
+                    {% for incident in incidents %}
+                    <tr>
+                        <td><span class="detail-piece-code">INC-{{ '%06d'|format(incident.id|int) }}</span></td>
+                        <td>{{ vehicle.process_code }}</td>
+                        <td>{{ incident.pieza }}</td>
+                        <td>{{ incident.descripcion }}</td>
+                        <td>{{ incident.fecha_incidencia.strftime('%d/%m/%Y') if incident.fecha_incidencia and incident.fecha_incidencia.strftime else incident.fecha_incidencia or '—' }}</td>
+                        <td>{{ incident.usuario }}</td>
+                        <td><span class="detail-incident-state">{{ incident.estado }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table></div>
+            {% else %}<div class="detail-empty-notice">No hay incidencias registradas para este vehículo.</div>{% endif %}
+        </section>
+
+        <section id="panel-result" class="detail-tab-panel" role="tabpanel" aria-labelledby="tab-result" tabindex="0" hidden>
+            <h2>Resultado del desarme</h2>
+            {% if result %}
+            <article class="detail-result-card">
+                <header class="detail-result-heading">
+                    <h3><i class="fa-regular fa-circle-check" aria-hidden="true"></i> Resultado RES-{{ '%06d'|format(result.id|int) }}</h3>
+                    <p>Registrado: {{ result.fecha_registro.strftime('%d/%m/%Y, %H:%M:%S') if result.fecha_registro and result.fecha_registro.strftime else result.fecha_registro or '—' }} · Usuario: {{ result.usuario }}</p>
+                </header>
+                <dl class="detail-result-grid">
+                    <div class="is-obtained"><dd>{{ result.piezas_obtenidas }}</dd><dt>Piezas Obtenidas</dt></div>
+                    <div class="is-suitable"><dd>{{ result.piezas_aptas }}</dd><dt>Piezas Aptas</dt></div>
+                    <div class="is-damaged"><dd>{{ result.piezas_danadas }}</dd><dt>Piezas Dañadas</dt></div>
+                    <div class="is-unsuitable"><dd>{{ result.piezas_no_aptas }}</dd><dt>No Aptas</dt></div>
+                </dl>
+                <p class="detail-result-process">ID Desarme: {{ vehicle.process_code }} · Estado: {{ result.estado }}</p>
+                <p class="detail-result-notes">{{ result.observaciones or 'Sin observaciones.' }}</p>
+            </article>
+            {% elif result_error %}
+            <div class="detail-empty-notice detail-incidents-error" role="alert">{{ result_error }}</div>
+            {% else %}<div class="detail-empty-notice">Todavía no hay un resultado registrado para este desarme.</div>{% endif %}
+        </section>
+
+    <div id="desarme-photo-modal" class="desarme-photo-modal" hidden role="dialog" aria-modal="true" aria-label="Vista de fotografía de la pieza">
+        <button type="button" id="desarme-photo-close" class="desarme-photo-close" aria-label="Cerrar fotografía"><i class="fa-solid fa-xmark"></i></button>
+        <figure class="desarme-photo-modal-content"><img id="desarme-photo-modal-image" alt=""><figcaption id="desarme-photo-modal-caption"></figcaption></figure>
+    </div>
+    </main>
+
+    {% if vehicle.state_class == 'in-progress' and can_create %}
+    <div class="detail-piece-modal-backdrop" id="piece-modal" hidden>
+        <section class="detail-piece-modal" role="dialog" aria-modal="true" aria-labelledby="piece-modal-title" aria-describedby="piece-modal-description">
+            <header class="detail-piece-modal-header">
+                <h2 id="piece-modal-title">Registrar Pieza</h2>
+                <button type="button" class="modal-close" aria-label="Cerrar formulario de pieza" data-close-piece-modal><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+            <form id="piece-form" class="detail-piece-form" action="{{ url_for('agregar_pieza_desarme', vehicle_id=vehicle.id) }}" method="post" enctype="multipart/form-data">
+                <div class="detail-piece-form-body">
+                    <input type="hidden" name="id_detalle_desarme" id="piece-form-id" value="">
+                    <p id="piece-modal-description" class="sr-only">Registra una pieza recuperada del vehículo y su información de inventario.</p>
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% for category, message in messages %}<p class="detail-piece-form-error" role="alert">{{ message }}</p>{% endfor %}
+                    {% endwith %}
+                    <dl class="detail-piece-meta">
+                        <div><dt>ID Detalle Desarme</dt><dd>Automático (DTD-XXXXXX)</dd></div>
+                        <div><dt>ID Desarme</dt><dd>{{ vehicle.process_code }}</dd></div>
+                        <div><dt>Vehículo Origen</dt><dd>VEH-{{ '%06d'|format(vehicle.id|int) }} · {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.anio }}{% if vehicle.placa %} · {{ vehicle.placa }}{% endif %}</dd></div>
+                        <div><dt>Origen adquisición</dt><dd>{{ vehicle.origen }}</dd></div>
+                        <div><dt>Usuario Registro</dt><dd>{{ registered_by }}</dd></div>
+                    </dl>
+                    <div class="detail-piece-fields">
+                        <label class="detail-piece-field" for="piece-type"><span>Tipo de Repuesto <em>*</em></span>
+                            <select id="piece-type" name="id_tipo_repuesto" required><option value="" {% if not piece_form_values.get('id_tipo_repuesto') %}selected{% endif %} disabled>Seleccionar...</option>{% for type in piece_types %}<option value="{{ type.id }}" {% if piece_form_values.get('id_tipo_repuesto', '') == type.id|string %}selected{% endif %}>{{ type.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="detail-piece-field" for="piece-state"><span>Estado de la Pieza</span>
+                            <select id="piece-state" name="estado_pieza" required>{% for state in piece_states %}<option value="{{ state.nombre }}" {% if piece_form_values.get('estado_pieza', 'Bueno') == state.nombre %}selected{% endif %}>{{ state.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="detail-piece-field" for="piece-side"><span>Lado</span>
+                            <select id="piece-side" name="id_lado"><option value="" {% if not piece_form_values.get('id_lado') %}selected{% endif %}>No aplica</option>{% for side in piece_sides %}<option value="{{ side.id }}" {% if piece_form_values.get('id_lado', '') == side.id|string %}selected{% endif %}>{{ side.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="detail-piece-field" for="piece-position"><span>Posición</span>
+                            <select id="piece-position" name="id_posicion"><option value="" {% if not piece_form_values.get('id_posicion') %}selected{% endif %}>No aplica</option>{% for position in piece_positions %}<option value="{{ position.id }}" {% if piece_form_values.get('id_posicion', '') == position.id|string %}selected{% endif %}>{{ position.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="detail-piece-field" for="piece-quantity"><span>Cantidad <em>*</em></span>
+                            <input id="piece-quantity" name="cantidad" type="number" min="1" max="2147483647" step="1" value="{{ piece_form_values.get('cantidad', '1') }}" required inputmode="numeric">
+                        </label>
+                        <label class="detail-piece-field" for="piece-price"><span>Precio Venta <em>*</em></span>
+                            <input id="piece-price" name="precio_venta" type="number" min="0" max="99999999.99" step="0.01" value="{{ piece_form_values.get('precio_venta', '0') }}" required inputmode="decimal">
+                        </label>
+                        <label class="detail-piece-field detail-piece-span-2" for="piece-date"><span>Fecha Registro</span>
+                            <input id="piece-date" type="text" value="{{ registered_at }}" readonly aria-readonly="true">
+                        </label>
+                        <div class="detail-piece-field detail-piece-span-2">
+                            <span id="piece-photo-label">Fotografía</span>
+                            <div class="detail-piece-photo-control">
+                                <div class="detail-piece-photo-preview" id="piece-photo-preview" aria-hidden="true"><i class="fa-regular fa-image"></i></div>
+                                <div class="detail-piece-photo-controls">
+                                    <span class="detail-piece-photo-name" id="piece-photo-name">Sin fotografía</span>
+                                    <input id="piece-photo" name="fotografia" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="detail-piece-file-input" tabindex="-1" aria-labelledby="piece-photo-label" aria-describedby="piece-photo-help">
+                                    <button type="button" class="detail-piece-upload-button" data-choose-piece-photo><i class="fa-solid fa-camera" aria-hidden="true"></i> Subir foto</button>
+                                    <small class="detail-piece-photo-help" id="piece-photo-help">JPG, PNG o WEBP · Máx. 3 MB</small>
+                                </div>
+                            </div>
+                        </div>
+                        <label class="detail-piece-field" for="piece-observations"><span>Observaciones</span>
+                            <textarea id="piece-observations" name="observaciones" maxlength="500" rows="2">{{ piece_form_values.get('observaciones', '') }}</textarea>
+                        </label>
+                        <label class="detail-piece-field" for="piece-registered-by"><span>Usuario Registro</span>
+                            <input id="piece-registered-by" type="text" value="{{ registered_by }}" readonly aria-readonly="true">
+                        </label>
+                    </div>
+                </div>
+                <footer class="detail-piece-modal-actions">
+                    <button type="button" data-close-piece-modal>Cancelar</button>
+                    <button type="submit" class="detail-piece-save" id="piece-submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Guardar</button>
+                </footer>
+            </form>
+        </section>
+    </div>
+    {% endif %}
+
+    {% if can_create %}
+    {% if vehicle.state_class == 'in-progress' and not result %}
+    <div class="detail-piece-modal-backdrop" id="finalize-modal" hidden>
+        <section class="detail-piece-modal detail-finalize-modal" role="dialog" aria-modal="true" aria-labelledby="finalize-modal-title">
+            <header class="detail-piece-modal-header">
+                <div class="detail-finalize-modal-title">
+                    <span><i class="fa-regular fa-circle-check" aria-hidden="true"></i></span>
+                    <div><h2 id="finalize-modal-title">Finalizar Desarme</h2><p>Se generará el registro resultado_desarme</p></div>
+                </div>
+                <button type="button" class="modal-close" aria-label="Cerrar confirmación" data-close-finalize-modal><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+            <form id="finalize-form" class="detail-piece-form" action="{{ url_for('finalizar_desarme', vehicle_id=vehicle.id) }}" method="post">
+                <div class="detail-piece-form-body">
+                    <div class="detail-finalize-vehicle">
+                        <strong>{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.anio }}</strong>
+                        <span>VIN: {{ vehicle.vin_chasis or '—' }} · Placa: {{ vehicle.placa or '—' }}</span>
+                        <small>Desarme: {{ vehicle.process_code }}</small>
+                    </div>
+                    <div class="detail-finalize-counts">
+                        <div class="is-obtained"><strong>{{ result_counts.piezas_obtenidas }}</strong><span>Piezas<br>obtenidas</span></div>
+                        <div class="is-suitable"><strong>{{ result_counts.piezas_aptas }}</strong><span>Aptas</span></div>
+                        <div class="is-damaged"><strong>{{ result_counts.piezas_danadas }}</strong><span>Dañadas</span></div>
+                        <div class="is-unsuitable"><strong>{{ result_counts.piezas_no_aptas }}</strong><span>No aptas</span></div>
+                    </div>
+                    <ul class="detail-finalize-pieces">
+                        {% for piece in finalization_pieces %}
+                        <li><span>{{ piece.nombre }}</span><span class="detail-finalize-piece-state {{ piece.categoria }}">{{ piece.estado }}{% if piece.cantidad > 1 %} · {{ piece.cantidad }}{% endif %}</span></li>
+                        {% else %}
+                        <li class="detail-finalize-no-pieces">No hay piezas registradas en este proceso.</li>
+                        {% endfor %}
+                    </ul>
+                    <label class="detail-piece-field detail-piece-span-2" for="finalize-observations">
+                        <span>Observaciones del resultado</span>
+                        <textarea id="finalize-observations" name="observaciones" maxlength="1000" rows="3" placeholder="Observaciones generales del proceso..."></textarea>
+                    </label>
+                    <p class="detail-finalize-warning">Al confirmar: se crea el registro resultado_desarme, las piezas aprovechables se registran automáticamente en inventario y el vehículo cambia a estado Desarmado.</p>
+                </div>
+                <footer class="detail-piece-modal-actions">
+                    <button type="button" data-close-finalize-modal>Cancelar</button>
+                    <button type="submit" class="detail-piece-save detail-finalize-confirm" id="finalize-submit"><i class="fa-regular fa-circle-check" aria-hidden="true"></i> Confirmar Finalización</button>
+                </footer>
+            </form>
+        </section>
+    </div>
+    {% endif %}
+
+    <div class="detail-piece-modal-backdrop" id="incident-modal" hidden>
+        <section class="detail-piece-modal detail-incident-modal" role="dialog" aria-modal="true" aria-labelledby="incident-modal-title">
+            <header class="detail-piece-modal-header">
+                <h2 id="incident-modal-title">Registrar Incidencia</h2>
+                <button type="button" class="modal-close" aria-label="Cerrar formulario de incidencia" data-close-incident-modal><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+            <form id="incident-form" class="detail-piece-form" action="{{ url_for('registrar_incidencia_desarme', vehicle_id=vehicle.id) }}" method="post">
+                <div class="detail-piece-form-body">
+                    <dl class="detail-piece-meta">
+                        <div><dt>ID Desarme</dt><dd>{{ vehicle.process_code }}</dd></div>
+                        <div><dt>Usuario</dt><dd>{{ registered_by }}</dd></div>
+                    </dl>
+                    <div class="detail-piece-fields">
+                        <label class="detail-piece-field detail-piece-span-2" for="incident-piece">
+                            <span>Pieza relacionada (ID detalle)</span>
+                            <select id="incident-piece" name="id_detalle_desarme" required>
+                                <option value="">Selecciona una pieza...</option>
+                                {% for piece in pieces %}
+                                <option value="{{ piece.id_detalle_desarme }}">DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }} — {{ piece.tipo_repuesto or 'Pieza' }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="detail-piece-field" for="incident-status">
+                            <span>Estado de la Incidencia</span>
+                            <select id="incident-status" name="id_estado" required>
+                                <option value="">Selecciona un estado...</option>
+                                {% for state in incident_statuses %}
+                                <option value="{{ state.id }}">{{ state.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="detail-piece-field" for="incident-date">
+                            <span>Fecha Incidencia</span>
+                            <input id="incident-date" name="fecha_incidencia" type="date" value="{{ today_iso }}" required>
+                        </label>
+                        <label class="detail-piece-field detail-piece-span-2" for="incident-description">
+                            <span>Descripción <em>*</em></span>
+                            <textarea id="incident-description" name="descripcion" maxlength="1000" rows="3" placeholder="Describe la incidencia..." required></textarea>
+                        </label>
+                    </div>
+                </div>
+                <footer class="detail-piece-modal-actions">
+                    <button type="button" data-close-incident-modal>Cancelar</button>
+                    <button type="submit" class="detail-piece-save" id="incident-submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Registrar</button>
+                </footer>
+            </form>
+        </section>
+    </div>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='desarme.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='pagination.js') }}" defer></script>
+</body>
+</html>

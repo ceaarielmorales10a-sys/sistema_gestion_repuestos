@@ -1,0 +1,63 @@
+<tr class="hover:bg-gray-50/50 transition-colors">
+    <td class="px-6 py-4 whitespace-nowrap sale-index" data-label="N°">
+        <button type="button" class="detail-toggle inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 transition" aria-expanded="false">
+            <i class="fa-solid fa-chevron-down"></i>
+        </button>
+        <span class="ml-3 text-gray-700 font-medium whitespace-nowrap">{{ row_number }}. {{ repuesto.codigo_repuesto }}</span>
+    </td>
+    <td class="px-6 py-4 text-slate-900 font-semibold whitespace-nowrap" data-label="Repuesto">{{ repuesto.tipo_repuesto or '-' }}</td>
+    <td class="px-6 py-4 text-gray-500 font-normal" data-label="Vehículo Origen">{{ repuesto.vehiculo_origen }}</td>
+    <td class="px-6 py-4 text-gray-500 font-normal" data-label="Lado / Pos.">{{ repuesto.lado }}{% if repuesto.posicion %} / {{ repuesto.posicion }}{% endif %}</td>
+    <td class="px-6 py-4" data-label="Estado">
+        <span class="inventory-status-badge {{ 'is-inactive' if repuesto.estado|lower == 'inactivo' else 'is-active' }}">{{ repuesto.estado or 'Activo' }}</span>
+    </td>
+    <td class="px-6 py-4 text-gray-500 font-normal" data-label="P. Compra">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_compra)) }}</td>
+    <td class="px-6 py-4 text-gray-500 font-normal" data-label="P. Venta">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) }}</td>
+    <td class="px-6 py-4 text-center" data-label="Stock">
+        {% if repuesto.stock is not none and repuesto.stock <= 5 %}
+        <div class="inventory-stock-low flex items-center justify-center gap-1.5">
+            <span>{{ repuesto.stock }}</span>
+            <i class="fa-solid fa-circle-exclamation text-xs"></i>
+        </div>
+        {% else %}
+        {{ repuesto.stock }}
+        {% endif %}
+    </td>
+    <td class="px-6 py-4 text-center" data-label="Acciones">
+        <div class="flex justify-center gap-3 items-center">
+            <button type="button" class="inventory-action-photo {% if repuesto.fotografia %}has-photo inventory-photo-trigger{% else %}no-photo{% endif %}" {% if repuesto.fotografia %}data-image="{{ url_for('static', filename=repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}" title="Ver fotografía" aria-label="Ver fotografía"{% else %}title="Sin fotografía" aria-label="Sin fotografía" disabled{% endif %}><i class="fa-regular fa-image"></i></button>
+            {% if has_permission('inventario', 'write') %}
+            <a href="/inventario/modificar/{{ repuesto.id_repuesto }}" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+<tr class="detail-row bg-slate-50/80 hidden">
+    <td colspan="9" class="px-6 py-4">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm text-slate-600">
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Código</p><p class="font-medium text-slate-800">{{ repuesto.codigo_repuesto or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Modelo</p><p class="font-medium text-slate-800">{{ repuesto.modelo or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Posición</p><p class="font-medium text-slate-800">{{ repuesto.posicion or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Stock mínimo</p><p class="font-medium text-slate-800">{{ repuesto.stock_minimo or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Fecha ingreso</p><p class="font-medium text-slate-800">{{ repuesto.fecha_ingreso or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Vehículo origen</p><p class="font-medium text-slate-800">{{ repuesto.vehiculo_origen or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Año</p><p class="font-medium text-slate-800">{{ repuesto.anio or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Transmisión</p><p class="font-medium text-slate-800">{{ repuesto.transmision or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Stock máximo</p><p class="font-medium text-slate-800">{{ repuesto.stock_maximo or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Registrado por</p><p class="font-medium text-slate-800">{{ repuesto.usuario_registro or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Tipo de repuesto</p><p class="font-medium text-slate-800">{{ repuesto.tipo_repuesto or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Color</p><p class="font-medium text-slate-800">{{ repuesto.color or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Ubicación en bodega</p><p class="font-medium text-slate-800">{{ repuesto.ubicacion_bodega or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Precio compra</p><p class="font-medium text-slate-800">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_compra)) if repuesto.precio_compra is not none else '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Marca</p><p class="font-medium text-slate-800">{{ repuesto.marca or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Lado</p><p class="font-medium text-slate-800">{{ repuesto.lado or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Estado del repuesto</p><p class="font-medium text-slate-800">{{ repuesto.estado_repuesto or '-' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Estado del inventario</p><p class="font-medium text-slate-800">{{ repuesto.estado or 'Activo' }}</p></div>
+            <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Precio venta</p><p class="font-medium text-slate-800">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) if repuesto.precio_venta is not none else '-' }}</p></div>
+            <div class="inventory-detail-photo-field">
+                <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Fotografía</p>
+                {% if repuesto.fotografia %}<button type="button" class="inventory-detail-photo inventory-photo-trigger" data-image="{{ url_for('static', filename=repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}"><img src="{{ url_for('static', filename=repuesto.fotografia) }}" alt="Fotografía de {{ repuesto.codigo_repuesto }}"></button>{% else %}<div class="inventory-detail-photo-empty"><i class="fa-regular fa-image"></i><span>Sin fotografía</span></div>{% endif %}
+            </div>
+        </div>
+    </td>
+</tr>

@@ -8,10 +8,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento-auditoria.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='mantenimiento-modelos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
 <body class="module-theme bg-slate-100 min-h-screen flex flex-col md:flex-row font-sans antialiased">
     <div class="md:hidden fixed top-4 left-4 z-40"><button id="mobile-menu-button" class="bg-white text-slate-900 p-3 rounded-xl shadow border"><i class="fa-solid fa-bars"></i></button></div>
@@ -25,7 +28,7 @@
                 {% if has_permission('clientes', 'read') %}<a href="/clientes" class="side-link"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
                 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}" class="side-link"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
                 {% if has_permission('ventas', 'read') %}<a href="/ventas" class="side-link"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
-                {% if has_permission('prestamos', 'read') %}<a href="/prestamos" class="side-link flex justify-between items-center"><i class="fa-solid fa-handshake"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos" class="side-link"><span class="flex items-center gap-3"><i class="fa-solid fa-handshake"></i> Préstamos</span>{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
                 {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones" class="side-link"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
                 {% if has_permission('desarme', 'read') %}<a href="/desarme" class="side-link"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
                 {% if has_permission('usuarios', 'read') %}<a href="/usuario" class="side-link"><i class="fa-solid fa-users-gear"></i> Usuarios</a>{% endif %}
@@ -38,10 +41,40 @@
     <main class="flex-1 min-w-0 p-5 md:p-6 lg:p-7">
         <header class="page-header">
             <div><h1><i class="fa-solid fa-database"></i> Mantenimiento de Base de Datos</h1><p>Gestión de catálogos, backups, limpieza y auditoría</p></div>
-            <div class="header-tabs"><button class="selected"><i class="fa-solid fa-database"></i> Base de Datos</button><button><i class="fa-regular fa-file-lines"></i> Auditoría y Bitácoras</button></div>
+            <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
+            <div class="header-tabs" role="tablist" aria-label="Secciones de mantenimiento"><button class="{% if initial_view != 'audit' %}selected{% endif %}" type="button" data-maintenance-tab="database" aria-selected="{{ 'true' if initial_view != 'audit' else 'false' }}"><i class="fa-solid fa-database"></i> Base de Datos</button><button class="{% if initial_view == 'audit' %}selected{% endif %}" type="button" data-maintenance-tab="audit" aria-selected="{{ 'true' if initial_view == 'audit' else 'false' }}"><i class="fa-regular fa-file-lines"></i> Auditoría y Bitácoras</button></div>
         </header>
 
-        <section class="stats-grid">
+        <section id="audit-view" class="audit-view" {% if initial_view != 'audit' %}hidden{% endif %}>
+            <div class="audit-heading"><h2><i class="fa-regular fa-file-lines"></i> Auditoría y Bitácoras</h2><p>Registro histórico de acciones por módulo</p></div>
+            <div class="audit-module-tabs" role="tablist" aria-label="Módulos auditados">
+                {% for key, label, icon in [('clientes', 'Clientes', 'fa-users'), ('repuestos', 'Repuestos', 'fa-cube'), ('ventas', 'Ventas', 'fa-cart-shopping'), ('prestamos', 'Préstamos', 'fa-handshake')] %}
+                <button type="button" class="{% if loop.first %}active{% endif %}" data-audit-module="{{ key }}" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}"><i class="fa-solid {{ icon }}" aria-hidden="true"></i> {{ label }}</button>
+                {% endfor %}
+            </div>
+            <section class="audit-card" aria-label="Registros de auditoría">
+                <div class="audit-card-top"><span id="audit-count">0 registro(s) en bitacora</span><div><a id="audit-csv-download" class="audit-export audit-export-csv" href="#"><i class="fa-solid fa-download" aria-hidden="true"></i> Excel/CSV</a><a id="audit-pdf-download" class="audit-export audit-export-pdf" href="#"><i class="fa-regular fa-file-pdf" aria-hidden="true"></i> PDF</a></div></div>
+                <form class="audit-filters" id="audit-filters" autocomplete="off">
+                    <label class="audit-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input name="q" type="search" placeholder="Buscar..." aria-label="Buscar en bitácoras"></label>
+                    <i class="fa-regular fa-calendar audit-calendar-icon" aria-hidden="true"></i>
+                    <label><span class="sr-only">Desde</span><input name="from_date" type="date" aria-label="Fecha desde"></label>
+                    <span class="audit-date-separator" aria-hidden="true">—</span>
+                    <label><span class="sr-only">Hasta</span><input name="to_date" type="date" aria-label="Fecha hasta"></label>
+                    <label class="audit-user-filter"><span class="sr-only">Usuario</span><select name="usuario" aria-label="Filtrar por usuario"><option value="">Todos los usuarios</option></select></label>
+                </form>
+                <p id="audit-message" class="audit-message" role="status" hidden></p>
+                <div id="audit-empty" class="audit-empty" hidden><i class="fa-solid fa-users" aria-hidden="true"></i><strong>Sin registros en bitácora</strong><span>Las acciones registradas aparecerán aquí</span></div>
+                <div id="audit-table-wrap" class="audit-table-wrap" hidden>
+                    <table class="audit-table" id="audit-table">
+                        <thead id="audit-table-head"><tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th><th>TABLA</th></tr></thead>
+                        <tbody id="audit-table-body"></tbody>
+                    </table>
+                </div>
+                <nav id="audit-pagination" class="audit-pagination" aria-label="Paginación de auditoría" hidden><button type="button" id="audit-previous" aria-label="Página anterior">‹</button><span id="audit-page-label"></span><button type="button" id="audit-next" aria-label="Página siguiente">›</button></nav>
+            </section>
+        </section>
+
+        <section class="stats-grid {% if initial_view == 'audit' %}hidden{% endif %}" data-maintenance-view="database">
             <article class="stat-card blue"><span>Total Registros</span><strong>{{ total_registros }}</strong><i class="fa-solid fa-database"></i></article>
             <article class="stat-card purple"><span>Tablas Activas</span><strong>{{ catalogos|length }}</strong><i class="fa-solid fa-file-code"></i></article>
             <article class="stat-card orange"><span>Espacio Usado</span><strong>Base de datos</strong><i class="fa-solid fa-hard-drive"></i></article>
@@ -49,7 +82,7 @@
 
         {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid fa-circle-{{ 'check' if category == 'success' else 'exclamation' }}"></i>{{ message }}</div>{% endfor %}{% endwith %}
 
-        <section class="panel catalog-panel">
+        <section class="panel catalog-panel {% if initial_view == 'audit' %}hidden{% endif %}" data-maintenance-view="database">
             <h2><i class="fa-regular fa-map"></i> Gestión de Catálogos</h2>
             <div class="catalog-layout">
                 <aside class="catalog-menu" aria-label="Catálogos">
@@ -59,38 +92,356 @@
                     {% for catalogo in catalogos %}
                     <section class="catalog-table {% if catalogo.key != active_catalog %}hidden{% endif %}" id="catalog-{{ catalogo.key }}" data-label="{{ catalogo.label }}" data-name-label="{{ catalogo.name_label }}" data-url="{{ url_for('guardar_catalogo_mantenimiento', key=catalogo.key) }}" data-fields='{{ catalogo.fields|tojson }}'>
                         <div class="table-tools"><div class="table-heading"><h3>{{ catalogo.label }}</h3>{% if catalogo.key == 'modelos' %}<select class="brand-filter" aria-label="Filtrar modelos por marca"><option value="">— Todas las marcas —</option>{% for marca in catalogo.marcas %}<option value="{{ marca.id }}">{{ marca.nombre }}</option>{% endfor %}</select>{% endif %}</div><div><label class="search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Buscar..."></label><button class="primary add-catalog" type="button"><i class="fa-solid fa-plus"></i> Agregar</button></div></div>
-                        <div class="table-scroll"><table><thead>{% if catalogo.key == 'modelos' %}<tr><th>#</th><th>MARCA</th><th>NOMBRE</th><th>DESCRIPCIÓN</th><th>ACCIONES</th></tr>{% else %}<tr><th>{{ 'ID_MOTIVO' if catalogo.key == 'motivo_devolucion' else '#' }}</th><th>{{ 'AÑO' if catalogo.key == 'anios' else catalogo.name_label|upper }}</th>{% for field in catalogo.fields %}<th>{{ field.label|upper }}</th>{% endfor %}<th>ACCIONES</th></tr>{% endif %}</thead><tbody>
-                            {% for row in catalogo.rows %}<tr data-search="{{ (row.nombre ~ ' ' ~ row.marca ~ ' ' ~ row.descripcion)|lower if catalogo.key == 'modelos' else row.search }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}"{% endif %}><td>{{ row.id if catalogo.key == 'motivo_devolucion' else loop.index }}</td>{% if catalogo.key == 'modelos' %}<td><span class="brand-badge"><i class="fa-solid fa-car"></i>{{ row.marca }}</span></td>{% endif %}<td>{{ row.nombre }}</td>{% if catalogo.key == 'modelos' %}<td>{{ row.descripcion or '—' }}</td>{% else %}{% for field in catalogo.fields %}<td>{{ row.extra_display[field.name] or '—' }}</td>{% endfor %}{% endif %}<td class="actions"><button type="button" class="edit-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}" data-description="{{ row.descripcion or '' }}"{% else %}data-extra='{{ row.extra|tojson }}'{% endif %} title="Editar"><i class="fa-solid fa-pen"></i></button><button type="button" class="delete-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" title="Eliminar"><i class="fa-solid fa-trash"></i></button></td></tr>{% else %}<tr class="empty"><td colspan="{{ 5 if catalogo.key == 'modelos' else 3 + catalogo.fields|length }}">No hay registros en este catálogo.</td></tr>{% endfor %}
+                        <div class="table-scroll"><table data-pagination-page-size="10"><thead>{% if catalogo.key == 'modelos' %}<tr><th>#</th><th>MARCA</th><th>NOMBRE</th><th>DESCRIPCIÓN</th><th>ACCIONES</th></tr>{% else %}<tr><th>{{ 'ID_MOTIVO' if catalogo.key == 'motivo_devolucion' else '#' }}</th><th>{{ 'AÑO' if catalogo.key == 'anios' else catalogo.name_label|upper }}</th>{% for field in catalogo.fields %}<th>{{ field.label|upper }}</th>{% endfor %}<th>ACCIONES</th></tr>{% endif %}</thead><tbody>
+                            {% for row in catalogo.rows %}<tr data-search="{{ (row.nombre ~ ' ' ~ row.marca ~ ' ' ~ row.descripcion)|lower if catalogo.key == 'modelos' else row.search }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}"{% endif %}><td data-label="{{ '#' if catalogo.key != 'motivo_devolucion' else 'ID_MOTIVO' }}">{{ row.id if catalogo.key == 'motivo_devolucion' else loop.index }}</td>{% if catalogo.key == 'modelos' %}<td data-label="MARCA"><span class="brand-badge"><i class="fa-solid fa-car"></i>{{ row.marca }}</span></td>{% endif %}<td data-label="{{ 'NOMBRE' if catalogo.key == 'modelos' else (catalogo.name_label|upper) }}">{{ row.nombre }}</td>{% if catalogo.key == 'modelos' %}<td data-label="DESCRIPCIÓN">{{ row.descripcion or '—' }}</td>{% else %}{% for field in catalogo.fields %}<td data-label="{{ field.label|upper }}">{{ row.extra_display[field.name] or '—' }}</td>{% endfor %}{% endif %}<td class="actions" data-label="ACCIONES"><button type="button" class="edit-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" data-extra='{{ row.extra|tojson }}' {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}" data-description="{{ row.descripcion or '' }}"{% endif %} title="Editar"><i class="fa-solid fa-pen"></i></button></td></tr>{% else %}<tr class="empty"><td colspan="{{ 5 if catalogo.key == 'modelos' else 3 + catalogo.fields|length }}">No hay registros en este catálogo.</td></tr>{% endfor %}
                         </tbody></table></div>
-                        <div class="catalog-pagination"><span>Mostrando {{ catalogo.rows|length }} de {{ catalogo.count }} registros. Página {{ catalogo.page }} de {{ catalogo.total_pages }}.</span><div>{% if catalogo.page > 1 %}<a href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page - 1 }}">‹</a>{% endif %}{% for page in range(1, catalogo.total_pages + 1) %}<a class="{% if page == catalogo.page %}active{% endif %}" href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ page }}">{{ page }}</a>{% endfor %}{% if catalogo.page < catalogo.total_pages %}<a href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page + 1 }}">›</a>{% endif %}</div></div>
+                        <div class="catalog-pagination">
+                            {% set first_row = (catalogo.page - 1) * 10 + 1 %}
+                            {% set last_row = first_row + catalogo.rows|length - 1 %}
+                            <span>{% if catalogo.count %}Mostrando {{ first_row }}–{{ last_row }} de {{ catalogo.count }} registros{% else %}No hay registros{% endif %}</span>
+                            {% if catalogo.total_pages > 1 %}<nav aria-label="Paginación de {{ catalogo.label }}"><div>{% if catalogo.page > 1 %}<a aria-label="Página anterior" href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page - 1 }}">‹</a>{% endif %}{% for page in range(1, catalogo.total_pages + 1) %}<a class="{% if page == catalogo.page %}active{% endif %}" aria-current="{% if page == catalogo.page %}page{% else %}false{% endif %}" href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ page }}">{{ page }}</a>{% endfor %}{% if catalogo.page < catalogo.total_pages %}<a aria-label="Página siguiente" href="?catalogo={{ catalogo.key }}&page_{{ catalogo.key }}={{ catalogo.page + 1 }}">›</a>{% endif %}</div></nav>{% endif %}
+                        </div>
                     </section>
                     {% endfor %}
                 </div>
             </div>
         </section>
 
-        <section class="panel system-panel"><h2>Tablas del Sistema</h2><div class="system-tables">{% for tabla in tablas_sistema %}<article><div><strong>{{ tabla.label }}</strong><small>{{ tabla.count }} registros</small></div><button type="button" class="clear-button" data-name="{{ tabla.label }}"><i class="fa-regular fa-trash-can"></i> Limpiar</button></article>{% else %}<p class="text-slate-500 text-sm">No hay tablas transaccionales disponibles.</p>{% endfor %}</div></section>
+        <section class="panel system-panel {% if initial_view == 'audit' %}hidden{% endif %}" data-maintenance-view="database"><h2>Tablas del Sistema</h2><div class="system-tables">{% for tabla in tablas_sistema %}<article><div><strong>{{ tabla.label }}</strong><small>{{ tabla.count }} registros</small></div><button type="button" class="clear-button" data-name="{{ tabla.label }}"><i class="fa-regular fa-trash-can"></i> Limpiar</button></article>{% else %}<p class="text-slate-500 text-sm">No hay tablas transaccionales disponibles.</p>{% endfor %}</div></section>
 
-        <section class="panel backups"><h2>Gestión de Backups</h2><p>Selecciona las tablas (vacío = todas):</p><div class="backup-tags">{% for tabla in tablas_sistema %}<span>{{ tabla.label }}</span>{% endfor %}</div><div class="backup-grid"><article><h3><i class="fa-solid fa-download text-emerald-600"></i> Crear Backup</h3><p>Descarga una copia de seguridad de los datos seleccionados.</p><button class="backup-download"><i class="fa-solid fa-download"></i> Descargar Backup</button></article><article><h3><i class="fa-solid fa-upload text-blue-600"></i> Restaurar Backup</h3><p>Restaura los datos desde un archivo de backup.</p><button class="backup-upload"><i class="fa-solid fa-upload"></i> Seleccionar Archivo</button></article></div></section>
-        <section class="danger"><h2><i class="fa-solid fa-triangle-exclamation"></i> Zona de Peligro</h2><p>Las siguientes acciones son irreversibles. Proceder con extrema precaución.</p><button type="button" id="reset-database"><i class="fa-solid fa-rotate"></i> Reiniciar Base de Datos Completa</button></section>
+<section class="panel backups {% if initial_view == 'audit' %}hidden{% endif %}" data-maintenance-view="database"><h2>Gestión de Backups</h2><div class="backup-grid"><article><h3><i class="fa-solid fa-file-export text-emerald-600"></i> Exportar Base de Datos Completa</h3><p>Genera y descarga un archivo ZIP con todas las tablas en formato CSV.</p><button class="backup-download"><i class="fa-solid fa-download"></i> Descargar ZIP (CSV)</button></article><article><h3><i class="fa-solid fa-file-import text-blue-600"></i> Importar Base de Datos</h3><p>Restaura todas las tablas desde un archivo ZIP con CSVs (sobrescribe datos actuales).</p><button class="backup-upload"><i class="fa-solid fa-upload"></i> Seleccionar ZIP</button></article></div></section>
     </main>
 
-    <div class="modal-backdrop hidden" id="catalog-modal"><form class="modal" method="post"><input type="hidden" name="action" id="modal-action" value="add"><input type="hidden" name="id" id="modal-id"><header><h2 id="modal-title">Agregar</h2><button type="button" class="close-modal">&times;</button></header><div class="modal-body"><div id="model-fields" class="hidden"><label for="modal-brand">Marca <em>*</em></label><select id="modal-brand" name="id_marca"><option value="">Selecciona una marca</option></select></div><label id="modal-label" for="modal-name">Nombre <em>*</em></label><input id="modal-name" name="nombre" required autocomplete="off"><div id="description-field" class="hidden"><label for="modal-description">Descripción</label><input id="modal-description" name="descripcion" autocomplete="off" placeholder="Ej. Sedán compacto"></div><div id="extra-fields"></div></div><footer><button type="button" class="cancel-modal">Cancelar</button><button class="primary" id="modal-submit" type="submit">Agregar</button></footer></form></div>
-    <div class="modal-backdrop hidden" id="confirm-modal"><div class="modal confirm"><header><h2>Confirmar eliminación</h2><button type="button" class="close-confirm">&times;</button></header><div class="modal-body"><p>¿Deseas eliminar <strong id="delete-name"></strong>? Esta acción puede estar bloqueada si el registro se encuentra en uso.</p></div><footer><button type="button" class="cancel-confirm">Cancelar</button><form method="post" id="delete-form"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" id="delete-id"><button class="danger-button" type="submit">Eliminar</button></form></footer></div></div>
+    <div class="modal-backdrop hidden" id="catalog-modal"><form class="modal" method="post"><input type="hidden" name="action" id="modal-action" value="add"><input type="hidden" name="id" id="modal-id"><header><h2 id="modal-title">Agregar</h2><button type="button" class="close-modal">&times;</button></header><div class="modal-body"><div id="model-fields" class="hidden"><label for="modal-brand">Marca <em>*</em></label><select id="modal-brand" name="id_marca"><option value="">Selecciona una marca</option></select></div><label id="modal-label" for="modal-name">Nombre <em>*</em></label><input id="modal-name" name="nombre" required autocomplete="off"><div id="description-field" class="hidden"><label for="modal-description">Descripción</label><input id="modal-description" name="descripcion" autocomplete="off" placeholder="Ej. Sedán compacto"></div><div id="extra-fields"></div><div id="estado-field" class="hidden"><label class="status-toggle" for="modal-estado"><input type="checkbox" name="id_estado" value="1" id="modal-estado"><span class="toggle-track" aria-hidden="true"></span><span class="toggle-copy"><strong>Activo</strong><small>Desactiva para ocultar este registro en nuevas operaciones</small></span></label></div></div><footer><button type="button" class="cancel-modal">Cancelar</button><button class="primary" id="modal-submit" type="submit">Agregar</button></footer></form></div>
     <script>
+        const auditView = document.getElementById('audit-view');
+        const auditForm = document.getElementById('audit-filters');
+        const auditBody = document.getElementById('audit-table-body');
+        const auditRequestUrl = "{{ url_for('mantenimiento_auditoria') }}";
+        const auditExportUrl = "{{ url_for('exportar_mantenimiento_auditoria', file_format='csv') }}";
+        const auditCsvDownload = document.getElementById('audit-csv-download');
+        const auditPdfDownload = document.getElementById('audit-pdf-download');
+        let auditModule = 'clientes';
+        let auditPage = 1;
+        let auditRequestId = 0;
+        let auditSearchTimer = null;
+
+        function setMaintenanceView(view) {
+            const showAudit = view === 'audit';
+            auditView.hidden = !showAudit;
+            document.querySelectorAll('[data-maintenance-view="database"]').forEach(section => {
+                section.classList.toggle('hidden', showAudit);
+            });
+        document.querySelectorAll('[data-maintenance-tab]').forEach(button => {
+                const active = button.dataset.maintenanceTab === view;
+                button.classList.toggle('selected', active);
+                button.setAttribute('aria-selected', String(active));
+            });
+            const url = new URL(window.location.href);
+            if (showAudit) url.searchParams.set('vista', 'audit');
+            else url.searchParams.delete('vista');
+            window.history.replaceState({}, '', url);
+            if (showAudit) loadAuditRecords();
+        }
+
+        function auditFilters() {
+            return Object.fromEntries(new FormData(auditForm).entries());
+        }
+
+        function updateAuditExportLinks(filters) {
+            const params = new URLSearchParams({ modulo: auditModule });
+            Object.entries(filters).forEach(([key, value]) => {
+                if (String(value).trim()) params.set(key, String(value).trim());
+            });
+            auditCsvDownload.href = `${auditExportUrl}?${params.toString()}`;
+            auditPdfDownload.href = auditExportUrl.replace(/\/csv$/, '/pdf') + `?${params.toString()}`;
+        }
+
+        function renderAuditPagination(currentPage, totalPages) {
+            const navigation = document.getElementById('audit-pagination');
+            navigation.hidden = totalPages <= 1;
+            document.getElementById('audit-page-label').textContent = `Página ${currentPage} de ${totalPages}`;
+            document.getElementById('audit-previous').disabled = currentPage <= 1;
+            document.getElementById('audit-next').disabled = currentPage >= totalPages;
+        }
+
+        async function loadAuditRecords() {
+            const requestId = ++auditRequestId;
+            const filters = auditFilters();
+            const params = new URLSearchParams({ modulo: auditModule, page: String(auditPage) });
+            Object.entries(filters).forEach(([key, value]) => {
+                if (String(value).trim()) params.set(key, String(value).trim());
+            });
+            updateAuditExportLinks(filters);
+            const message = document.getElementById('audit-message');
+            message.hidden = false;
+            message.textContent = 'Cargando bitácoras...';
+            document.getElementById('audit-empty').hidden = true;
+            document.getElementById('audit-table-wrap').hidden = true;
+            document.getElementById('audit-pagination').hidden = true;
+            try {
+                const response = await fetch(`${auditRequestUrl}?${params.toString()}`, {
+                    headers: { Accept: 'application/json' },
+                });
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    if (response.redirected || /<!doctype|<html/i.test(responseText.slice(0, 300))) {
+                        throw new Error('El servidor respondió una página HTML. La sesión pudo expirar; recarga e inicia sesión de nuevo.');
+                    }
+                    throw new Error('El servidor devolvió una respuesta inválida al consultar las bitácoras.');
+                }
+                if (requestId !== auditRequestId) return;
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'No se pudieron cargar los registros de auditoría.');
+                }
+                document.getElementById('audit-count').textContent =
+                    `${data.total} registro(s) en bitacora`;
+                const userSelect = auditForm.elements.usuario;
+                const selectedUser = filters.usuario;
+                userSelect.replaceChildren(new Option('Todos los usuarios', ''));
+                data.usuarios.forEach(user => userSelect.add(new Option(user, user)));
+                userSelect.value = selectedUser;
+                auditBody.replaceChildren();
+                const auditTable = document.getElementById('audit-table');
+                const auditHead = document.getElementById('audit-table-head');
+                const isRepuestos = auditModule === 'repuestos';
+
+                if (isRepuestos && data.columnas) {
+                    const headers = data.columnas.map(col => col.replace(/_/g, ' ').toUpperCase());
+                    auditHead.innerHTML = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+                    data.registros.forEach(record => {
+                        const row = document.createElement('tr');
+                        const rawData = record.raw_data || {};
+                        data.columnas.forEach(col => {
+                            const cell = document.createElement('td');
+                            cell.textContent = rawData[col] || '—';
+                            row.append(cell);
+                        });
+                        auditBody.append(row);
+                    });
+                } else {
+                    auditHead.innerHTML = '<tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th><th>TABLA</th></tr>';
+                    data.registros.forEach(record => {
+                        const row = document.createElement('tr');
+                        [record.fecha, record.accion, record.registro, record.detalle, record.usuario, record.tabla]
+                            .forEach(value => {
+                                const cell = document.createElement('td');
+                                cell.textContent = value || '—';
+                                row.append(cell);
+                            });
+                        auditBody.append(row);
+                    });
+                }
+
+                const missingTables = data.tablas_no_disponibles.length
+                    ? `No se encontraron estas tablas: ${data.tablas_no_disponibles.join(', ')}.`
+                    : '';
+                message.textContent = missingTables;
+                message.hidden = !missingTables;
+                if (data.total) {
+                    document.getElementById('audit-table-wrap').hidden = false;
+                    renderAuditPagination(data.pagina, data.total_paginas);
+                } else {
+                    document.getElementById('audit-empty').hidden = false;
+                }
+            } catch (error) {
+                if (requestId !== auditRequestId) return;
+                message.hidden = false;
+                message.textContent = error.message;
+                document.getElementById('audit-count').textContent = 'No se pudieron leer las bitácoras';
+            }
+        }
+
+        document.querySelectorAll('[data-maintenance-tab]').forEach(button => {
+            button.addEventListener('click', () => setMaintenanceView(button.dataset.maintenanceTab));
+        });
+        document.querySelectorAll('[data-audit-module]').forEach(button => {
+            button.addEventListener('click', () => {
+                auditModule = button.dataset.auditModule;
+                auditPage = 1;
+                document.querySelectorAll('[data-audit-module]').forEach(tab => {
+                    const active = tab === button;
+                    tab.classList.toggle('active', active);
+                    tab.setAttribute('aria-selected', String(active));
+                });
+                auditForm.reset();
+                    loadAuditRecords();
+            });
+        });
+        auditForm.addEventListener('input', event => {
+            auditPage = 1;
+            if (event.target.name === 'q') {
+                window.clearTimeout(auditSearchTimer);
+                auditSearchTimer = window.setTimeout(loadAuditRecords, 250);
+            } else {
+                loadAuditRecords();
+            }
+        });
+        auditForm.addEventListener('change', () => {
+            auditPage = 1;
+            loadAuditRecords();
+        });
+        document.getElementById('audit-previous').addEventListener('click', () => {
+            if (auditPage > 1) {
+                auditPage -= 1;
+                loadAuditRecords();
+            }
+        });
+        document.getElementById('audit-next').addEventListener('click', () => {
+            auditPage += 1;
+            loadAuditRecords();
+        });
+
         const sidebar=document.getElementById('sidebar'), overlay=document.getElementById('mobile-sidebar-overlay');
         document.getElementById('mobile-menu-button')?.addEventListener('click',()=>{sidebar.classList.toggle('-translate-x-full');overlay.classList.toggle('hidden')}); overlay?.addEventListener('click',()=>{sidebar.classList.add('-translate-x-full');overlay.classList.add('hidden')});
-        const modal=document.getElementById('catalog-modal'), form=modal.querySelector('form'), action=document.getElementById('modal-action'), id=document.getElementById('modal-id'), nameInput=document.getElementById('modal-name'), modelFields=document.getElementById('model-fields'), descriptionField=document.getElementById('description-field'), modalBrand=document.getElementById('modal-brand'), modalDescription=document.getElementById('modal-description'), extraFields=document.getElementById('extra-fields');
+        const modal=document.getElementById('catalog-modal'), form=modal.querySelector('form'), action=document.getElementById('modal-action'), id=document.getElementById('modal-id'), nameInput=document.getElementById('modal-name'), modelFields=document.getElementById('model-fields'), descriptionField=document.getElementById('description-field'), modalBrand=document.getElementById('modal-brand'), modalDescription=document.getElementById('modal-description'), extraFields=document.getElementById('extra-fields'), estadoField=document.getElementById('estado-field'), modalEstado=document.getElementById('modal-estado');
         const closeModal=()=>modal.classList.add('hidden'); document.querySelectorAll('.close-modal,.cancel-modal').forEach(x=>x.addEventListener('click',closeModal));
         document.querySelectorAll('.catalog-tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.catalog-tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.catalog-table').forEach(x=>x.classList.add('hidden'));tab.classList.add('active');document.getElementById('catalog-'+tab.dataset.catalog).classList.remove('hidden')}));
-        function openCatalogModal(panel, mode, rowButton){const label=panel.dataset.label,isModel=panel.id==='catalog-modelos',fields=JSON.parse(panel.dataset.fields||'[]'),extra=rowButton?.dataset.extra?JSON.parse(rowButton.dataset.extra):{};form.action=panel.dataset.url;form.classList.toggle('model-modal',isModel);action.value=mode;id.value=rowButton?.dataset.id||'';nameInput.value=rowButton?.dataset.name||'';nameInput.placeholder=isModel?'Ej. Corolla':'';modelFields.classList.toggle('hidden',!isModel);descriptionField.classList.toggle('hidden',!isModel);modalBrand.required=isModel;modalDescription.disabled=!isModel;extraFields.replaceChildren();if(!isModel){fields.forEach(field=>{const labelNode=document.createElement('label'),options=field.options||[],input=options.length?document.createElement('select'):document.createElement('input');labelNode.htmlFor='extra-'+field.name;labelNode.textContent=field.label;input.id='extra-'+field.name;input.name=field.name;input.autocomplete='off';if(options.length){const placeholder=new Option('Seleccione...', '');input.add(placeholder);options.forEach(option=>input.add(new Option(option.nombre, option.id)));}input.value=extra[field.name]??'';extraFields.append(labelNode,input);});}if(isModel){const filter=panel.querySelector('.brand-filter');modalBrand.innerHTML=filter.innerHTML;modalBrand.value=rowButton?.dataset.brand||'';modalDescription.value=rowButton?.dataset.description||'';modalDescription.placeholder='Descripción opcional...';}document.getElementById('modal-title').textContent=(mode==='add'?'Agregar':'Editar')+' — '+label;document.getElementById('modal-label').innerHTML=(label==='Años'?'Año':panel.dataset.nameLabel||'Nombre')+' <em>*</em>';document.getElementById('modal-submit').textContent=mode==='add'?'Agregar':'Guardar cambios';modal.classList.remove('hidden');nameInput.focus()}
+        function openCatalogModal(panel, mode, rowButton){const label=panel.dataset.label,isModel=panel.id==='catalog-modelos',fields=JSON.parse(panel.dataset.fields||'[]'),extra=rowButton?.dataset.extra?JSON.parse(rowButton.dataset.extra):{};form.action=panel.dataset.url;form.classList.toggle('model-modal',isModel);action.value=mode;id.value=rowButton?.dataset.id||'';nameInput.value=rowButton?.dataset.name||'';nameInput.placeholder=isModel?'Ej. Corolla':'';modelFields.classList.toggle('hidden',!isModel);descriptionField.classList.toggle('hidden',!isModel);modalBrand.required=isModel;modalDescription.disabled=!isModel;extraFields.replaceChildren();estadoField.classList.add('hidden');modalEstado.checked=mode==='add';if(!isModel){fields.forEach(field=>{if(field.name==='id_estado'){return;}const labelNode=document.createElement('label'),options=field.options||[],input=options.length?document.createElement('select'):document.createElement('input');labelNode.htmlFor='extra-'+field.name;labelNode.textContent=field.label;input.id='extra-'+field.name;input.name=field.name;input.autocomplete='off';if(options.length){const placeholder=new Option('Seleccione...', '');input.add(placeholder);options.forEach(option=>input.add(new Option(option.nombre, option.id)));}input.value=extra[field.name]??'';extraFields.append(labelNode,input);});}if(isModel){const filter=panel.querySelector('.brand-filter');modalBrand.innerHTML=filter.innerHTML;modalBrand.value=rowButton?.dataset.brand||'';modalDescription.value=rowButton?.dataset.description||'';modalDescription.placeholder='Descripción opcional...';}if(fields.some(field=>field.name==='id_estado') && (mode==='add' || extra.id_estado!==undefined)){estadoField.classList.remove('hidden');modalEstado.checked=mode==='add' || extra.id_estado==1 || extra.id_estado==='1';}document.getElementById('modal-title').textContent=(mode==='add'?'Agregar':'Editar')+' — '+label;document.getElementById('modal-label').innerHTML=(label==='Años'?'Año':panel.dataset.nameLabel||'Nombre')+' <em>*</em>';document.getElementById('modal-submit').textContent=mode==='add'?'Agregar':'Guardar cambios';modal.classList.remove('hidden');nameInput.focus()}
         document.querySelectorAll('.add-catalog').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'add')));
         document.querySelectorAll('.edit-row').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'edit',button)));
         document.querySelectorAll('.search input').forEach(input=>input.addEventListener('input',()=>input.closest('.catalog-table').querySelectorAll('tbody tr[data-search]').forEach(row=>row.classList.toggle('hidden',!row.dataset.search.includes(input.value.toLowerCase())))));
         document.querySelectorAll('.brand-filter').forEach(filter=>filter.addEventListener('change',()=>filter.closest('.catalog-table').querySelectorAll('tbody tr[data-brand]').forEach(row=>row.classList.toggle('hidden',Boolean(filter.value)&&row.dataset.brand!==filter.value))));
-        const confirmModal=document.getElementById('confirm-modal'),closeConfirm=()=>confirmModal.classList.add('hidden');document.querySelectorAll('.close-confirm,.cancel-confirm').forEach(x=>x.addEventListener('click',closeConfirm));document.querySelectorAll('.delete-row').forEach(button=>button.addEventListener('click',()=>{document.getElementById('delete-form').action=button.closest('.catalog-table').dataset.url;document.getElementById('delete-id').value=button.dataset.id;document.getElementById('delete-name').textContent=button.dataset.name;confirmModal.classList.remove('hidden')}));
-        document.querySelectorAll('.clear-button,.backup-download,.backup-upload,#reset-database').forEach(button=>button.addEventListener('click',()=>alert('Esta acción requiere una confirmación y respaldo. La operación se habilitará cuando se configure el proceso de copias de seguridad.')));
+        
+        document.querySelectorAll('.clear-button,#reset-database').forEach(button=>button.addEventListener('click',()=>alert('Esta acción requiere una confirmación y respaldo. La operación se habilitará cuando se configure el proceso de limpieza.')));
+
+        document.querySelector('.backup-download').addEventListener('click', async () => {
+            const btn = document.querySelector('.backup-download');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando backup...';
+            try {
+                const response = await fetch('{{ url_for("mantenimiento_backup_descargar") }}');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const disposition = response.headers.get('Content-Disposition');
+                    let filename = `backup_importadora_morales_${new Date().toISOString().slice(0,10)}.json`;
+                    if (disposition) {
+                        const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                        if (match) filename = match[1].replace(/['"]/g, '');
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'No se pudo crear el backup'));
+                }
+            } catch (e) {
+                alert('Error de conexión: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-download"></i> Descargar Backup';
+            }
+        });
+
+        document.querySelector('.backup-upload').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (!confirm('¿Está seguro de restaurar el backup? Esto reemplazará todos los datos actuales. Se recomienda hacer un backup antes.')) {
+                    return;
+                }
+
+                const btn = document.querySelector('.backup-upload');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Restaurando...';
+
+                const formData = new FormData();
+                formData.append('archivo', file);
+
+                try {
+                    const response = await fetch('{{ url_for("mantenimiento_backup_restaurar") }}', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert('Backup restaurado correctamente. La página se recargará.');
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + (data.error || 'No se pudo restaurar el backup'));
+                    }
+                } catch (e) {
+                    alert('Error de conexión: ' + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-upload"></i> Seleccionar Archivo';
+                }
+            };
+            input.click();
+        });
         document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeConfirm()}});
+        if ({{ 'true' if initial_view == 'audit' else 'false' }}) loadAuditRecords();
+
+        // DateTime display
+        function updateDateTime() {
+            const now = new Date();
+            const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+            const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+            const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+            const el = document.getElementById('datetime-display');
+            if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+        }
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
+
+        // Session auto-refresh on tab visibility change
+        (function() {
+            const KEEP_ALIVE_INTERVAL = 30000;
+            let keepAliveTimer = null;
+
+            function pingKeepAlive() {
+                fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'expired') {
+                            window.location.href = '{{ url_for("login") }}';
+                        }
+                    })
+                    .catch(() => {
+                        window.location.href = '{{ url_for("login") }}';
+                    });
+            }
+
+            function startKeepAlive() {
+                if (keepAliveTimer) return;
+                keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+            }
+
+            function stopKeepAlive() {
+                if (keepAliveTimer) {
+                    clearInterval(keepAliveTimer);
+                    keepAliveTimer = null;
+                }
+            }
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopKeepAlive();
+                } else {
+                    // Tab became visible - immediately check session
+                    pingKeepAlive();
+                    startKeepAlive();
+                }
+            });
+
+            startKeepAlive();
+            window.addEventListener('beforeunload', stopKeepAlive);
+        })();
     </script>
+    <script src="{{ url_for('static', filename='pagination.js') }}" defer></script>
 </body>
 </html>

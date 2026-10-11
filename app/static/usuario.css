@@ -6,6 +6,80 @@ html {
     scroll-behavior: smooth;
 }
 
+/* Resumen de permisos dentro del formulario de usuario. */
+.permissions-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin: 16px 0 20px;
+    padding: 14px;
+    border: 1px solid #dbe5f2;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #172b4d;
+}
+
+.permissions-box > strong {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.permissions-box > span {
+    color: #64748b;
+    font-size: 0.875rem;
+}
+
+.permissions-box .permisos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.permissions-box .permiso-badge {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 10px;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #94a3b8;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.permissions-box .permiso-modulo,
+.permissions-box .permiso-nivel {
+    display: block;
+    line-height: 1.3;
+}
+
+.permissions-box .permiso-modulo {
+    color: #334155;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.permissions-box .permiso-nivel {
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+}
+
+.permissions-box .perm-write { border-left-color: #10b981; }
+.permissions-box .perm-write .permiso-nivel { color: #047857; }
+.permissions-box .perm-read { border-left-color: #f59e0b; }
+.permissions-box .perm-read .permiso-nivel { color: #b45309; }
+.permissions-box .perm-none { border-left-color: #cbd5e1; }
+
+@media (max-width: 640px) {
+    .permissions-box { padding: 11px; }
+    .permissions-box .permisos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 body {
     font-family: 'Inter', sans-serif;
 }

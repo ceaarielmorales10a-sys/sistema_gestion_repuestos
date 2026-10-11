@@ -1,0 +1,649 @@
+/* =========================================================
+   RESPONSIVE GLOBAL - Funciona en todo el sistema
+   ========================================================= */
+
+/* ----- VISTA DE TARJETAS PARA TABLAS EN MÓVIL ----- */
+@media (max-width: 767px) {
+  /* Contenedor de tabla */
+  .table-wrap,
+  .report-table-wrap,
+  .disassembly-table-wrap,
+  .preview-table-wrap,
+  [class*="overflow-x-auto"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Transformar tabla en tarjetas */
+  .card > table,
+  table[data-pagination-page-size] {
+    display: block;
+    min-width: 0;
+  }
+
+  .card > table > thead,
+  table[data-pagination-page-size] > thead {
+    display: none !important;
+  }
+
+  .card > table > tbody,
+  .card > table > tbody > tr,
+  table[data-pagination-page-size] > tbody,
+  table[data-pagination-page-size] > tbody > tr {
+    display: block;
+  }
+
+  .card > table > tbody > tr:not(.empty):not(.detail):not(.detail-row),
+  table[data-pagination-page-size] > tbody > tr:not(.empty):not(.detail):not(.detail-row) {
+    margin: 0;
+    border-bottom: 1px solid var(--line, #e5e9ef);
+    padding: 12px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .card > table > tbody > tr:not(.empty):not(.detail):not(.detail-row) > td,
+  table[data-pagination-page-size] > tbody > tr:not(.empty):not(.detail):not(.detail-row) > td {
+    height: auto;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    white-space: normal;
+    text-align: right;
+    border: none;
+  }
+
+  .card > table > tbody > tr:not(.empty):not(.detail):not(.detail-row) > td::before,
+  table[data-pagination-page-size] > tbody > tr:not(.empty):not(.detail):not(.detail-row) > td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: #6f8199;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-align: left;
+    min-width: 80px;
+  }
+
+  /* Celdas especiales que no necesitan label */
+  .card > table > tbody > tr > td.client,
+  .card > table > tbody > tr > td.product,
+  .card > table > tbody > tr > td.reference,
+  .card > table > tbody > tr > td.sale-reference,
+  .card > table > tbody > tr > td.sale-index,
+  .card > table > tbody > tr > td.product-name,
+  .card > table > tbody > tr > td[class*="name"],
+  .card > table > tbody > tr > td[class*="reference"],
+  .card > table > tbody > tr > td[class*="index"],
+  table[data-pagination-page-size] > tbody > tr > td.client,
+  table[data-pagination-page-size] > tbody > tr > td.product,
+  table[data-pagination-page-size] > tbody > tr > td.reference,
+  table[data-pagination-page-size] > tbody > tr > td.sale-reference,
+  table[data-pagination-page-size] > tbody > tr > td.sale-index,
+  table[data-pagination-page-size] > tbody > tr > td.product-name,
+  table[data-pagination-page-size] > tbody > tr > td[class*="name"],
+  table[data-pagination-page-size] > tbody > tr > td[class*="reference"],
+  table[data-pagination-page-size] > tbody > tr > td[class*="index"] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .card > table > tbody > tr > td.client::before,
+  .card > table > tbody > tr > td.product::before,
+  .card > table > tbody > tr > td.reference::before,
+  .card > table > tbody > tr > td.sale-reference::before,
+  .card > table > tbody > tr > td.sale-index::before,
+  .card > table > tbody > tr > td.product-name::before,
+  .card > table > tbody > tr > td[class*="name"]::before,
+  .card > table > tbody > tr > td[class*="reference"]::before,
+  .card > table > tbody > tr > td[class*="index"]::before,
+  table[data-pagination-page-size] > tbody > tr > td.client::before,
+  table[data-pagination-page-size] > tbody > tr > td.product::before,
+  table[data-pagination-page-size] > tbody > tr > td.reference::before,
+  table[data-pagination-page-size] > tbody > tr > td.sale-reference::before,
+  table[data-pagination-page-size] > tbody > tr > td.sale-index::before,
+  table[data-pagination-page-size] > tbody > tr > td.product-name::before,
+  table[data-pagination-page-size] > tbody > tr > td[class*="name"]::before,
+  table[data-pagination-page-size] > tbody > tr > td[class*="reference"]::before,
+  table[data-pagination-page-size] > tbody > tr > td[class*="index"]::before {
+    display: none;
+  }
+
+  .card > table > tbody > tr > td.actions,
+  .card > table > tbody > tr > td.acciones,
+  table[data-pagination-page-size] > tbody > tr > td.actions,
+  table[data-pagination-page-size] > tbody > tr > td.acciones {
+    justify-content: flex-end;
+  }
+
+  .card > table > tbody > tr > td.actions::before,
+  .card > table > tbody > tr > td.acciones::before,
+  table[data-pagination-page-size] > tbody > tr > td.actions::before,
+  table[data-pagination-page-size] > tbody > tr > td.acciones::before {
+    margin-right: auto;
+  }
+
+  /* Filas de detalle expandibles */
+  .card > table > tbody > tr.detail,
+  .card > table > tbody > tr.detail-row,
+  table[data-pagination-page-size] > tbody > tr.detail,
+  table[data-pagination-page-size] > tbody > tr.detail-row {
+    padding: 0 12px 12px;
+    border-bottom: 1px solid var(--line, #e5e9ef);
+    border-radius: 0 0 8px 8px;
+    background: #f8fafc;
+    box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.03);
+  }
+
+  .card > table > tbody > tr.detail > td,
+  .card > table > tbody > tr.detail-row > td,
+  table[data-pagination-page-size] > tbody > tr.detail > td,
+  table[data-pagination-page-size] > tbody > tr.detail-row > td {
+    display: block;
+    padding: 0;
+  }
+
+  .card > table > tbody > tr.detail > td > div,
+  .card > table > tbody > tr.detail-row > td > div,
+  table[data-pagination-page-size] > tbody > tr.detail > td > div,
+  table[data-pagination-page-size] > tbody > tr.detail-row > td > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 24px;
+  }
+
+  .card > table > tbody > tr.detail > td > div > div,
+  .card > table > tbody > tr.detail-row > td > div > div,
+  table[data-pagination-page-size] > tbody > tr.detail > td > div > div,
+  table[data-pagination-page-size] > tbody > tr.detail-row > td > div > div {
+    min-width: 0;
+  }
+
+  .card > table > tbody > tr.empty,
+  table[data-pagination-page-size] > tbody > tr.empty {
+    display: table-row;
+  }
+
+  .card > table > tbody > tr.empty > td,
+  table[data-pagination-page-size] > tbody > tr.empty > td {
+    display: table-cell;
+    padding: 24px;
+    text-align: center;
+  }
+
+  /* Tablas dentro de filas de detalle (items de venta) */
+  .card > table > tbody > tr.detail .items,
+  table[data-pagination-page-size] > tbody > tr.detail .items {
+    display: table;
+    width: 100%;
+    min-width: 480px;
+  }
+
+  .card > table > tbody > tr.detail .items thead,
+  table[data-pagination-page-size] > tbody > tr.detail .items thead {
+    display: table-header-group;
+  }
+
+  .card > table > tbody > tr.detail .items tbody,
+  table[data-pagination-page-size] > tbody > tr.detail .items tbody {
+    display: table-row-group;
+  }
+
+  .card > table > tbody > tr.detail .items tr,
+  table[data-pagination-page-size] > tbody > tr.detail .items tr {
+    display: table-row;
+  }
+
+  .card > table > tbody > tr.detail .items th,
+  .card > table > tbody > tr.detail .items td,
+  table[data-pagination-page-size] > tbody > tr.detail .items th,
+  table[data-pagination-page-size] > tbody > tr.detail .items td {
+    display: table-cell;
+    padding: 8px 5px;
+    font-size: 11px;
+  }
+
+  /* Grid de estadísticas */
+  .stats-row,
+  .summary,
+  .loan-summary,
+  .report-metrics,
+  .report-summary,
+  .disassembly-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Filtros y controles */
+  .sales-report-filters,
+  .report-filters,
+  .disassembly-filters,
+  .report-controls-row,
+  .loan-filters,
+  .inventory-tabs {
+    display: grid;
+    grid-template-columns: 1fr !important;
+  }
+
+  .filter-actions,
+  .report-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-actions button,
+  .report-actions button,
+  .filter-actions a,
+  .report-actions a {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Tabs */
+  .tabs,
+  .inventory-tabs,
+  .audit-module-tabs {
+    display: flex;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .tabs button,
+  .inventory-tab,
+  .audit-module-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+
+  /* Botones */
+  .primary-btn,
+  .secondary-btn,
+  .primary,
+  .new-sale,
+  .new-vehicle-button,
+  .new-return {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .primary-btn.small,
+  .secondary-btn.small,
+  button.small {
+    width: auto;
+    min-width: 80px;
+  }
+
+  /* Modal responsive */
+  .modal,
+  .modal-box,
+  .disassembly-modal,
+  .disassembly-vehicle-modal,
+  .modal-backdrop > .modal {
+    width: calc(100% - 24px) !important;
+    max-width: calc(100% - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    margin: 12px !important;
+    border-radius: 12px !important;
+    overflow-y: auto;
+  }
+
+  .modal-backdrop {
+    padding: 12px !important;
+    align-items: flex-start !important;
+  }
+
+  .modal-backdrop .modal {
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+
+  /* Formularios en modal */
+  .modal-box label,
+  .modal-box .form-section,
+  .disassembly-modal label,
+  .vehicle-form-field {
+    width: 100%;
+  }
+
+  .modal-box input,
+  .modal-box select,
+  .modal-box textarea,
+  .disassembly-modal input,
+  .disassembly-modal select,
+  .vehicle-form-field input,
+  .vehicle-form-field select {
+    width: 100% !important;
+    min-height: 44px;
+    font-size: 16px !important; /* Evita zoom en iOS */
+  }
+
+  .modal-box .wide,
+  .modal-box .input-icon {
+    width: 100%;
+  }
+
+  /* Acciones del modal */
+  .modal-actions,
+  .vehicle-modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions button,
+  .vehicle-modal-actions button {
+    width: 100%;
+  }
+
+  /* Header del modal */
+  .disassembly-modal header,
+  .vehicle-modal-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* Búsqueda */
+  .search,
+  .loan-filters .search-wrap {
+    width: 100%;
+  }
+
+  .search input,
+  .loan-filters .search-wrap input {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Main content padding */
+  main,
+  .disassembly-main {
+    padding: 16px !important;
+  }
+
+  /* Sidebar ya manejado por sidebar-mobile.css */
+
+  /* Grid de detalles */
+  .inventory-detail-grid,
+  .detail .info {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px;
+  }
+
+  .detail .info strong {
+    font-size: 13px;
+  }
+
+  .detail .items {
+    width: 100%;
+    margin: 0;
+    min-width: 480px;
+  }
+
+  .detail {
+    overflow-x: auto;
+  }
+
+  /* Footer paginación */
+  footer,
+  .table-pagination,
+  .catalog-pagination {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  footer > div,
+  .table-pagination > div,
+  .catalog-pagination > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  footer a,
+  .table-pagination a,
+  .table-pagination button,
+  .catalog-pagination a {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* Resumen de tarjetas */
+  .summary article,
+  .loan-summary article,
+  .stat-box,
+  .summary-card,
+  .metric {
+    width: 100%;
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .summary-card strong,
+  .stat-value,
+  .loan-summary article b,
+  .metric b {
+    font-size: 20px;
+  }
+
+  /* Flash notifications */
+  .flash,
+  .disassembly-flash {
+    position: fixed;
+    top: 70px;
+    left: 12px;
+    right: 12px;
+    max-width: calc(100% - 24px);
+    z-index: 100;
+  }
+
+  /* Badges y pills */
+  .pill,
+  .sale-status,
+  .client-status,
+  .state-badge,
+  .loan-overdue-badge,
+  .inventory-status-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  /* Inputs y selects generales */
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Botones de acción en tabla */
+  table button,
+  .table-wrap button {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+
+  /* Acciones agrupadas */
+  .flex.justify-center.gap-3,
+  .vehicle-row-actions {
+    gap: 8px;
+  }
+
+  .vehicle-edit-button,
+  .vehicle-delete-button,
+  .vehicle-detail-button,
+  .detail-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Tablas de reporte */
+  .report-preview table,
+  .report-preview th,
+  .report-preview td {
+    min-width: auto;
+  }
+
+  .report-table-wrap {
+    overflow-x: auto;
+  }
+}
+
+/* ----- TABLET (768px - 1023px) ----- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  main,
+  .disassembly-main {
+    padding: 20px;
+  }
+
+  .stats-row,
+  .summary,
+  .loan-summary,
+  .report-metrics,
+  .report-summary,
+  .disassembly-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sales-report-filters,
+  .report-filters,
+  .disassembly-filters {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .modal,
+  .modal-box,
+  .disassembly-modal {
+    width: 90%;
+    max-width: 600px;
+  }
+}
+
+/* ----- ESCRITORIO GRANDE (1024px+) ----- */
+@media (min-width: 1024px) {
+  .modal,
+  .modal-box,
+  .disassembly-modal {
+    max-width: 630px;
+  }
+
+  .disassembly-vehicle-modal {
+    max-width: 630px;
+  }
+}
+
+/* ----- UTILIDADES ----- */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Touch targets mínimos */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  a[role="button"],
+  .toggle,
+  .icon,
+  .table-pagination button,
+  .table-pagination a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Safe area para iPhone X+ */
+@supports (padding: max(0px)) {
+  @media (max-width: 767px) {
+    .modal-backdrop {
+      padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    }
+
+    main,
+    .disassembly-main {
+      padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+    }
+
+    .session-panel a {
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* Impresión */
+@media print {
+  .sidebar,
+  #sidebar,
+  .mobile-menu-trigger,
+  #mobile-sidebar-overlay,
+  .table-pagination,
+  .catalog-pagination,
+  footer,
+  .flash,
+  .disassembly-flash,
+  .modal-backdrop,
+  button,
+  .primary-btn,
+  .secondary-btn {
+    display: none !important;
+  }
+
+  main,
+  .disassembly-main {
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .card > table,
+  table[data-pagination-page-size] {
+    display: table !important;
+  }
+
+  .card > table > thead,
+  table[data-pagination-page-size] > thead {
+    display: table-header-group !important;
+  }
+
+  .card > table > tbody > tr,
+  table[data-pagination-page-size] > tbody > tr {
+    display: table-row !important;
+  }
+
+  .card > table > tbody > tr > td,
+  table[data-pagination-page-size] > tbody > tr > td {
+    display: table-cell !important;
+    border: 1px solid #ddd !important;
+  }
+
+  .card > table > tbody > tr > td::before,
+  table[data-pagination-page-size] > tbody > tr > td::before {
+    content: none !important;
+  }
+}

@@ -1,20 +1,33 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Préstamos - Importadora Morales</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='devoluciones.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='prestamos.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='nueva_venta.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
-<body class="module-theme prestamos-page">
-  <aside class="sidebar">
-    <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
-    <nav aria-label="Navegación principal">
+<body class="module-theme prestamos-page bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased">
+  <div class="md:hidden fixed top-4 left-4 z-40">
+    <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+      <i class="fa-solid fa-bars text-lg" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+
+  <aside id="sidebar" class="sidebar fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:h-auto md:max-h-none md:min-h-screen md:self-stretch bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+    <div>
+      <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
+      <nav aria-label="Navegación principal">
       <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
       {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
       {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
@@ -25,9 +38,10 @@
       {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side" aria-hidden="true"></i> Desarme de Vehículos</a>{% endif %}
       {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users" aria-hidden="true"></i> Usuarios</a>{% endif %}
       {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears" aria-hidden="true"></i> Mantenimiento</a>{% endif %}
-    </nav>
+      </nav>
+    </div>
     <div class="session-panel">
-      <small>SESIÓN ACTIVA</small>
+      <small>Sesión activa</small>
       <strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong>
       <span>{{ session.get('role', 'ADMINISTRADOR') }}</span>
       <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Cerrar Sesión</a>
@@ -37,6 +51,7 @@
   <main>
     <header>
       <div><h1>Préstamos de Repuestos</h1><p>Control de repuestos entregados en préstamo</p></div>
+      <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
       {% if has_permission('prestamos', 'write') %}<button class="new-return" type="button" id="open-loan"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo Préstamo</button>{% endif %}
     </header>
 
@@ -70,40 +85,49 @@
 
       <section class="card" aria-label="Listado de préstamos">
         <div class="table-wrap">
-          <table>
-            <thead><tr><th scope="col">CÓDIGO</th><th scope="col">REPUESTO</th><th scope="col">CLIENTE</th><th scope="col">CANT.</th><th scope="col">PRECIO UNIT.</th><th scope="col">F. PRÉSTAMO</th><th scope="col">F. DEVOLUCIÓN EST.</th><th scope="col">REGISTRADO POR</th><th scope="col">ESTADO</th><th scope="col">ACCIONES</th></tr></thead>
+          <table data-pagination-page-size="10">
+            <thead><tr><th scope="col">PRÉSTAMO</th><th scope="col">REPUESTOS</th><th scope="col">CLIENTE</th><th scope="col">CANT.</th><th scope="col">PRECIO TOTAL</th><th scope="col">F. PRÉSTAMO</th><th scope="col">F. DEVOLUCIÓN EST.</th><th scope="col">REGISTRADO POR</th><th scope="col">ESTADO</th><th scope="col">ACCIONES</th></tr></thead>
             <tbody>
               {% for loan in prestamos %}
-                {% set item_count = loan['items']|length %}
-                {% for item in loan['items'] %}
-                  <tr class="loan-row{% if not loop.first %} loan-row-continuation{% endif %}" data-state="{{ loan.estado|lower }}" data-search="{{ item.codigo }} {{ item.nombre }} {{ loan.cliente }} {{ loan.usuario }}" data-loan-id="{{ loan.id_prestamo }}">
-                    {% if loop.first %}
-                      <td data-label="Código" rowspan="{{ item_count }}">{{ item.codigo }}</td>
-                      <td class="product" data-label="Repuesto" rowspan="{{ item_count }}">{{ item.nombre }}</td>
-                      <td data-label="Cliente" rowspan="{{ item_count }}">{{ loan.cliente }}</td>
-                      <td data-label="Cant.">{{ item.cantidad }}</td>
-                      <td data-label="Precio unit.">Q {{ '{:,.2f}'.format(item.precio or 0) }}</td>
-                      <td data-label="F. Préstamo" rowspan="{{ item_count }}">{{ loan.fecha_prestamo.strftime('%d/%m/%Y') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo or '—' }}</td>
-                      <td data-label="F. Devolución est." rowspan="{{ item_count }}">{{ loan.fecha_devolucion_estimada.strftime('%d/%m/%Y') if loan.fecha_devolucion_estimada and loan.fecha_devolucion_estimada.strftime else loan.fecha_devolucion_estimada or '—' }}</td>
-                      <td data-label="Registrado por" rowspan="{{ item_count }}">{{ loan.usuario }}</td>
-                      <td data-label="Estado" rowspan="{{ item_count }}"><span class="status status-{{ loan.estado|lower|replace(' ','-') }}">{{ loan.estado }}</span></td>
-                      <td class="actions" data-label="Acciones" rowspan="{{ item_count }}">
-                        {% if has_permission('prestamos', 'write') and loan.estado|lower in ('activo', 'vencido') %}
-                          <form method="post" action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}" onsubmit="return confirm('¿Confirmas que el préstamo fue devuelto? Se reintegrarán los repuestos al inventario.');">
-                            <input type="hidden" name="estado" value="devuelto">
-                            <button class="action-return" type="submit" title="Marcar préstamo como devuelto"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Devuelto</button>
-                          </form>
-                          <button class="action-paid" type="button" data-open-payment data-payment-action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}" data-payment-loan="P-{{ '%06d'|format(loan.id_prestamo|int) }}" data-payment-client="{{ loan.cliente }}" title="Registrar pago y crear venta"><i class="fa-solid fa-dollar-sign" aria-hidden="true"></i> Pagado</button>
-                        {% else %}
-                          <span class="done status-done-{{ loan.estado|lower|replace(' ','-') }}"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> {{ loan.estado }}</span>
-                        {% endif %}
-                      </td>
-                    {% else %}
-                      <td data-label="Cant.">{{ item.cantidad }}</td>
-                      <td data-label="Precio unit.">Q {{ '{:,.2f}'.format(item.precio or 0) }}</td>
+                {% set searchable_items = loan['items']|map(attribute='codigo')|join(' ') ~ ' ' ~ loan['items']|map(attribute='nombre')|join(' ') %}
+                <tr class="loan-row" data-state="{{ loan.estado|lower }}" data-search="{{ searchable_items }} {{ loan.cliente }} {{ loan.usuario }}" data-loan-id="{{ loan.id_prestamo }}">
+                  <td data-label="Préstamo">P-{{ '%06d'|format(loan.id_prestamo|int) }}</td>
+                  <td class="product" data-label="Repuestos">
+                    {% if loan['items'] %}
+                      <strong>{{ loan['items'][0].nombre }}</strong>
+                      {% if loan['items']|length > 1 %}<small>y {{ loan['items']|length - 1 }} repuesto(s) más</small>{% endif %}
+                    {% else %}Sin repuestos{% endif %}
+                  </td>
+                  <td data-label="Cliente">{{ loan.cliente }}</td>
+                  <td data-label="Cant.">{{ loan.unidades }}</td>
+                  <td data-label="Precio total">Q {{ '{:,.2f}'.format(loan.total or 0) }}</td>
+                  <td data-label="F. Préstamo">{{ loan.fecha_prestamo.strftime('%d/%m/%Y') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo or '—' }}</td>
+                  <td data-label="F. Devolución est.">{{ loan.fecha_devolucion_estimada.strftime('%d/%m/%Y') if loan.fecha_devolucion_estimada and loan.fecha_devolucion_estimada.strftime else loan.fecha_devolucion_estimada or '—' }}</td>
+                  <td data-label="Registrado por">{{ loan.usuario }}</td>
+                  <td data-label="Estado"><span class="status status-{{ loan.estado|lower|replace(' ','-') }}">{{ loan.estado }}</span></td>
+                  <td class="actions" data-label="Acciones">
+                    <button class="action-view-loan" type="button" data-open-loan-detail data-loan-detail="{{ {
+                      'id_prestamo': loan.id_prestamo,
+                      'cliente': loan.cliente,
+                      'usuario': loan.usuario,
+                      'estado': loan.estado,
+                      'fecha_prestamo': loan.fecha_prestamo.strftime('%Y-%m-%d') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo|string,
+                      'fecha_devolucion_estimada': loan.fecha_devolucion_estimada.strftime('%Y-%m-%d') if loan.fecha_devolucion_estimada and loan.fecha_devolucion_estimada.strftime else loan.fecha_devolucion_estimada|string,
+                      'observaciones': loan.observaciones or '',
+                      'total': loan.total,
+                      'unidades': loan.unidades,
+                      'items': loan['items']
+                    }|tojson|forceescape }}" title="Ver detalles del préstamo" aria-label="Ver detalles del préstamo P-{{ '%06d'|format(loan.id_prestamo|int) }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+                    {% set loan_status_label = loan.estado|lower %}
+                    {% if has_permission('prestamos', 'write') and ('activo' in loan_status_label or 'pendiente' in loan_status_label or 'vencido' in loan_status_label) and 'devuelto' not in loan_status_label and 'pagado' not in loan_status_label and 'transfe' not in loan_status_label %}
+                      <form method="post" action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}" onsubmit="return confirm('¿Confirmas que el préstamo fue devuelto? Se reintegrarán los repuestos al inventario.');">
+                        <input type="hidden" name="estado" value="devuelto">
+                        <button class="action-return" type="submit" title="Marcar préstamo como devuelto"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Devuelto</button>
+                      </form>
+                      <button class="action-paid" type="button" data-open-payment data-payment-action="{{ url_for('actualizar_estado_prestamo', id_prestamo=loan.id_prestamo) }}" data-payment-loan="P-{{ '%06d'|format(loan.id_prestamo|int) }}" data-payment-client="{{ loan.cliente }}" title="Registrar pago y crear venta"><i class="fa-solid fa-dollar-sign" aria-hidden="true"></i> Pagado</button>
                     {% endif %}
-                  </tr>
-                {% endfor %}
+                  </td>
+                </tr>
               {% else %}
                 <tr><td colspan="10" class="empty">No hay préstamos registrados.</td></tr>
               {% endfor %}
@@ -120,9 +144,15 @@
         <form id="loan-report-form" class="loan-report-filters" autocomplete="off">
           <label>Fecha Préstamo Desde<input type="date" name="from_date"></label>
           <label>Fecha Préstamo Hasta<input type="date" name="to_date"></label>
+          <label>Fecha Devolución Desde<input type="date" name="return_from"></label>
+          <label>Fecha Devolución Hasta<input type="date" name="return_to"></label>
           <label>Estado<select name="estado"><option value="">Todos los estados</option>{% for estado in estados %}<option value="{{ estado.nombre|lower }}">{{ estado.nombre }}</option>{% endfor %}</select></label>
           <label>Cliente<input type="search" name="cliente" placeholder="Buscar cliente..."></label>
+          <label>Vendedor<input type="search" name="vendedor" placeholder="Buscar vendedor..."></label>
           <label>Repuesto (nombre o código)<input type="search" name="repuesto" placeholder="Buscar repuesto..."></label>
+          <label>Método de Pago<select name="metodo_pago"><option value="">Todos</option>{% for metodo in metodos_pago %}<option value="{{ metodo.id }}">{{ metodo.nombre }}</option>{% endfor %}</select></label>
+          <label>Monto Mín<input type="number" step="0.01" name="min_total" placeholder="0.00"></label>
+          <label>Monto Máx<input type="number" step="0.01" name="max_total" placeholder="99999.99"></label>
           <div class="loan-report-actions"><button type="button" class="secondary" id="clear-loan-report">Limpiar filtros</button><a class="download" id="loan-report-download" href="{{ url_for('exportar_pdf_prestamos') }}"><i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir PDF (<span id="loan-report-count">0</span>)</a></div>
         </form>
       </div>
@@ -133,15 +163,16 @@
       </div>
       <section class="loan-report-preview">
         <div class="loan-report-preview-heading"><span>Vista previa del reporte</span><small><b id="loan-report-preview-count">0</b> registros</small></div>
-        <div class="table-wrap"><table><thead><tr><th scope="col">PRÉSTAMO</th><th scope="col">REPUESTO</th><th scope="col">CLIENTE</th><th scope="col">CANTIDAD</th><th scope="col">TOTAL (Q)</th><th scope="col">F. PRÉSTAMO</th><th scope="col">F. DEVOLUCIÓN</th><th scope="col">ESTADO</th></tr></thead><tbody id="loan-report-body">
+        <div class="table-wrap"><table data-pagination-page-size="10" data-pagination-group-key="loanId"><thead><tr><th scope="col">PRÉSTAMO</th><th scope="col">REPUESTO</th><th scope="col">CLIENTE</th><th scope="col">VENDEDOR</th><th scope="col">CANTIDAD</th><th scope="col">TOTAL (Q)</th><th scope="col">F. PRÉSTAMO</th><th scope="col">F. DEVOLUCIÓN</th><th scope="col">ESTADO</th></tr></thead><tbody id="loan-report-body">
           {% for loan in prestamos %}
             {% set item_count = loan['items']|length %}
             {% for item in loan['items'] %}
-              <tr class="loan-report-row{% if not loop.first %} loan-report-row-continuation{% endif %}" data-date="{{ loan.fecha_prestamo }}" data-state="{{ loan.estado|lower }}" data-client="{{ loan.cliente|lower }}" data-repuesto="{{ (item.nombre ~ ' ' ~ item.codigo)|lower }}" data-total="{{ (item.precio or 0) * (item.cantidad or 0) }}">
+              <tr class="loan-report-row{% if not loop.first %} loan-report-row-continuation{% endif %}" data-loan-id="{{ loan.id_prestamo }}" data-date="{{ loan.fecha_prestamo }}" data-return-date="{{ loan.fecha_devolucion_estimada }}" data-state="{{ loan.estado|lower }}" data-client="{{ loan.cliente|lower }}" data-vendedor="{{ loan.vendedor|lower }}" data-repuesto="{{ (item.nombre ~ ' ' ~ item.codigo)|lower }}" data-total="{{ (item.precio or 0) * (item.cantidad or 0) }}">
                 {% if loop.first %}
                   <td rowspan="{{ item_count }}">P-{{ '%06d'|format(loan.id_prestamo|int) }}</td>
                   <td rowspan="{{ item_count }}">{{ item.nombre }} · {{ item.codigo }}</td>
                   <td rowspan="{{ item_count }}">{{ loan.cliente }}</td>
+                  <td rowspan="{{ item_count }}">{{ loan.vendedor }}</td>
                   <td>{{ item.cantidad }}</td>
                   <td>Q {{ '{:,.2f}'.format((item.precio or 0) * (item.cantidad or 0)) }}</td>
                   <td rowspan="{{ item_count }}">{{ loan.fecha_prestamo.strftime('%d/%m/%Y') if loan.fecha_prestamo and loan.fecha_prestamo.strftime else loan.fecha_prestamo or '—' }}</td>
@@ -157,6 +188,42 @@
       </section>
     </section>
   </main>
+
+  <div class="modal-backdrop detail-modal-backdrop loan-detail-backdrop" id="loan-detail-modal" hidden>
+    <section class="modal detail-modal loan-detail-modal" role="dialog" aria-modal="true" aria-labelledby="loan-detail-title" aria-describedby="loan-detail-date">
+      <header class="detail-modal-head">
+        <div class="detail-modal-heading">
+          <span class="detail-modal-icon"><i class="fa-solid fa-handshake" aria-hidden="true"></i></span>
+          <div><h2 id="loan-detail-title">Detalle del Préstamo</h2><small id="loan-detail-number"></small></div>
+        </div>
+        <button class="detail-modal-close" type="button" data-close-loan-detail aria-label="Cerrar detalle"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <div class="detail-modal-content">
+        <div class="detail-modal-date" id="loan-detail-date"><i class="fa-regular fa-clock" aria-hidden="true"></i><span></span></div>
+        <section class="detail-info-card detail-sale-card" aria-labelledby="loan-detail-info-heading">
+          <h3 id="loan-detail-info-heading"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Información del préstamo</h3>
+          <dl>
+            <div><dt>Préstamo</dt><dd id="loan-detail-reference"></dd></div>
+            <div><dt>Cliente</dt><dd id="loan-detail-client"></dd></div>
+            <div><dt>Registrado por</dt><dd id="loan-detail-user"></dd></div>
+            <div><dt>Estado</dt><dd id="loan-detail-status"></dd></div>
+            <div><dt>Devolución estimada</dt><dd id="loan-detail-return-date"></dd></div>
+          </dl>
+        </section>
+        <section class="detail-info-card detail-items-card" aria-labelledby="loan-detail-items-heading">
+          <h3 id="loan-detail-items-heading"><i class="fa-solid fa-cube" aria-hidden="true"></i> Repuestos prestados</h3>
+          <div class="detail-return-items-head" aria-hidden="true"><span>Repuesto</span><span>Cantidad</span><span>Precio unitario</span><span>Subtotal</span></div>
+          <div class="detail-return-items" id="loan-detail-items"></div>
+          <div class="detail-refund-total"><span>Precio total del préstamo</span><strong id="loan-detail-total"></strong></div>
+        </section>
+        <section class="detail-info-card detail-reason-card" aria-labelledby="loan-detail-notes-heading">
+          <h3 id="loan-detail-notes-heading"><i class="fa-regular fa-message" aria-hidden="true"></i> Observaciones</h3>
+          <dl><div><dt>Notas</dt><dd id="loan-detail-notes"></dd></div></dl>
+        </section>
+      </div>
+      <footer class="detail-modal-footer"><button type="button" class="detail-close-button" data-close-loan-detail>Cerrar</button></footer>
+    </section>
+  </div>
 
   {% if has_permission('prestamos', 'write') %}
     <div class="modal-backdrop" id="loan-payment-modal" hidden>
@@ -180,26 +247,127 @@
       </section>
     </div>
 
-    <div class="modal-backdrop" id="loan-modal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="new-loan-title">
-        <div class="modal-head"><div><h2 id="new-loan-title">Nuevo préstamo</h2><p>Selecciona el cliente y los repuestos que serán entregados.</p></div><button type="button" class="close" id="close-loan" aria-label="Cerrar formulario"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
-        <form method="post" action="{{ url_for('nuevo_prestamo') }}">
-          <div class="form-grid">
-            <label class="field">Cliente<select name="id_cliente" required><option value="">Selecciona un cliente...</option>{% for cliente in clientes %}<option value="{{ cliente.id }}">{{ cliente.nombre }}</option>{% endfor %}</select></label>
-            <label class="field">Devolución estimada<input type="date" name="fecha_devolucion" required></label>
-          </div>
-          <label class="field loan-notes">Observaciones<textarea name="observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea></label>
-          <div class="loan-items-head"><strong>Repuestos</strong><button type="button" class="secondary" id="add-loan-item"><i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar repuesto</button></div>
-          <div id="loan-items"><div class="loan-item"><select name="id_repuesto[]" aria-label="Repuesto" required><option value="">Selecciona un repuesto...</option>{% for repuesto in repuestos %}<option value="{{ repuesto.id }}" data-price="{{ repuesto.precio }}">{{ repuesto.codigo }} · {{ repuesto.nombre }} · Stock {{ repuesto.stock }}</option>{% endfor %}</select><input name="cantidad[]" type="number" min="1" value="1" aria-label="Cantidad" required><input name="precio[]" type="number" min="0" step="0.01" placeholder="Precio" aria-label="Precio unitario" required><button type="button" class="remove-item" title="Quitar repuesto" aria-label="Quitar repuesto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></div>
-          <div class="modal-actions"><button type="button" class="secondary" id="cancel-loan">Cancelar</button><button class="primary" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i> Registrar préstamo</button></div>
-        </form>
-      </div>
+    <div class="sale-modal-backdrop" id="loan-modal" hidden>
+      <form class="sale-form sale-modal-box loan-create-form" role="dialog" aria-modal="true" aria-labelledby="new-loan-title" method="post" action="{{ url_for('nuevo_prestamo') }}">
+        <header class="sale-form-header">
+          <div><h1 id="new-loan-title">Nuevo préstamo</h1><p>Selecciona el cliente y los repuestos que serán entregados.</p></div>
+          <button type="button" class="close-form" id="close-loan" aria-label="Cerrar formulario"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <section class="sale-fields loan-create-fields">
+          <label><span>Cliente <em>*</em></span><select name="id_cliente" required><option value="">Selecciona un cliente...</option>{% for cliente in clientes %}<option value="{{ cliente.id }}">{{ cliente.nombre }}</option>{% endfor %}</select></label>
+          <label><span>Devolución estimada <em>*</em></span><input type="date" name="fecha_devolucion" required></label>
+          <label class="observation-field"><span>Observaciones</span><textarea name="observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea></label>
+        </section>
+        <section class="items-section loan-create-items">
+          <div class="items-heading"><span>Repuestos</span><button type="button" id="add-loan-item"><i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar repuesto</button></div>
+          <div class="items-head"><span>REPUESTO</span><span>CANTIDAD</span><span>PRECIO UNITARIO</span><span></span></div>
+          <div id="loan-items"><div class="item-row loan-item"><select name="id_repuesto[]" aria-label="Repuesto" required><option value="">Selecciona un repuesto...</option>{% for repuesto in repuestos %}<option value="{{ repuesto.id }}" data-price="{{ repuesto.precio }}">{{ repuesto.codigo }} · {{ repuesto.nombre }} · Stock {{ repuesto.stock }}</option>{% endfor %}</select><input name="cantidad[]" type="number" min="1" value="1" aria-label="Cantidad" required><input name="precio[]" type="number" min="0" step="0.01" placeholder="Precio" aria-label="Precio unitario" required><button type="button" class="remove-item" title="Quitar repuesto" aria-label="Quitar repuesto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></div>
+        </section>
+        <footer class="sale-form-actions">
+          <button type="button" id="cancel-loan">Cancelar</button>
+          <button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i> Registrar préstamo</button>
+        </footer>
+      </form>
     </div>
   {% endif %}
 
   <script>
     const modal = document.getElementById('loan-modal');
     const items = document.getElementById('loan-items');
+    const loanDetailModal = document.getElementById('loan-detail-modal');
+    let lastLoanDetailTrigger = null;
+
+    const formatLoanCurrency = (value) => `Q ${Number(value || 0).toLocaleString('es-GT', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+    function formatLoanDate(value, includeTime = false) {
+      if (!value) return 'No registrada';
+      const date = new Date(`${value}${value.length === 10 ? 'T12:00:00' : ''}`);
+      if (Number.isNaN(date.getTime())) return value;
+      return new Intl.DateTimeFormat('es-GT', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+      }).format(date);
+    }
+
+    function openLoanDetail(button) {
+      let data;
+      try {
+        data = JSON.parse(button.dataset.loanDetail);
+      } catch (error) {
+        console.error('No fue posible cargar el detalle del préstamo.', error);
+        return;
+      }
+
+      lastLoanDetailTrigger = button;
+      const reference = `P-${String(data.id_prestamo).padStart(6, '0')}`;
+      document.getElementById('loan-detail-number').textContent = reference;
+      document.querySelector('#loan-detail-date span').textContent =
+        `Préstamo registrado el ${formatLoanDate(data.fecha_prestamo, true)}`;
+      document.getElementById('loan-detail-reference').textContent = reference;
+      document.getElementById('loan-detail-client').textContent =
+        data.cliente || 'Sin cliente frecuente';
+      document.getElementById('loan-detail-user').textContent = data.usuario || 'Sistema';
+      document.getElementById('loan-detail-status').textContent = data.estado || 'Sin estado';
+      document.getElementById('loan-detail-return-date').textContent =
+        formatLoanDate(data.fecha_devolucion_estimada);
+      document.getElementById('loan-detail-total').textContent = formatLoanCurrency(data.total);
+      document.getElementById('loan-detail-notes').textContent =
+        data.observaciones || 'Sin observaciones registradas';
+
+      const detailItems = document.getElementById('loan-detail-items');
+      detailItems.replaceChildren();
+      (Array.isArray(data.items) ? data.items : []).forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'detail-return-item';
+
+        const info = document.createElement('div');
+        info.className = 'detail-item-info';
+        const name = document.createElement('strong');
+        name.textContent = item.nombre || 'Repuesto';
+        const code = document.createElement('small');
+        code.textContent = item.codigo || 'Sin código';
+        info.append(name, code);
+
+        const quantity = document.createElement('span');
+        quantity.className = 'detail-item-value detail-item-quantity';
+        quantity.textContent = String(item.cantidad ?? '—');
+        const unitPrice = document.createElement('span');
+        unitPrice.className = 'detail-item-value detail-item-unit-price';
+        unitPrice.textContent = formatLoanCurrency(item.precio);
+        const subtotal = document.createElement('strong');
+        subtotal.className = 'detail-item-value detail-item-subtotal';
+        subtotal.textContent = formatLoanCurrency(Number(item.precio || 0) * Number(item.cantidad || 0));
+        row.append(info, quantity, unitPrice, subtotal);
+        detailItems.append(row);
+      });
+
+      loanDetailModal.hidden = false;
+      loanDetailModal.querySelector('[data-close-loan-detail]')?.focus();
+    }
+
+    function closeLoanDetail() {
+      if (!loanDetailModal || loanDetailModal.hidden) return;
+      loanDetailModal.hidden = true;
+      lastLoanDetailTrigger?.focus();
+    }
+
+    document.querySelectorAll('[data-open-loan-detail]').forEach((button) => {
+      button.addEventListener('click', () => openLoanDetail(button));
+    });
+    loanDetailModal?.querySelectorAll('[data-close-loan-detail]').forEach((button) => {
+      button.addEventListener('click', closeLoanDetail);
+    });
+    loanDetailModal?.addEventListener('click', (event) => {
+      if (event.target === loanDetailModal) closeLoanDetail();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeLoanDetail();
+    });
 
     function bindItem(row) {
       row.querySelector('select').addEventListener('change', (event) => {
@@ -299,17 +467,32 @@
       const values = Object.fromEntries(new FormData(loanReportForm).entries());
       const from = values.from_date || '';
       const to = values.to_date || '';
+      const returnFrom = values.return_from || '';
+      const returnTo = values.return_to || '';
       const state = (values.estado || '').toLowerCase();
       const client = (values.cliente || '').toLowerCase().trim();
+      const seller = (values.vendedor || '').toLowerCase().trim();
       const part = (values.repuesto || '').toLowerCase().trim();
+      const metodoPago = (values.metodo_pago || '').toLowerCase().trim();
+      const minTotal = parseFloat(values.min_total) || 0;
+      const maxTotal = parseFloat(values.max_total) || Infinity;
       let visible = 0;
       let active = 0;
       let total = 0;
       loanReportRows.forEach((row) => {
         const date = String(row.dataset.date || '').slice(0, 10);
-        const matches = (!from || date >= from) && (!to || date <= to) && (!state || row.dataset.state === state) && (!client || row.dataset.client.includes(client)) && (!part || row.dataset.repuesto.includes(part));
+        const returnDate = String(row.dataset.returnDate || '').slice(0, 10);
+        const rowTotal = Number(row.dataset.total || 0);
+        const matches = (!from || date >= from) && (!to || date <= to) &&
+          (!returnFrom || returnDate >= returnFrom) && (!returnTo || returnDate <= returnTo) &&
+          (!state || row.dataset.state === state) &&
+          (!client || row.dataset.client.includes(client)) &&
+          (!seller || row.dataset.vendedor.includes(seller)) &&
+          (!part || row.dataset.repuesto.includes(part)) &&
+          (!metodoPago || row.dataset.metodoPago === metodoPago) &&
+          (rowTotal >= minTotal) && (rowTotal <= maxTotal);
         row.hidden = !matches;
-        if (matches) { visible += 1; total += Number(row.dataset.total || 0); if (row.dataset.state === 'activo') active += 1; }
+        if (matches) { visible += 1; total += rowTotal; if (row.dataset.state === 'activo') active += 1; }
       });
       document.getElementById('loan-report-total').textContent = visible;
       document.getElementById('loan-report-count').textContent = visible;
@@ -323,6 +506,83 @@
     loanReportForm?.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', filterLoanReport));
     document.getElementById('clear-loan-report')?.addEventListener('click', () => { loanReportForm.reset(); filterLoanReport(); });
     filterLoanReport();
+
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const closeMobileSidebar = () => {
+      sidebar.classList.add('-translate-x-full');
+      sidebarOverlay.classList.add('hidden');
+      mobileMenuButton.setAttribute('aria-expanded', 'false');
+    };
+    mobileMenuButton?.addEventListener('click', () => {
+      const isOpen = !sidebar.classList.contains('-translate-x-full');
+      sidebar.classList.toggle('-translate-x-full', isOpen);
+      sidebarOverlay.classList.toggle('hidden', isOpen);
+      mobileMenuButton.setAttribute('aria-expanded', String(!isOpen));
+    });
+    sidebarOverlay?.addEventListener('click', closeMobileSidebar);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMobileSidebar();
+    });
+
+    // DateTime display
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+        const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+        const el = document.getElementById('datetime-display');
+        if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Session auto-refresh on tab visibility change
+    (function() {
+        const KEEP_ALIVE_INTERVAL = 30000;
+        let keepAliveTimer = null;
+
+        function pingKeepAlive() {
+            fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'expired') {
+                        window.location.href = '{{ url_for("login") }}';
+                    }
+                })
+                .catch(() => {
+                    window.location.href = '{{ url_for("login") }}';
+                });
+        }
+
+        function startKeepAlive() {
+            if (keepAliveTimer) return;
+            keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveTimer) {
+                clearInterval(keepAliveTimer);
+                keepAliveTimer = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopKeepAlive();
+            } else {
+                // Tab became visible - immediately check session
+                pingKeepAlive();
+                startKeepAlive();
+            }
+        });
+
+        startKeepAlive();
+        window.addEventListener('beforeunload', stopKeepAlive);
+    })();
   </script>
+  <script src="{{ url_for('static', filename='pagination.js') }}" defer></script>
 </body>
 </html>

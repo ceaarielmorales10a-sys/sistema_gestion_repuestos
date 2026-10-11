@@ -6,10 +6,14 @@
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
 <script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='ventas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='nueva_venta.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='ventas-tabla.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='ventas-responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ventas-report.css') }}">
 </head>
 <body class="module-theme">
 <aside class="sidebar"><div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div><nav>
@@ -19,26 +23,40 @@
 {% if has_permission('ventas', 'read') %}<a class="active" href="/ventas"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
 {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
 {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
-{% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
+{% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}{% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
 </nav><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
 <main>
-<header><div><h1>Ventas</h1><p>Registro de ventas con múltiples repuestos</p></div><a href="/ventas/nueva" class="new-sale"><i class="fa-solid fa-plus"></i> Nueva Venta</a></header>
-<section class="summary"><article class="income"><span>Ingresos Totales</span><b>Q {{ '{:,.2f}'.format(ingresos_totales or 0) }}</b></article><article class="today"><span>Ventas Hoy</span><b>{{ ventas_hoy }}</b></article><article class="transactions"><span>Transacciones</span><b>{{ total_transacciones }}</b></article></section>
+<header><div><h1>Ventas</h1><p>Registro de ventas con múltiples repuestos</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div><a href="/ventas/nueva" class="new-sale"><i class="fa-solid fa-plus"></i> Nueva Venta</a></header>
+<section class="summary"><article class="income"><span>Ingresos Totales</span><b>Q {{ '{:,.2f}'.format(ingresos_totales or 0) }}</b></article><article class="today"><span>Ventas Hoy</span><b>Q {{ '{:,.2f}'.format(ventas_hoy or 0) }}</b></article><article class="transactions"><span>Transacciones</span><b>{{ total_transacciones }}</b></article></section>
 <div class="tabs"><button type="button" class="active" data-sales-tab="list"><i class="fa-solid fa-cart-shopping"></i> Ventas</button><button type="button" data-sales-tab="report"><i class="fa-solid fa-chart-column"></i> Reportes</button></div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
 <section id="sales-list-view">
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="sale-search" type="search" placeholder="Buscar por # venta, cliente, usuario o repuesto..."></div>
-<section class="card"><div class="table-wrap"><table><thead><tr><th>N°</th><th>N° / Fecha</th><th>Cliente</th><th>Registrado por</th><th>Pago</th><th>Repuestos</th><th>Total</th></tr></thead><tbody>
+<section class="card"><div class="table-wrap"><table data-pagination-page-size="10" data-pagination-group-next=".detail"><thead><tr><th>N°</th><th>N° / Fecha</th><th>Cliente</th><th>Registrado por</th><th>Pago</th><th>Repuestos</th><th>Total</th><th>Estado</th></tr></thead><tbody>
 {% for venta in ventas %}
-<tr class="sale" data-search="{{ venta.id_venta }} {{ venta.cliente }} {{ venta.usuario }} {% for item in venta['items'] %}{{ item.repuesto }} {{ item.codigo }} {% endfor %}"><td class="sale-index" data-label="N°">{{ loop.index + (current_page - 1) * 10 }}</td><td class="sale-reference" data-label="Venta"><div class="sale-reference-content"><button class="toggle" type="button" aria-expanded="false" aria-controls="detail-{{ venta.id_venta }}"><i class="fa-solid fa-chevron-right"></i></button><div><b>V-{{ '%06d'|format(venta.id_venta|int) }}</b><small>{{ venta.fecha_venta.strftime('%d/%m/%Y %I:%M %p') if venta.fecha_venta.strftime else venta.fecha_venta }}</small></div></div></td><td data-label="Cliente">{{ venta.cliente }}</td><td data-label="Registrado por">{{ venta.usuario }}</td><td data-label="Pago"><span class="pill">{{ venta.metodo_pago }}</span></td><td data-label="Repuestos"><i class="fa-solid fa-cube"></i> {{ venta['items']|length }} {{ 'repuesto' if venta['items']|length == 1 else 'repuestos' }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td></tr>
-<tr id="detail-{{ venta.id_venta }}" class="detail" hidden><td colspan="7"><div class="info"><span><b><i class="fa-regular fa-calendar"></i> Fecha</b><strong>{{ venta.fecha_venta.strftime('%d/%m/%Y') if venta.fecha_venta.strftime else venta.fecha_venta }}</strong><small>{{ venta.fecha_venta.strftime('%I:%M %p') if venta.fecha_venta.strftime else '' }}</small></span><span><b><i class="fa-regular fa-user"></i> Cliente</b><strong>{{ venta.cliente }}</strong></span><span><b><i class="fa-regular fa-user"></i> Registrado por</b><strong>{{ venta.usuario }}</strong></span><span><b>Método de pago</b><strong>{{ venta.metodo_pago }}</strong></span></div><table class="items"><thead><tr><th>Código</th><th>Repuesto</th><th>Cantidad</th><th>Precio unit.</th><th>Descuento (Q)</th><th>Subtotal</th></tr></thead><tbody>{% for item in venta['items'] %}{% set descuento = (item.precio_unitario or 0) * (item.cantidad or 0) - (item.subtotal or 0) %}<tr><td>{{ item.codigo }}</td><td class="item-name">{{ item.repuesto }}</td><td>{{ item.cantidad }}</td><td>Q {{ '{:,.2f}'.format(item.precio_unitario or 0) }}</td><td class="discount-cell">{{ '—' if descuento <= 0 else '-Q ' ~ '{:,.2f}'.format(descuento) }}</td><td class="subtotal-cell">Q {{ '{:,.2f}'.format(item.subtotal or 0) }}</td></tr>{% endfor %}<tr class="grand"><td colspan="5">Total General</td><td>Q {{ '{:,.2f}'.format(venta.total or 0) }}</td></tr></tbody></table></td></tr>
-{% else %}<tr><td class="empty" colspan="7">No hay ventas registradas.</td></tr>{% endfor %}
+<tr class="sale" data-search="{{ venta.id_venta }} {{ venta.cliente }} {{ venta.usuario }} {% for item in venta['items'] %}{{ item.repuesto }} {{ item.codigo }} {% endfor %}"><td class="sale-index" data-label="N°">{{ loop.index + (current_page - 1) * 10 }}</td><td class="sale-reference" data-label="Venta"><div class="sale-reference-content"><button class="toggle" type="button" aria-expanded="false" aria-controls="detail-{{ venta.id_venta }}"><i class="fa-solid fa-chevron-right"></i></button><div><b>V-{{ '%06d'|format(venta.id_venta|int) }}</b><small>{{ venta.fecha_venta.strftime('%d/%m/%Y %I:%M %p') if venta.fecha_venta.strftime else venta.fecha_venta }}</small></div></div></td><td data-label="Cliente">{{ venta.cliente }}</td><td data-label="Registrado por">{{ venta.usuario }}</td><td data-label="Pago"><span class="pill">{{ venta.metodo_pago }}</span></td><td data-label="Repuestos"><i class="fa-solid fa-cube"></i> {{ venta['items']|length }} {{ 'repuesto' if venta['items']|length == 1 else 'repuestos' }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td><td data-label="Estado"><span class="sale-status {{ 'returned' if venta.id_estado_venta == 2 else 'completed' }}">{{ venta.estado }}</span></td></tr>
+<tr id="detail-{{ venta.id_venta }}" class="detail" hidden><td colspan="8">{% if venta.id_estado_venta == 2 %}<div class="returned-notice">Venta Devuelta / Anulada</div>{% endif %}<div class="info"><span><b><i class="fa-regular fa-calendar"></i> Fecha</b><strong>{{ venta.fecha_venta.strftime('%d/%m/%Y') if venta.fecha_venta.strftime else venta.fecha_venta }}</strong><small>{{ venta.fecha_venta.strftime('%I:%M %p') if venta.fecha_venta.strftime else '' }}</small></span><span><b><i class="fa-regular fa-user"></i> Cliente</b><strong>{{ venta.cliente }}</strong></span><span><b><i class="fa-regular fa-user"></i> Registrado por</b><strong>{{ venta.usuario }}</strong></span><span><b>Método de pago</b><strong>{{ venta.metodo_pago }}</strong></span></div><table class="items"><thead><tr><th>Código</th><th>Repuesto</th><th>Cantidad</th><th>Precio unit.</th><th>Descuento (Q)</th><th>Subtotal</th></tr></thead><tbody>{% for item in venta['items'] %}{% set descuento = (item.precio_unitario or 0) * (item.cantidad or 0) - (item.subtotal or 0) %}<tr><td data-label="Código">{{ item.codigo }}</td><td class="item-name" data-label="Repuesto">{{ item.repuesto }}</td><td data-label="Cantidad">{{ item.cantidad }}</td><td data-label="Precio unitario">Q {{ '{:,.2f}'.format(item.precio_unitario or 0) }}</td><td class="discount-cell" data-label="Descuento (Q)">{{ '—' if descuento <= 0 else '-Q ' ~ '{:,.2f}'.format(descuento) }}</td><td class="subtotal-cell" data-label="Subtotal">Q {{ '{:,.2f}'.format(item.subtotal or 0) }}</td></tr>{% endfor %}<tr class="grand"><td colspan="5">Total General</td><td class="subtotal-cell" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td></tr></tbody></table></td></tr>
+{% else %}<tr><td class="empty" colspan="8">No hay ventas registradas.</td></tr>{% endfor %}
 </tbody></table></div><footer><span>Mostrando {{ ventas|length }} de {{ total_items }} registros</span><div>{% if current_page > 1 %}<a href="{{ url_for('ventas', page=current_page-1) }}#sales-list-view">‹</a>{% endif %}{% for p in range(1,total_pages+1) %}<a class="{{ 'current' if p == current_page }}" href="{{ url_for('ventas', page=p) }}#sales-list-view">{{ p }}</a>{% endfor %}{% if current_page < total_pages %}<a href="{{ url_for('ventas', page=current_page+1) }}#sales-list-view">›</a>{% endif %}</div></footer></section>
 </section>
 <section id="sales-report-view" class="sales-report-view" hidden>
-<div class="report-card"><div class="report-title-row"><div class="report-title-wrap"><i class="fa-regular fa-calendar-days"></i><span>Filtros del Reporte</span></div></div><div class="sales-report-filters"><label>Fecha Desde<input id="report-from" type="date"></label><label>Fecha Hasta<input id="report-to" type="date"></label><label>Cliente<input id="report-client" type="search" placeholder="Buscar cliente..."></label><label>Vendedor<input id="report-seller" type="search" placeholder="Buscar vendedor..."></label><label>Método de Pago<select id="report-payment"><option value="">Todos</option></select></label><div class="report-actions"><button type="button" id="clear-sales-report" class="secondary-btn">Limpiar filtros</button><button type="button" id="export-sales-report" class="primary-btn"><i class="fa-solid fa-download"></i> Descargar reporte (<span id="report-count">0</span>)</button></div></div></div>
+<div class="report-card">
+  <div class="report-title-row"><div class="report-title-wrap"><i class="fa-regular fa-calendar-days"></i><span>Filtros del Reporte</span></div></div>
+  <form id="sales-report-form" class="sales-report-filters" autocomplete="off">
+    <label>Fecha Desde<input id="report-from" name="from_date" type="date"></label>
+    <label>Fecha Hasta<input id="report-to" name="to_date" type="date"></label>
+    <label>Cliente<input id="report-client" name="cliente" type="search" placeholder="Buscar cliente..."></label>
+    <label>Vendedor<input id="report-seller" name="vendedor" type="search" placeholder="Buscar vendedor..."></label>
+    <label>Repuesto<input id="report-repuesto" name="repuesto" type="search" placeholder="Buscar repuesto..."></label>
+    <label>Método de Pago<select id="report-payment" name="metodo_pago"><option value="">Todos</option></select></label>
+    <label>Estado<select id="report-status" name="estado"><option value="">Todas</option><option value="1">Completadas</option><option value="2">Devueltas</option></select></label>
+    <label>Monto Mín<input id="report-min-amount" name="min_total" type="number" step="0.01" placeholder="0.00"></label>
+    <label>Monto Máx<input id="report-max-amount" name="max_total" type="number" step="0.01" placeholder="0.00"></label>
+    <div class="report-actions"><button type="button" id="clear-sales-report" class="secondary-btn">Limpiar filtros</button><a id="export-sales-report" class="primary-btn" href="{{ url_for('exportar_pdf_ventas') }}"><i class="fa-solid fa-download"></i> Descargar reporte (<span id="report-count">0</span>)</a></div>
+  </form>
+</div>
 <div class="report-summary"><article class="income"><span>Total del Periodo</span><b id="report-total">Q 0.00</b></article><article class="today"><span>Ventas en Periodo</span><b id="report-sales-count">0</b></article><article class="transactions"><span>Unidades Vendidas</span><b id="report-units">0</b></article></div>
-<section class="report-preview"><div class="report-preview-header"><span>Vista previa del reporte</span><small><b id="report-preview-count">0</b> registros</small></div><div class="report-table-wrap"><table><thead><tr><th>N° VENTA</th><th>FECHA</th><th>CLIENTE</th><th>VENDEDOR</th><th>PAGO</th><th>REPUESTOS VENDIDOS</th><th>TOTAL</th></tr></thead><tbody id="sales-report-body"></tbody></table></div></section>
+<section class="report-preview"><div class="report-preview-header"><span>Vista previa del reporte</span><small><b id="report-preview-count">0</b> registros</small></div><div class="report-table-wrap"><table data-pagination-page-size="10"><thead><tr><th>N° VENTA</th><th>FECHA</th><th>CLIENTE</th><th>VENDEDOR</th><th>PAGO</th><th>REPUESTOS VENDIDOS</th><th>TOTAL</th><th>ESTADO</th></tr></thead><tbody id="sales-report-body"></tbody></table></div></section>
 </section>
 </main>
 {% if show_new_sale %}{% include 'nueva_venta_modal.html' %}{% endif %}
@@ -52,10 +70,59 @@ const reportMoney=value=>`Q ${Number(value||0).toLocaleString('en-US',{minimumFr
 const reportDate=value=>value ? value.slice(0,10).split('-').reverse().join('/') : '-';
 const reportPayment=document.getElementById('report-payment');
 [...new Set(reportData.map(row=>row.metodo_pago).filter(Boolean))].sort().forEach(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;reportPayment.appendChild(option)});
-function filteredReportRows(){const from=document.getElementById('report-from').value,to=document.getElementById('report-to').value,client=document.getElementById('report-client').value.trim().toLowerCase(),seller=document.getElementById('report-seller').value.trim().toLowerCase(),payment=reportPayment.value.toLowerCase();return reportData.filter(row=>{const date=(row.fecha||'').slice(0,10);return (!from||date>=from)&&(!to||date<=to)&&(!client||String(row.cliente).toLowerCase().includes(client))&&(!seller||String(row.vendedor).toLowerCase().includes(seller))&&(!payment||String(row.metodo_pago).toLowerCase()===payment)})}
-function renderSalesReport(){const rows=filteredReportRows(),body=document.getElementById('sales-report-body');body.innerHTML=rows.length?rows.map(row=>`<tr><td>${row.numero}</td><td>${reportDate(row.fecha)}</td><td>${row.cliente}</td><td>${row.vendedor}</td><td><span class="pill">${row.metodo_pago}</span></td><td>${row.detalle_repuestos}</td><td class="report-total-cell">${reportMoney(row.total)}</td></tr>`).join(''):'<tr><td colspan="7" class="report-empty">No se encontraron ventas con estos filtros.</td></tr>';document.getElementById('report-total').textContent=reportMoney(rows.reduce((sum,row)=>sum+Number(row.total||0),0));document.getElementById('report-sales-count').textContent=rows.length;document.getElementById('report-units').textContent=rows.reduce((sum,row)=>sum+Number(row.unidades||0),0);document.getElementById('report-count').textContent=rows.length;document.getElementById('report-preview-count').textContent=rows.length}
+
+function filteredReportRows(){
+  const from=document.getElementById('report-from').value;
+  const to=document.getElementById('report-to').value;
+  const client=document.getElementById('report-client').value.trim().toLowerCase();
+  const seller=document.getElementById('report-seller').value.trim().toLowerCase();
+  const repuesto=document.getElementById('report-repuesto').value.trim().toLowerCase();
+  const payment=reportPayment.value.toLowerCase();
+  const status=document.getElementById('report-status').value;
+  const minTotal=parseFloat(document.getElementById('report-min-amount').value)||0;
+  const maxTotal=parseFloat(document.getElementById('report-max-amount').value)||Infinity;
+  return reportData.filter(row=>{
+    const date=(row.fecha||'').slice(0,10);
+    const total=Number(row.total||0);
+    return (!from||date>=from)&&(!to||date<=to)&&
+      (!client||String(row.cliente).toLowerCase().includes(client))&&
+      (!seller||String(row.vendedor).toLowerCase().includes(seller))&&
+      (!repuesto||String(row.detalle_repuestos).toLowerCase().includes(repuesto))&&
+      (!payment||String(row.metodo_pago).toLowerCase()===payment)&&
+      (!status||String(row.id_estado_venta)===status)&&
+      (total>=minTotal)&&(total<=maxTotal);
+  });
+}
+
+function renderSalesReport(){
+  const rows=filteredReportRows();
+  const body=document.getElementById('sales-report-body');
+  body.innerHTML=rows.length?rows.map(row=>`<tr><td>${row.numero}</td><td>${reportDate(row.fecha)}</td><td>${row.cliente}</td><td>${row.vendedor}</td><td><span class="pill">${row.metodo_pago}</span></td><td>${row.detalle_repuestos}</td><td class="report-total-cell">${reportMoney(row.total)}</td><td><span class="sale-status ${row.id_estado_venta===2?'returned':'completed'}">${row.estado}</span></td></tr>`).join(''):'<tr><td colspan="8" class="report-empty">No se encontraron ventas con estos filtros.</td></tr>';
+  const completed=rows.filter(row=>row.id_estado_venta===1);
+  document.getElementById('report-total').textContent=reportMoney(completed.reduce((sum,row)=>sum+Number(row.total||0),0));
+  document.getElementById('report-sales-count').textContent=completed.length;
+  document.getElementById('report-units').textContent=completed.reduce((sum,row)=>sum+Number(row.unidades||0),0);
+  document.getElementById('report-count').textContent=rows.length;
+  document.getElementById('report-preview-count').textContent=rows.length;
+  updateExportLink();
+}
+
+function updateExportLink(){
+  const form=document.getElementById('sales-report-form');
+  const params=new URLSearchParams(new FormData(form));
+  document.getElementById('export-sales-report').href=`{{ url_for('exportar_pdf_ventas') }}?${params.toString()}`;
+}
+
+function clearSalesReport(){
+  document.getElementById('sales-report-form').reset();
+  renderSalesReport();
+}
+
 document.querySelectorAll('[data-sales-tab]').forEach(tab=>tab.onclick=()=>{const report=tab.dataset.salesTab==='report';listView.hidden=report;reportView.hidden=!report;document.querySelectorAll('[data-sales-tab]').forEach(button=>button.classList.toggle('active',button===tab));if(report)renderSalesReport()});
-['report-from','report-to','report-client','report-seller','report-payment'].forEach(id=>document.getElementById(id).addEventListener('input',renderSalesReport));
-document.getElementById('clear-sales-report').onclick=()=>{['report-from','report-to','report-client','report-seller'].forEach(id=>document.getElementById(id).value='');reportPayment.value='';renderSalesReport()};
-document.getElementById('export-sales-report').onclick=()=>{const params=new URLSearchParams({from_date:document.getElementById('report-from').value,to_date:document.getElementById('report-to').value,cliente:document.getElementById('report-client').value,vendedor:document.getElementById('report-seller').value,metodo_pago:reportPayment.value});window.location.href=`{{ url_for('exportar_pdf_ventas') }}?${params.toString()}`};
-</script></body></html>
+['report-from','report-to','report-client','report-seller','report-repuesto','report-payment','report-status','report-min-amount','report-max-amount'].forEach(id=>document.getElementById(id).addEventListener('input',renderSalesReport));
+document.getElementById('clear-sales-report').onclick=clearSalesReport;
+renderSalesReport();
+function updateDateTime(){const n=new Date(),d=n.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),t=n.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:!1}),e=document.getElementById('datetime-display');e&&(e.textContent=d+' \u2022 '+t)}updateDateTime(),setInterval(updateDateTime,1e3);
+// Session auto-refresh on tab visibility change
+(function(){const I=3e4;let t=null;function p(){fetch('{{url_for("keep_alive")}}',{method:'POST',credentials:'same-origin'}).then(r=>r.json()).then(d=>{d.status==='expired'&&(location.href='{{url_for("login")}}')}).catch(()=>location.href='{{url_for("login")}}')}function s(){t||(t=setInterval(p,I))}function o(){t&&(clearInterval(t),t=null)}document.addEventListener('visibilitychange',()=>{document.hidden?o():(p(),s())}),s(),addEventListener('beforeunload',o)})();
+</script><script src="{{ url_for('static', filename='pagination.js') }}" defer></script></body></html>

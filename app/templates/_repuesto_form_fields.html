@@ -39,6 +39,20 @@
         </div>
     </section>
 
+    {% if is_edit %}
+    <section class="form-section" aria-labelledby="inventory-status-title">
+        <h2 class="form-section-title" id="inventory-status-title">Estado del inventario</h2>
+        <div class="inventory-status-field">
+            <label class="inventory-status-toggle">
+                <input type="checkbox" name="activo" value="on" {% if repuesto.id_estado_general == estado_activo_id %}checked{% endif %}>
+                <span class="inventory-status-checkmark" aria-hidden="true"></span>
+                <span>Repuesto activo</span>
+            </label>
+            <small>Los repuestos inactivos no estarán disponibles para nuevas ventas.</small>
+        </div>
+    </section>
+    {% endif %}
+
     <section class="form-section" aria-labelledby="precios-title">
         <h2 class="form-section-title" id="precios-title">Precios (Q)</h2>
         <div class="field-grid field-grid-2">

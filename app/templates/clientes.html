@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Clientes - Importadora Morales</title><link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="{{ url_for('static',filename='clientes.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}"></head>
+<title>Clientes - Importadora Morales</title><link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="{{ url_for('static',filename='clientes.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='clientes-report.css') }}"></head>
 <body class="module-theme">
 <aside class="sidebar"><div><div class="brand"><img src="{{ url_for('static',filename='logo.png') }}" alt="Importadora Morales"></div><nav>
 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
@@ -12,21 +12,177 @@
 {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
 {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
 </nav></div><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name',session.get('user','Usuario')) }}</strong><span>{{ session.get('role','Administrador') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
-<main><header><div><h1>Clientes</h1><p>Gestión del registro de clientes</p></div><button class="primary" onclick="openModal()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button></header>
+<main><header><div><h1>Clientes</h1><p>Gestión del registro de clientes</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div><button class="primary" onclick="openModal()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button></header>
 <div class="tabs"><button class="active" data-tab="list"><i class="fa-solid fa-users"></i> Lista</button><button data-tab="report"><i class="fa-solid fa-file-lines"></i> Reportes</button></div>
 {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
 <section id="list" class="panel active"><article class="metric"><span>Total Clientes</span><b>{{ total_clientes }}</b><i class="fa-solid fa-users"></i></article>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="search" placeholder="Buscar por nombre, NIT, correo o teléfono..."></div>
-<div class="card"><table><thead><tr><th>Cliente</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Acciones</th></tr></thead><tbody>
-{% for cliente in clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td class="actions" data-label="Acciones"><button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button><form method="post"><input type="hidden" name="action" value="delete"><input type="hidden" name="id_cliente" value="{{ cliente.id }}"><button class="icon delete" onclick="return confirm('¿Eliminar este cliente?')" title="Eliminar"><i class="fa-solid fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
+<div class="card"><table data-pagination-page-size="10"><thead><tr><th>Cliente</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+{% for cliente in clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td><td class="actions" data-label="Acciones"><button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
 </tbody></table><footer><span>Mostrando {{ clientes|length }} de {{ total_clientes }} registros. Página {{ current_page }} de {{ total_pages }}.</span><div class="pagination">{% if current_page > 1 %}<a href="{{ url_for('clientes', page=current_page - 1) }}">‹</a>{% endif %}{% for page in range(1, total_pages + 1) %}<a class="{{ 'current' if page == current_page else '' }}" href="{{ url_for('clientes', page=page) }}">{{ page }}</a>{% endfor %}{% if current_page < total_pages %}<a href="{{ url_for('clientes', page=current_page + 1) }}">›</a>{% endif %}</div></footer></div></section>
-<section id="report" class="panel"><div class="report-filters"><h3><i class="fa-solid fa-magnifying-glass"></i> Filtros del Reporte</h3><label>Buscar (nombre / NIT / teléfono)<input id="report-search" placeholder="Ej: García, 12345678, 5551234..."></label><label>Fecha Registro Desde<input type="text" placeholder="dd/mm/aaaa"></label><label>Fecha Registro Hasta<input type="text" placeholder="dd/mm/aaaa"></label><div class="filter-actions"><button type="button" id="clear-report">Limpiar filtros</button><button type="button" class="primary"><i class="fa-solid fa-download"></i> Descargar reporte ({{ total_clientes }})</button></div></div><div class="report-metrics"><article><span>Clientes en Período</span><b>{{ total_clientes }}</b></article></div><div class="report-preview"><header><span>Vista previa del reporte</span><small>{{ total_clientes }} registros</small></header><div class="report-table-wrap"><table><thead><tr><th>Nombre completo</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Fecha registro</th></tr></thead><tbody>{% for cliente in clientes %}<tr data-report-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }}"><td>{{ cliente.nombre }}</td><td>{{ cliente.nit }}</td><td>{{ cliente.telefono }}</td><td>{{ cliente.correo }}</td><td>{{ cliente.direccion }}</td><td>{{ cliente.fecha or '—' }}</td></tr>{% else %}<tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>{% endfor %}</tbody></table></div></div></section>
+<section id="report" class="panel">
+  <div class="client-report-card">
+    <h3><i class="fa-solid fa-magnifying-glass"></i> Filtros del Reporte</h3>
+    <form id="client-report-form" class="client-report-filters" autocomplete="off">
+      <label>Buscar (nombre / NIT / correo / teléfono)
+        <input type="search" id="report-search" name="q" placeholder="Ej: García, 12345678, cliente@correo.com, 5551234...">
+      </label>
+      <label>Fecha Registro Desde
+        <input type="date" id="report-from-date" name="from_date">
+      </label>
+      <label>Fecha Registro Hasta
+        <input type="date" id="report-to-date" name="to_date">
+      </label>
+      <label>Estado
+        <select id="report-estado" name="estado">
+          <option value="">Todos</option>
+          <option value="activo">Activo</option>
+          <option value="inactivo">Inactivo</option>
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="button" id="clear-report" class="secondary-btn">Limpiar filtros</button>
+        <a id="download-client-report" class="primary-btn" href="{{ url_for('exportar_pdf_clientes') }}"><i class="fa-solid fa-download"></i> Descargar reporte (<span id="report-count">{{ total_clientes }}</span>)</a>
+      </div>
+    </form>
+  </div>
+  <div class="report-summary client-report-summary">
+    <article class="client-report-metric metric-total"><div><span>Total Clientes</span><b id="report-total">{{ total_clientes }}</b></div><i class="fa-solid fa-users" aria-hidden="true"></i><small>Coincide con los filtros aplicados</small></article>
+    <article class="client-report-metric metric-active"><div><span>Activos</span><b id="report-activos">{{ report_clientes|selectattr('activo')|list|length }}</b></div><i class="fa-solid fa-user-check" aria-hidden="true"></i><small>Disponibles para operaciones</small></article>
+    <article class="client-report-metric metric-inactive"><div><span>Inactivos</span><b id="report-inactivos">{{ report_clientes|rejectattr('activo')|list|length }}</b></div><i class="fa-solid fa-user-slash" aria-hidden="true"></i><small>Fuera de uso en operaciones</small></article>
+  </div>
+  <div class="report-preview client-report-preview">
+    <header class="client-report-preview-heading"><span><i class="fa-solid fa-table-list" aria-hidden="true"></i> Vista previa del reporte</span><small><b id="report-preview-count">{{ report_clientes|length }}</b> registros</small></header>
+    <div class="report-table-wrap">
+      <table class="client-report-table" data-pagination-page-size="10">
+        <thead><tr><th>Nombre completo</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Fecha registro</th></tr></thead>
+        <tbody id="report-table-body">
+          {% for cliente in report_clientes %}
+          <tr data-report-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}" data-date="{{ cliente.fecha }}" data-estado="{{ 'activo' if cliente.activo else 'inactivo' }}">
+            <td data-label="Nombre completo">{{ cliente.nombre }}</td>
+            <td data-label="NIT">{{ cliente.nit }}</td>
+            <td data-label="Teléfono">{{ cliente.telefono }}</td>
+            <td data-label="Correo">{{ cliente.correo }}</td>
+            <td data-label="Dirección">{{ cliente.direccion }}</td>
+            <td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td>
+            <td data-label="Fecha registro">{{ cliente.fecha or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty">No hay clientes registrados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
 </main>
-<div id="modal" class="modal" hidden><form method="post" class="modal-box"><header><h2 id="modal-title">Nuevo Cliente</h2><button type="button" aria-label="Cerrar" onclick="closeModal()">×</button></header><input type="hidden" name="action" id="action" value="create"><input type="hidden" name="id_cliente" id="id_cliente">
+<div id="modal" class="client-modal-overlay" hidden><form method="post" class="modal-box"><header><h2 id="modal-title">Nuevo Cliente</h2><button type="button" aria-label="Cerrar" onclick="closeModal()">×</button></header><input type="hidden" name="action" id="action" value="create"><input type="hidden" name="id_cliente" id="id_cliente">
 <p class="form-section"><i class="fa-regular fa-user"></i> Nombres</p><label>Primer Nombre <em>*</em><input name="primer_nombre" id="primer_nombre" required placeholder="Ej: Juan"></label><label>Segundo Nombre<input name="segundo_nombre" id="segundo_nombre" placeholder="Ej: Carlos"></label>
 <p class="form-section"><i class="fa-regular fa-user"></i> Apellidos</p><label>Primer Apellido <em>*</em><input name="primer_apellido" id="primer_apellido" required placeholder="Ej: Pérez"></label><label>Segundo Apellido<input name="segundo_apellido" id="segundo_apellido" placeholder="Ej: Rodríguez"></label>
 <p class="form-section"><i class="fa-solid fa-phone"></i> Contacto</p><label>NIT <em>*</em><span class="input-icon"><i class="fa-solid fa-hashtag"></i><input name="nit" id="nit" required placeholder="Ej: 1234567-8"></span></label><label>Teléfono<span class="input-icon"><i class="fa-solid fa-phone"></i><input name="telefono" id="telefono" placeholder="Ej: +502 5551-1001"></span></label>
 <label class="wide">Correo Electrónico<span class="input-icon"><i class="fa-regular fa-envelope"></i><input name="correo" id="correo" type="email" placeholder="Ej: cliente@correo.com"></span></label><label class="wide"><i class="fa-solid fa-location-dot label-icon"></i> Dirección<input name="direccion" id="direccion" placeholder="Ej: Zona 8, Guatemala"></label>
+{% if has_client_status %}<div id="client-status-field" class="wide" hidden><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="activo" id="client-active" style="display:inline-block;width:16px;height:16px;margin:0"><span>Cliente activo</span></label><small>Los clientes inactivos no estarán disponibles para ventas ni préstamos.</small></div>{% endif %}
 <div class="modal-actions"><button type="button" onclick="closeModal()">Cancelar</button><button class="primary" id="submit">Registrar Cliente</button></div></form></div>
-<script>const modal=document.getElementById('modal');function openModal(){document.querySelector('.modal-box').reset();action.value='create';id_cliente.value='';document.getElementById('modal-title').textContent='Nuevo Cliente';submit.textContent='Registrar Cliente';modal.hidden=false}function closeModal(){modal.hidden=true}function editClient(b){const d=JSON.parse(b.dataset.client);openModal();action.value='edit';id_cliente.value=d.id_cliente||'';document.getElementById('modal-title').textContent='Editar Cliente';submit.textContent='Guardar Cambios';Object.entries(d).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v||''})}document.getElementById('search').oninput=e=>document.querySelectorAll('tbody tr[data-search]').forEach(r=>r.hidden=!r.dataset.search.toLowerCase().includes(e.target.value.toLowerCase()));document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.panel').forEach(e=>e.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});</script>
-<script>document.getElementById('report-search').oninput=e=>document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=!r.dataset.reportSearch.toLowerCase().includes(e.target.value.toLowerCase()));document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};document.querySelector('.filter-actions .primary').onclick=()=>{window.location='/clientes/reporte-pdf?q='+encodeURIComponent(document.getElementById('report-search').value)};</script></body></html>
+<script>
+  const modal=document.getElementById('modal');
+  function openModal(){document.querySelector('.modal-box').reset();action.value='create';id_cliente.value='';document.getElementById('modal-title').textContent='Nuevo Cliente';submit.textContent='Registrar Cliente';modal.hidden=false}
+  function closeModal(){modal.hidden=true}
+  function editClient(b){const d=JSON.parse(b.dataset.client);openModal();action.value='edit';id_cliente.value=d.id_cliente||'';document.getElementById('modal-title').textContent='Editar Cliente';submit.textContent='Guardar Cambios';Object.entries(d).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v||''})}
+  document.getElementById('search').oninput=e=>document.querySelectorAll('tbody tr[data-search]').forEach(r=>r.hidden=!r.dataset.search.toLowerCase().includes(e.target.value.toLowerCase()));
+  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.panel').forEach(e=>e.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});
+
+  // Report filters
+  const reportForm = document.getElementById('client-report-form');
+  const reportSearch = document.getElementById('report-search');
+  const reportFromDate = document.getElementById('report-from-date');
+  const reportToDate = document.getElementById('report-to-date');
+  const reportEstado = document.getElementById('report-estado');
+  const reportTableBody = document.getElementById('report-table-body');
+  const reportCount = document.getElementById('report-count');
+  const reportPreviewCount = document.getElementById('report-preview-count');
+  const downloadLink = document.getElementById('download-client-report');
+
+  function filterReportRows() {
+    const search = reportSearch.value.toLowerCase();
+    const fromDate = reportFromDate.value;
+    const toDate = reportToDate.value;
+    const estado = reportEstado.value;
+    const rows = reportTableBody.querySelectorAll('tr[data-report-search]');
+    let visibleCount = 0;
+    let activeCount = 0;
+    let inactiveCount = 0;
+    rows.forEach(row => {
+      const matchesSearch = !search || row.dataset.reportSearch.toLowerCase().includes(search);
+      const rowDate = row.dataset.date;
+      const matchesFrom = !fromDate || (rowDate && rowDate >= fromDate);
+      const matchesTo = !toDate || (rowDate && rowDate <= toDate);
+      const matchesEstado = !estado || row.dataset.estado === estado;
+      const show = matchesSearch && matchesFrom && matchesTo && matchesEstado;
+      row.hidden = !show;
+      if (show) {
+        visibleCount++;
+        if (row.dataset.estado === 'activo') activeCount++;
+        else inactiveCount++;
+      }
+    });
+    reportCount.textContent = visibleCount;
+    reportPreviewCount.textContent = visibleCount;
+    document.getElementById('report-total').textContent = visibleCount;
+    document.getElementById('report-activos').textContent = activeCount;
+    document.getElementById('report-inactivos').textContent = inactiveCount;
+    updateDownloadLink();
+  }
+
+  function updateDownloadLink() {
+    const params = new URLSearchParams();
+    if (reportSearch.value) params.set('q', reportSearch.value);
+    if (reportFromDate.value) params.set('from_date', reportFromDate.value);
+    if (reportToDate.value) params.set('to_date', reportToDate.value);
+    if (reportEstado.value) params.set('estado', reportEstado.value);
+  downloadLink.href = '{{ url_for("exportar_pdf_clientes") }}?' + params.toString();
+  }
+
+  function clearReportFilters() {
+    reportForm.reset();
+    filterReportRows();
+  }
+
+  [reportSearch, reportFromDate, reportToDate, reportEstado].forEach(el => {
+    if (el) el.addEventListener('input', filterReportRows);
+  });
+  document.getElementById('clear-report')?.addEventListener('click', clearReportFilters);
+  updateDownloadLink();
+</script>
+{% if has_client_status %}<script>
+const openClientModal = window.openModal;
+const clientStatusField = document.getElementById('client-status-field');
+const clientActiveCheckbox = document.getElementById('client-active');
+const activeClientStatusId = '{{ active_status_id }}';
+window.openModal = function () {
+  openClientModal();
+  clientStatusField.hidden = true;
+  clientActiveCheckbox.checked = true;
+};
+window.editClient = function (button) {
+  const data = JSON.parse(button.dataset.client);
+  window.openModal();
+  document.getElementById('action').value = 'edit';
+  document.getElementById('id_cliente').value = data.id_cliente || '';
+  document.getElementById('modal-title').textContent = 'Editar Cliente';
+  document.getElementById('submit').textContent = 'Guardar Cambios';
+  Object.entries(data).forEach(([key, value]) => {
+    const input = document.getElementById(key);
+    if (input) input.value = value || '';
+  });
+  const status = Object.entries(data).find(([key]) => key.toLowerCase() === 'id_estado_general' || key.toLowerCase() === 'id_estado');
+  clientStatusField.hidden = false;
+  clientActiveCheckbox.checked = Boolean(status && String(status[1]) === activeClientStatusId);
+};
+</script>{% endif %}
+<script>document.getElementById('report-search').oninput=e=>document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=!r.dataset.reportSearch.toLowerCase().includes(e.target.value.toLowerCase()));document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};document.querySelector('.filter-actions .primary').onclick=()=>{window.location='/clientes/reporte-pdf?q='+encodeURIComponent(document.getElementById('report-search').value)};</script>
+<script>
+function updateDateTime(){const n=new Date(),d=n.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),t=n.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:!1}),e=document.getElementById('datetime-display');e&&(e.textContent=d+' \u2022 '+t)}updateDateTime(),setInterval(updateDateTime,1e3);
+// Session auto-refresh on tab visibility change
+(function(){const I=3e4;let t=null;function p(){fetch('{{url_for("keep_alive")}}',{method:'POST',credentials:'same-origin'}).then(r=>r.json()).then(d=>{d.status==='expired'&&(location.href='{{url_for("login")}}')}).catch(()=>location.href='{{url_for("login")}}')}function s(){t||(t=setInterval(p,I))}function o(){t&&(clearInterval(t),t=null)}document.addEventListener('visibilitychange',()=>{document.hidden?o():(p(),s())}),s(),addEventListener('beforeunload',o)})();
+</script>
+<script src="{{ url_for('static', filename='pagination.js') }}" defer></script></body></html>

@@ -10,6 +10,12 @@
   --disassembly-gap: 14px;
   --disassembly-radius: 10px;
   --disassembly-control-height: 36px;
+  --disassembly-modal-width: 630px;
+  --disassembly-modal-ink: var(--module-ink, #19365d);
+  --disassembly-modal-line: var(--module-line, #e2e7ee);
+  --disassembly-modal-overlay: rgb(17 24 39 / 52%);
+  --disassembly-success: #05883e;
+  --disassembly-success-tint: #eafff1;
 }
 
 .dismantling-page { min-height: 100vh; }
@@ -20,8 +26,17 @@ body.module-theme.dismantling-page .disassembly-header { display: flex; justify-
 body.module-theme.dismantling-page .disassembly-header h1 { margin: 0 0 7px; color: var(--module-ink); font-size: 28px; font-weight: 800; line-height: 1.2; }
 body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var(--module-muted); font-size: 14px; }
 .new-vehicle-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; flex: 0 0 auto; min-height: 40px; padding: 0 17px; border: 0; border-radius: 10px; background: var(--module-blue); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background-color .16s ease, transform .16s ease; }
-.new-vehicle-button:hover { background: #1857d3; transform: translateY(-1px); }
-.new-vehicle-button:focus-visible, .disassembly-filters input:focus-visible, .disassembly-filters select:focus-visible, .notice-confirm:focus-visible, .modal-close:focus-visible { outline: 3px solid #2165ee55; outline-offset: 2px; }
+.new-vehicle-button:hover:not(:disabled) { background: #1857d3; transform: translateY(-1px); }
+.new-vehicle-button:disabled { cursor: not-allowed; opacity: .6; }
+.new-vehicle-button:focus-visible, .disassembly-filters input:focus-visible, .disassembly-filters select:focus-visible, .vehicle-form-field input:focus-visible, .vehicle-form-field select:focus-visible, .vehicle-modal-actions button:focus-visible, .modal-close:focus-visible, .vehicle-detail-button:focus-visible { outline: 3px solid rgb(33 101 238 / 32%); outline-offset: 2px; }
+.vehicle-schema-warning { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid #f3d48a; border-radius: 8px; background: #fff9e8; color: #775500; font-size: 11px; line-height: 1.45; }
+.vehicle-schema-warning i { flex: 0 0 auto; margin-top: 2px; }
+.disassembly-flash { position: fixed; top: 22px; right: 22px; z-index: 70; display: flex; align-items: center; gap: 10px; max-width: min(420px, calc(100vw - 28px)); padding: 12px 14px; border: 1px solid transparent; border-radius: 9px; box-shadow: 0 8px 22px rgb(15 23 42 / 12%); font-size: 12px; transition: opacity .2s ease, transform .2s ease; }
+.disassembly-flash.success { border-color: #a3efbd; background: var(--disassembly-success-tint); color: var(--disassembly-success); }
+.disassembly-flash.error { border-color: #fecaca; background: #fff1f2; color: #b42318; }
+.disassembly-flash.is-closing { opacity: 0; transform: translateY(-5px); }
+.disassembly-flash .flash-close { display: inline-grid; flex: 0 0 auto; width: 25px; height: 25px; margin-left: auto; place-items: center; border: 0; border-radius: 6px; background: transparent; color: currentColor; cursor: pointer; }
+.disassembly-flash .flash-close:hover { background: rgb(0 0 0 / 6%); }
 .disassembly-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--disassembly-gap); margin-bottom: 22px; }
 .summary-card { min-height: 79px; padding: 14px 16px; border: 1px solid var(--module-line); border-left: 3px solid; border-radius: var(--disassembly-radius); box-shadow: 0 2px 3px #152b450c; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
 .summary-card span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
@@ -46,13 +61,26 @@ body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var
 .disassembly-message p { max-width: 580px; margin: 0; line-height: 1.6; }
 .error-state { color: #a12b2b; }
 .disassembly-table-wrap { overflow-x: auto; }
-.disassembly-table { width: 100%; min-width: 760px; border-collapse: collapse; }
-.disassembly-table th, .disassembly-table td { padding: 13px 14px; border-bottom: 1px solid var(--module-line); text-align: left; font-size: 12px; }
-.disassembly-table th { background: #f8fafc; color: #52637a; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.disassembly-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+.disassembly-table th, .disassembly-table td { padding: 13px 12px; border-bottom: 1px solid var(--module-line); text-align: left; font-size: 12px; vertical-align: middle; }
+.disassembly-table th { background: #f8fafc; color: #52637a; font-size: 10px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 .disassembly-table tr:last-child td { border-bottom: 0; }
 .disassembly-table tbody tr:hover { background: #f8fbff; }
-.vehicle-id { color: var(--module-blue) !important; font-weight: 700; white-space: nowrap; }
-.vehicle-notes { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vehicle-id { color: var(--module-blue) !important; font-size: 10px !important; font-weight: 700; white-space: nowrap; }
+.vehicle-make { color: var(--module-ink) !important; font-weight: 700; }
+.vehicle-identifier { min-width: 100px; }
+.vehicle-identifier span, .vehicle-identifier small { display: block; }
+.vehicle-identifier small { margin-top: 3px; color: var(--module-muted); font-size: 10px; }
+.parts-count { display: inline-grid; min-width: 22px; height: 22px; padding: 0 5px; place-items: center; border-radius: 999px; background: var(--disassembly-parts-tint); color: #6806a0; font-size: 10px; }
+.vehicle-detail-button { display: inline-grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--module-blue); cursor: pointer; }
+.vehicle-detail-button:hover { background: #eff6ff; }
+.vehicle-row-actions { display: flex; align-items: center; gap: 2px; }
+.vehicle-edit-button, .vehicle-delete-button { display: inline-grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.vehicle-edit-button { color: #64748b; }
+.vehicle-edit-button:hover { background: #f1f5f9; color: var(--module-ink); }
+.vehicle-delete-button { color: #ef4444; }
+.vehicle-delete-button:hover { background: #fff1f2; color: #c62828; }
+.vehicle-cancel-form { display: inline-flex; margin: 0; }
 .state-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; background: #f1f5f9; color: #52637a; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .state-badge.pending { background: var(--disassembly-pending-tint); color: #805000; }
 .state-badge.in-progress { background: var(--disassembly-progress-tint); color: #173f9d; }
@@ -60,20 +88,45 @@ body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var
 .mobile-menu-trigger { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .disassembly-modal-backdrop[hidden] { display: none; }
-.disassembly-modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: #11182780; }
+.disassembly-modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: var(--disassembly-modal-overlay); }
 .disassembly-modal { width: min(100%, 460px); padding: 22px; border: 1px solid var(--module-line); border-radius: 14px; background: #fff; box-shadow: 0 18px 45px #0f172a30; animation: notice-enter .16s ease-out; }
 .disassembly-modal header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .disassembly-modal h2 { margin: 0; color: var(--module-ink); font-size: 18px; font-weight: 800; }
-.modal-close { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--module-muted); cursor: pointer; }
+.modal-close { display: inline-grid; flex: 0 0 auto; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--module-muted); cursor: pointer; }
 .modal-close:hover { background: #f1f5f9; }
-.modal-notice-icon { display: grid; place-items: center; width: 44px; height: 44px; margin: 20px 0 12px; border-radius: 50%; background: #eff6ff; color: var(--module-blue); font-size: 20px; }
-.disassembly-modal > p { margin: 0; color: #56667c; font-size: 13px; line-height: 1.65; }
-.disassembly-modal footer { display: flex; justify-content: flex-end; margin-top: 22px; }
-.notice-confirm { min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; background: var(--module-blue); color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
-.notice-confirm:hover { background: #1857d3; }
+.disassembly-vehicle-modal { display: flex; flex-direction: column; width: min(var(--disassembly-modal-width), calc(100vw - 32px)); max-height: min(90dvh, 560px); padding: 0; overflow: hidden; border: 0; border-radius: 14px; }
+.vehicle-modal-header { flex: 0 0 auto; min-height: 57px; padding: 0 22px; border-bottom: 1px solid #edf0f4; }
+.vehicle-modal-header h2 { font-size: 16px; }
+.vehicle-form { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; margin: 0; }
+.vehicle-form-fields { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 22px; }
+.vehicle-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 19px 15px; }
+.vehicle-form-field { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #253247; font-size: 12px; line-height: 1.2; }
+.vehicle-form-field > span { display: block; }
+.vehicle-form-field em { color: #ef4444; font-style: normal; }
+.vehicle-form-field input, .vehicle-form-field select { display: block; width: 100%; min-width: 0; height: 36px; margin: 0; padding: 0 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #172b48; font: 12px Arial, Helvetica, sans-serif; }
+.vehicle-form-field select { padding-right: 26px; }
+.vehicle-form-field input::placeholder { color: #9aa5b3; }
+.vehicle-form-field input:focus, .vehicle-form-field select:focus { border-color: var(--module-blue); outline: 0; box-shadow: 0 0 0 3px rgb(33 101 238 / 12%); }
+.vehicle-form-field select:disabled { background: #f8fafc; color: #96a0af; }
+.vehicle-form-error { margin: 0 0 14px; padding: 9px 11px; border-radius: 7px; background: #fff1f2; color: #b42318; font-size: 12px; }
+.vehicle-modal-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 11px; margin: 0; padding: 15px 22px 21px; border-top: 1px solid #f1f3f6; background: #fff; }
+.vehicle-modal-actions button { display: inline-flex; min-width: 82px; min-height: 36px; align-items: center; justify-content: center; gap: 7px; padding: 0 16px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #293b54; font: 600 12px Arial, Helvetica, sans-serif; cursor: pointer; }
+.vehicle-modal-actions .vehicle-save { border-color: var(--module-blue); background: var(--module-blue); color: #fff; font-weight: 700; }
+.vehicle-modal-actions .vehicle-save:hover:not(:disabled) { background: #1857d3; }
+.vehicle-modal-actions .vehicle-cancel:hover { background: #f8fafc; }
+.vehicle-modal-actions button:disabled { opacity: .58; cursor: not-allowed; }
+.vehicle-detail-modal { width: min(100%, 520px); padding: 0; overflow: hidden; }
+.vehicle-detail-modal .vehicle-modal-header { display: flex; }
+.vehicle-detail-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 0; padding: 8px 22px; }
+.vehicle-detail-list div { padding: 11px 8px; border-bottom: 1px solid #edf0f4; }
+.vehicle-detail-list dt { color: #7b8799; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.vehicle-detail-list dd { margin: 5px 0 0; color: var(--module-ink); font-size: 13px; overflow-wrap: anywhere; }
+.vehicle-detail-modal .vehicle-modal-actions { padding-top: 12px; }
+.vehicle-detail-modal .vehicle-save { min-width: 75px; }
+body.modal-open { overflow: hidden; }
 @keyframes notice-enter { from { opacity: 0; transform: translateY(5px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   body.module-theme.dismantling-page main.disassembly-main { padding: 28px 22px; }
   .disassembly-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -95,8 +148,21 @@ body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var
   .disassembly-results, .disassembly-empty-state { min-height: 190px; }
   .disassembly-empty-state { gap: 12px; }
   .disassembly-empty-state p { font-size: 13px; }
+  .disassembly-flash { top: 12px; right: 12px; }
+  .disassembly-vehicle-modal { max-height: calc(100dvh - 24px); border-radius: 12px; }
+  .vehicle-modal-header { min-height: 54px; padding: 0 16px; }
+  .vehicle-modal-header h2 { max-width: calc(100% - 46px); font-size: 14px; }
+  .vehicle-form-fields { padding: 18px 16px; }
+  .vehicle-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .vehicle-modal-actions { gap: 9px; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
+  .vehicle-modal-actions button { min-height: 40px; }
+  .vehicle-detail-list { padding-right: 16px; padding-left: 16px; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 420px) {
   .disassembly-summary { grid-template-columns: 1fr; }
+  .vehicle-form-grid, .vehicle-detail-list { grid-template-columns: minmax(0, 1fr); }
+  .vehicle-form-grid { gap: 13px; }
+  .vehicle-modal-actions { justify-content: stretch; }
+  .vehicle-modal-actions button { flex: 1; }
 }

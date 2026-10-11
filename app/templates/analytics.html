@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics IA - Importadora Morales</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='analytics.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+</head>
+<body class="module-theme analytics-page">
+    <div class="md:hidden fixed top-4 left-4 z-40">
+        <button id="mobile-menu-button" type="button" class="bg-white/95 text-slate-900 p-3 rounded-xl shadow-lg border border-slate-200" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false"><i class="fa-solid fa-bars text-lg" aria-hidden="true"></i></button>
+    </div>
+    <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+    <aside id="sidebar" class="sidebar fixed inset-y-0 top-0 left-0 z-30 w-72 max-w-[18rem] transform -translate-x-full transition-transform duration-300 md:static md:translate-x-0 md:transform-none md:transition-none md:w-64 md:max-w-none md:self-stretch md:min-h-screen bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 flex-shrink-0 overflow-y-auto h-screen max-h-screen">
+        <div>
+            <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
+            <nav aria-label="Navegación principal">
+                <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
+                {% if has_permission('analytics', 'read') %}<a class="active" href="{{ url_for('analytics') }}" aria-current="page"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
+                {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
+                {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
+                {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake" aria-hidden="true"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
+                {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Devoluciones</a>{% endif %}
+                {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side" aria-hidden="true"></i> Desarme de Vehículos</a>{% endif %}
+                {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Usuarios</a>{% endif %}
+                {% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears" aria-hidden="true"></i> Mantenimiento</a>{% endif %}
+            </nav>
+        </div>
+        <div class="session-panel">
+            <small>Sesión activa</small><strong>{{ user_name }}</strong><span>{{ user_role }}</span>
+            <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Cerrar Sesión</a>
+        </div>
+    </aside>
+
+    <main class="analytics-main">
+        <header class="analytics-header">
+            <div class="analytics-title">
+                <span><i class="fa-solid fa-brain" aria-hidden="true"></i></span>
+                <div><h1>Analytics IA</h1><p>Análisis inteligente y generación de reportes</p></div>
+            </div>
+            <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
+            <div class="analytics-period" role="group" aria-label="Período del análisis">
+                {% for period in [7, 30, 90] %}
+                <button type="button" data-period="{{ period }}" class="{% if selected_days == period %}is-active{% endif %}" aria-pressed="{{ 'true' if selected_days == period else 'false' }}">{{ period }} días</button>
+                {% endfor %}
+            </div>
+        </header>
+
+        {% if data_error %}
+        <div class="analytics-error" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>{{ data_error }}</span></div>
+        {% endif %}
+        <div id="analytics-error" class="analytics-error" role="alert" hidden></div>
+
+        <section class="analytics-kpis" aria-label="Indicadores principales">
+            <article class="analytics-kpi kpi-blue">
+                <div class="kpi-icon"><i class="fa-solid fa-box-open" aria-hidden="true"></i></div>
+                <span class="kpi-tag"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> En tiempo real</span>
+                <p>Repuestos en Sistema</p><strong id="metric-products">{{ analytics_data.metricas.repuestos if analytics_data else 0 }}</strong>
+                <small><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> <span id="metric-units">{{ analytics_data.metricas.unidades_inventario if analytics_data else 0 }}</span> unidades en inventario</small>
+            </article>
+            <article class="analytics-kpi kpi-green">
+                <div class="kpi-icon"><i class="fa-solid fa-dollar-sign" aria-hidden="true"></i></div>
+                <span class="kpi-tag"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> <span data-period-label>{{ selected_days }} días</span></span>
+                <p>Ingresos Totales</p><strong id="metric-revenue">Q {{ '{:,.2f}'.format(analytics_data.metricas.ingresos if analytics_data else 0) }}</strong>
+                <small><i class="fa-solid fa-receipt" aria-hidden="true"></i> Ventas registradas en el período</small>
+            </article>
+            <article class="analytics-kpi kpi-purple">
+                <div class="kpi-icon"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></div>
+                <span class="kpi-tag"><i class="fa-solid fa-chart-line" aria-hidden="true"></i> <span data-period-label>{{ selected_days }} días</span></span>
+                <p>Total Ventas</p><strong id="metric-sales">{{ analytics_data.metricas.ventas if analytics_data else 0 }}</strong>
+                <small><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Documentos de venta</small>
+            </article>
+            <article class="analytics-kpi kpi-orange">
+                <div class="kpi-icon"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></div>
+                <span class="kpi-tag"><i class="fa-solid fa-percent" aria-hidden="true"></i> Margen bruto</span>
+                <p>Margen Promedio</p><strong id="metric-margin">{{ '{:.1f}'.format(analytics_data.metricas.margen_porcentaje if analytics_data else 0) }}%</strong>
+                <small><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Estimado según costo y precio</small>
+            </article>
+        </section>
+
+        <section class="analytics-predictions" id="predictions-panel" aria-labelledby="predictions-title">
+            <header>
+                <div class="analytics-section-title">
+                    <span class="section-icon purple-icon"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></span>
+                    <div><h2 id="predictions-title">Predicciones Inteligentes de Stock</h2><p>Análisis basado en existencias, mínimos y tendencias de ventas</p></div>
+                </div>
+                <button type="button" class="icon-close" data-close-predictions aria-label="Ocultar predicciones"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+            <div class="prediction-grid" id="prediction-grid">
+                {% if analytics_data and analytics_data.predicciones %}
+                    {% for item in analytics_data.predicciones %}
+                    <article class="prediction-card{% if item.requiere_reabastecimiento %} needs-restock{% endif %}">
+                        <div class="prediction-name"><strong>{{ item.nombre }}</strong><i class="fa-regular {% if item.requiere_reabastecimiento %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}" aria-hidden="true"></i></div>
+                        <p>Código: {{ item.codigo }} · {{ item.categoria }}</p>
+                        <div class="prediction-facts"><span>Stock actual/min.: <b>{{ item.stock|int }} / {{ item.minimo|int }}</b></span><span>Agotamiento estimado: <b>{{ item.dias_agotamiento if item.dias_agotamiento is not none else '—' }} días</b></span></div>
+                        <span class="prediction-status{% if item.requiere_reabastecimiento %} warning{% endif %}">{{ item.urgencia }}</span>
+                    </article>
+                    {% endfor %}
+                {% else %}
+                <div class="analytics-empty" id="prediction-empty">No hay repuestos para mostrar en este período.</div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="analytics-chart-grid" aria-label="Gráficas de analítica">
+            <article class="analytics-chart-card">
+                <h2><i class="fa-solid fa-chart-line chart-blue" aria-hidden="true"></i> Tendencia Temporal</h2>
+                <div class="chart-container"><canvas id="temporal-chart" aria-label="Ingresos y unidades vendidas por día"></canvas></div>
+            </article>
+            <article class="analytics-chart-card">
+                <h2><i class="fa-solid fa-chart-column chart-green" aria-hidden="true"></i> Rendimiento por Tipo</h2>
+                <div class="chart-container"><canvas id="type-chart" aria-label="Unidades vendidas y margen por categoría"></canvas></div>
+            </article>
+            <article class="analytics-chart-card">
+                <h2><i class="fa-solid fa-chart-pie chart-purple" aria-hidden="true"></i> Distribución de Inventario</h2>
+                <div class="chart-container"><canvas id="inventory-chart" aria-label="Distribución de repuestos por estado"></canvas></div>
+            </article>
+            <article class="analytics-chart-card">
+                <h2><i class="fa-solid fa-dollar-sign chart-orange" aria-hidden="true"></i> Ingresos por Categoría</h2>
+                <div class="chart-container"><canvas id="revenue-chart" aria-label="Ingresos por categoría"></canvas></div>
+            </article>
+        </section>
+
+        <section class="analytics-recommendations" aria-labelledby="recommendations-title">
+            <header>
+                <div class="analytics-section-title">
+                    <span class="section-icon purple-icon"><i class="fa-solid fa-brain" aria-hidden="true"></i></span>
+                    <div><h2 id="recommendations-title">Recomendaciones Inteligentes</h2><p>La IA analizará indicadores agregados del sistema, sin datos de clientes.</p></div>
+                </div>
+                <button type="button" class="analytics-ai-button" id="generate-ai"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Generar análisis IA</button>
+            </header>
+            <div class="recommendation-results" id="recommendation-results" aria-live="polite">
+                <article class="recommendation-note note-green">
+                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                    <div><strong>Seguimiento de inventario</strong><p id="recommendation-stock">Cargando indicadores de existencias y ventas...</p></div>
+                </article>
+                <article class="recommendation-note note-purple">
+                    <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+                    <div><strong>Análisis con ChatGPT</strong><p id="ai-recommendation">Selecciona “Generar análisis IA” para recibir recomendaciones basadas en los datos del período.</p></div>
+                </article>
+            </div>
+            <p class="analytics-ai-error" id="ai-error" role="alert" hidden></p>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script id="analytics-initial-data" type="application/json">{{ analytics_data|tojson if analytics_data else 'null' }}</script>
+    <script src="{{ url_for('static', filename='analytics.js') }}" defer></script>
+    <script>
+    // DateTime display
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+        const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+        const el = document.getElementById('datetime-display');
+        if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Session auto-refresh on tab visibility change
+    (function() {
+        const KEEP_ALIVE_INTERVAL = 30000;
+        let keepAliveTimer = null;
+
+        function pingKeepAlive() {
+            fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'expired') {
+                        window.location.href = '{{ url_for("login") }}';
+                    }
+                })
+                .catch(() => {
+                    window.location.href = '{{ url_for("login") }}';
+                });
+        }
+
+        function startKeepAlive() {
+            if (keepAliveTimer) return;
+            keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveTimer) {
+                clearInterval(keepAliveTimer);
+                keepAliveTimer = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopKeepAlive();
+            } else {
+                // Tab became visible - immediately check session
+                pingKeepAlive();
+                startKeepAlive();
+            }
+        });
+
+        startKeepAlive();
+        window.addEventListener('beforeunload', stopKeepAlive);
+    })();
+    </script>
+</body>
+</html>

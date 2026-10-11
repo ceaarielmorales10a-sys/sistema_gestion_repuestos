@@ -11,10 +11,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='desarme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
 <body class="module-theme dismantling-page min-h-screen flex flex-col md:flex-row">
     <div class="mobile-menu-trigger">
-        <button id="mobile-menu-button" type="button" aria-label="Abrir menú"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <button id="mobile-menu-button" type="button" aria-label="Abrir menú" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
     </div>
     <div id="mobile-sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
 
@@ -42,12 +44,13 @@
 
     <main class="disassembly-main">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}<div class="flash {{ category }}" role="status">{{ message }}</div>{% endfor %}
+            {% for category, message in messages %}<div class="disassembly-flash {{ category }}" role="status"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i><span>{{ message }}</span><button type="button" aria-label="Cerrar notificación" class="flash-close" data-close-flash><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>{% endfor %}
         {% endwith %}
 
         <header class="disassembly-header">
             <div><h1>Desarme de Vehículos</h1><p>Registro y control de vehículos para desarme</p></div>
-            {% if can_create %}<button class="new-vehicle-button" id="open-create-notice" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo vehículo</button>{% endif %}
+            <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
+            {% if can_create %}<button class="new-vehicle-button" id="open-create-vehicle" type="button" title="Nuevo vehículo"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo vehículo</button>{% endif %}
         </header>
 
         <section class="disassembly-summary" aria-label="Resumen de desarmes">
@@ -60,8 +63,8 @@
 
         <form class="disassembly-filters" id="disassembly-filter-form" action="{{ url_for('desarme') }}" method="get" role="search">
             <label class="vehicle-search">
-                <span class="sr-only">Buscar desarme</span><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                <input type="search" name="q" value="{{ filters.q }}" placeholder="Buscar por ID, origen o estado..." autocomplete="off" aria-label="Buscar por ID, origen o estado">
+                <span class="sr-only">Buscar vehículo</span><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search" name="q" value="{{ filters.q }}" placeholder="Buscar por ID, marca, modelo, placa, VIN..." autocomplete="off" aria-label="Buscar por ID, marca, modelo, placa o VIN">
             </label>
             <label>
                 <span class="sr-only">Filtrar por estado</span>
@@ -74,7 +77,7 @@
                 <span class="sr-only">Filtrar por origen</span>
                 <select name="origen" aria-label="Filtrar por origen">
                     <option value="">Todos los orígenes</option>
-                    {% for origen in origenes %}<option value="{{ origen.id }}" {% if filters.origen == origen.id|string %}selected{% endif %}>{{ origen.nombre }}</option>{% endfor %}
+                    {% for origen in origenes %}<option value="{{ origen.nombre }}" {% if filters.origen == origen.nombre %}selected{% endif %}>{{ origen.nombre }}</option>{% endfor %}
                 </select>
             </label>
         </form>
@@ -84,18 +87,30 @@
                 <div class="disassembly-message error-state" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>{{ page_error }}</p></div>
             {% elif vehicles %}
                 <div class="disassembly-table-wrap">
-                    <table class="disassembly-table">
-                        <thead><tr><th>ID</th><th>Origen</th><th>Fecha inicio</th><th>Fecha finalización</th><th>Estado</th><th>Piezas</th><th>Observaciones</th></tr></thead>
+                    <table class="disassembly-table" data-pagination-page-size="10">
+                        <thead><tr><th>ID vehículo</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Color</th><th>Placa / VIN</th><th>Origen</th><th>Fecha adq.</th><th>Estado</th><th>Desarme</th><th>Piezas</th><th>Acciones</th></tr></thead>
                         <tbody>
                             {% for vehicle in vehicles %}
                             <tr>
-                                <td class="vehicle-id">D-{{ '%06d'|format(vehicle.id|int) }}</td>
-                                <td>{{ vehicle.origen }}</td>
-                                <td>{{ vehicle.fecha_inicio.strftime('%d/%m/%Y') if vehicle.fecha_inicio and vehicle.fecha_inicio.strftime else vehicle.fecha_inicio or '—' }}</td>
-                                <td>{{ vehicle.fecha_finalizacion.strftime('%d/%m/%Y') if vehicle.fecha_finalizacion and vehicle.fecha_finalizacion.strftime else vehicle.fecha_finalizacion or '—' }}</td>
-                                <td><span class="state-badge {{ vehicle.state_class }}">{{ vehicle.estado }}</span></td>
-                                <td>{{ vehicle.piezas }}</td>
-                                <td class="vehicle-notes">{{ vehicle.observaciones or '—' }}</td>
+                                <td class="vehicle-id" data-label="ID vehículo">VEH-{{ '%06d'|format(vehicle.id|int) }}</td>
+                                <td class="vehicle-make" data-label="Marca">{{ vehicle.marca }}</td>
+                                <td data-label="Modelo">{{ vehicle.modelo }}</td>
+                                <td data-label="Año">{{ vehicle.anio }}</td>
+                                <td data-label="Color">{{ vehicle.color }}</td>
+                                <td class="vehicle-identifier" data-label="Placa / VIN">{% if vehicle.placa %}<span>{{ vehicle.placa }}</span>{% endif %}{% if vehicle.vin_chasis %}<small>{{ vehicle.vin_chasis }}</small>{% endif %}{% if not vehicle.placa and not vehicle.vin_chasis %}—{% endif %}</td>
+                                <td data-label="Origen">{{ vehicle.origen }}</td>
+                                <td data-label="Fecha adq.">{{ vehicle.fecha_adquisicion.strftime('%d/%m/%Y') if vehicle.fecha_adquisicion and vehicle.fecha_adquisicion.strftime else vehicle.fecha_adquisicion or '—' }}</td>
+                                <td data-label="Estado"><span class="state-badge {{ vehicle.state_class }}">{{ vehicle.estado }}</span></td>
+                                <td data-label="Desarme">{{ vehicle.fecha_finalizacion.strftime('%d/%m/%Y') if vehicle.fecha_finalizacion and vehicle.fecha_finalizacion.strftime else vehicle.fecha_finalizacion or '—' }}</td>
+                                <td data-label="Piezas"><span class="parts-count">{{ vehicle.piezas }}</span></td>
+                                <td data-label="Acciones">
+                                    <div class="vehicle-row-actions">
+                                        <a class="vehicle-detail-button" href="{{ url_for('desarme_detalle', vehicle_id=vehicle.id) }}" title="Ver todos los detalles del desarme" aria-label="Ver todos los detalles del desarme VEH-{{ '%06d'|format(vehicle.id|int) }}"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></a>
+{% if can_create %}
+                                    <button class="vehicle-edit-button" type="button" title="Modificar vehículo" aria-label="Modificar vehículo VEH-{{ '%06d'|format(vehicle.id|int) }}" data-edit-vehicle data-id="{{ vehicle.id }}" data-brand="{{ vehicle.id_marca }}" data-model="{{ vehicle.id_modelo }}" data-year="{{ vehicle.id_anio }}" data-color="{{ vehicle.id_color or '' }}" data-transmission="{{ vehicle.id_transmision or '' }}" data-plate="{{ vehicle.placa or '' }}" data-vin="{{ vehicle.vin_chasis or '' }}" data-origin="{{ vehicle.origen if vehicle.origen != 'Sin especificar' else '' }}" data-acquired="{{ vehicle.fecha_adquisicion.strftime('%Y-%m-%d') if vehicle.fecha_adquisicion and vehicle.fecha_adquisicion.strftime else vehicle.fecha_adquisicion or '' }}" data-state="{{ vehicle.state_id or '' }}"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+                                    {% endif %}
+                                    </div>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -104,57 +119,134 @@
             {% else %}
                 <div class="disassembly-empty-state">
                     <i class="fa-solid fa-car-side" aria-hidden="true"></i>
-                    <p>{{ 'No hay vehículos registrados para desarme' if not has_filters else 'No se encontraron desarmes con esos filtros' }}</p>
+                    <p>{{ 'No hay vehículos registrados para desarme' if not has_filters else 'No se encontraron vehículos con esos filtros' }}</p>
                 </div>
             {% endif %}
         </section>
     </main>
 
     {% if can_create %}
-    <div class="disassembly-modal-backdrop" id="create-notice" hidden>
-        <section class="disassembly-modal" role="dialog" aria-modal="true" aria-labelledby="create-notice-title" aria-describedby="create-notice-description">
-            <header><h2 id="create-notice-title">Registro de vehículo</h2><button type="button" class="modal-close" aria-label="Cerrar aviso" data-close-notice><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
-            <div class="modal-notice-icon"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>
-            <p id="create-notice-description">El tablero y los filtros están disponibles, pero el registro de vehículos está pendiente de definir cómo se vincula cada vehículo con su proceso de desarme. No se guardó ningún cambio ni se modificó el inventario.</p>
-            <footer><button type="button" class="notice-confirm" data-close-notice>Entendido</button></footer>
+    <div class="disassembly-modal-backdrop" id="vehicle-modal" hidden>
+        <section class="disassembly-modal disassembly-vehicle-modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title">
+            <header class="vehicle-modal-header">
+                <h2 id="vehicle-modal-title">Registrar Vehículo para Desarme</h2>
+                <button type="button" class="modal-close" aria-label="Cerrar formulario" data-close-vehicle-modal><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+            <form id="create-vehicle-form" class="vehicle-form" action="{{ url_for('desarme') }}" method="post" data-mode="create">
+                <input type="hidden" name="action" id="vehicle-form-action" value="create">
+                <input type="hidden" name="id_vehiculo_desarme" id="vehicle-form-id" value="">
+                <div class="vehicle-form-fields">
+                    {% if schema_warning %}<p class="vehicle-schema-warning" role="status"><i class="fa-solid fa-database" aria-hidden="true"></i>{{ schema_warning }}</p>{% endif %}
+                    {% if form_error %}<p class="vehicle-form-error" role="alert">{{ form_error }}</p>{% endif %}
+                    <div class="vehicle-form-grid">
+                        <label class="vehicle-form-field" for="vehicle-brand"><span>Marca <em>*</em></span>
+                            <select id="vehicle-brand" name="id_marca" required><option value="">Seleccionar...</option>{% for marca in marcas %}<option value="{{ marca.id }}">{{ marca.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-model"><span>Modelo <em>*</em></span>
+                            <select id="vehicle-model" name="id_modelo" required disabled><option value="">Selecciona primero una marca...</option></select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-year"><span>Año <em>*</em></span>
+                            <select id="vehicle-year" name="id_anio" required><option value="">Seleccionar...</option>{% for anio in anios %}<option value="{{ anio.id }}">{{ anio.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-transmission"><span>Transmisión</span>
+                            <select id="vehicle-transmission" name="id_transmision"><option value="">Sin especificar</option>{% for transmision in transmisiones %}<option value="{{ transmision.id }}">{{ transmision.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-color">Color
+                            <select id="vehicle-color" name="id_color"><option value="">Sin especificar</option>{% for color in colores %}<option value="{{ color.id }}">{{ color.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-vin">VIN / Chasis
+                            <input id="vehicle-vin" name="vin_chasis" type="text" maxlength="50" placeholder="Ej: 1HGCM82633A123456" autocomplete="off">
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-plate">Placa
+                            <input id="vehicle-plate" name="placa" type="text" maxlength="20" placeholder="Ej: ABC-1234" autocomplete="off">
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-acquired">Fecha de Adquisición
+                            <input id="vehicle-acquired" name="fecha_adquisicion" type="date" value="{{ today }}">
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-origin">Origen de Adquisición
+                            <select id="vehicle-origin" name="origen_adquisicion"><option value="">Sin especificar</option>{% for origen in origenes %}<option value="{{ origen.nombre }}">{{ origen.nombre }}</option>{% endfor %}</select>
+                        </label>
+                        <label class="vehicle-form-field" for="vehicle-state">Estado
+                            <select id="vehicle-state" name="id_estado_desarme" required {% if not process_link_ready %}disabled{% endif %}>{% for estado in estados %}<option value="{{ estado.id }}" {% if estado.id == pending_state_id %}selected{% endif %}>{{ 'Pendiente de desarme' if estado.id == pending_state_id else estado.nombre }}</option>{% endfor %}</select>
+                        </label>
+                    </div>
+                </div>
+                <footer class="vehicle-modal-actions">
+                    <button type="button" class="vehicle-cancel" data-close-vehicle-modal>Cancelar</button>
+                    <button type="submit" class="vehicle-save" id="vehicle-submit" {% if not schema_ready or not marcas or not anios or not estados or not pending_state_id %}disabled{% endif %}><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Guardar</button>
+                </footer>
+            </form>
         </section>
     </div>
     {% endif %}
 
+    <div class="disassembly-modal-backdrop" id="vehicle-detail-modal" hidden>
+        <section class="disassembly-modal vehicle-detail-modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-detail-title">
+            <header class="vehicle-modal-header"><h2 id="vehicle-detail-title">Detalle del vehículo</h2><button type="button" class="modal-close" aria-label="Cerrar detalle" data-close-detail><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+            <dl class="vehicle-detail-list" id="vehicle-detail-content"></dl>
+            <footer class="vehicle-modal-actions"><button type="button" class="vehicle-save" data-close-detail>Cerrar</button></footer>
+        </section>
+    </div>
+
     <script>
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('mobile-sidebar-overlay');
-        document.getElementById('mobile-menu-button')?.addEventListener('click', () => {
-            sidebar?.classList.toggle('-translate-x-full');
-            overlay?.classList.toggle('hidden');
-        });
-        overlay?.addEventListener('click', () => {
-            sidebar?.classList.add('-translate-x-full');
-            overlay.classList.add('hidden');
+    // DateTime display
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+        const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+        const el = document.getElementById('datetime-display');
+        if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Session auto-refresh on tab visibility change
+    (function() {
+        const KEEP_ALIVE_INTERVAL = 30000;
+        let keepAliveTimer = null;
+
+        function pingKeepAlive() {
+            fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'expired') {
+                        window.location.href = '{{ url_for("login") }}';
+                    }
+                })
+                .catch(() => {
+                    window.location.href = '{{ url_for("login") }}';
+                });
+        }
+
+        function startKeepAlive() {
+            if (keepAliveTimer) return;
+            keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveTimer) {
+                clearInterval(keepAliveTimer);
+                keepAliveTimer = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopKeepAlive();
+            } else {
+                // Tab became visible - immediately check session
+                pingKeepAlive();
+                startKeepAlive();
+            }
         });
 
-        const filterForm = document.getElementById('disassembly-filter-form');
-        let searchTimer;
-        filterForm?.querySelector('input[name="q"]')?.addEventListener('input', () => {
-            window.clearTimeout(searchTimer);
-            searchTimer = window.setTimeout(() => filterForm.requestSubmit(), 350);
-        });
-        filterForm?.querySelectorAll('select').forEach((select) => select.addEventListener('change', () => filterForm.requestSubmit()));
-
-        const notice = document.getElementById('create-notice');
-        const openNotice = document.getElementById('open-create-notice');
-        const closeNotice = () => {
-            if (!notice) return;
-            notice.hidden = true;
-            openNotice?.focus();
-        };
-        openNotice?.addEventListener('click', () => {
-            notice.hidden = false;
-            notice.querySelector('[data-close-notice]')?.focus();
-        });
-        notice?.querySelectorAll('[data-close-notice]').forEach((button) => button.addEventListener('click', closeNotice));
-        notice?.addEventListener('click', (event) => { if (event.target === notice) closeNotice(); });
-        document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && notice && !notice.hidden) closeNotice(); });
+        startKeepAlive();
+        window.addEventListener('beforeunload', stopKeepAlive);
+    })();
     </script>
+    <script src="{{ url_for('static', filename='desarme.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='pagination.js') }}" defer></script>
 </body>
 </html>

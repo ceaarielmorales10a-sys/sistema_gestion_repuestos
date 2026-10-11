@@ -2,6 +2,15 @@
 
 .photo-field{padding-top:4px}.photo-input{display:block;width:100%;padding:9px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px}.photo-help{display:block;margin-top:5px;color:#94a3b8;font-size:11px}.photo-preview,.current-photo{display:flex;align-items:center;gap:12px;margin:8px 0;padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#52637a;font-size:11px}.photo-preview img,.current-photo img{width:72px;height:58px;object-fit:cover;border-radius:7px;border:1px solid #cbd5e1}.current-photo{flex-wrap:wrap}.current-photo label{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b}.current-photo input{accent-color:#2563eb}
 
+.inventory-status-field{display:flex;flex-direction:column;gap:7px;padding:12px 14px;border:1px solid #dfe5ee;border-radius:10px;background:#f3f5f8}
+.inventory-status-toggle{display:inline-flex;align-items:center;gap:10px;color:#1f2937;font-size:13px;font-weight:600;cursor:pointer}
+.inventory-status-toggle input{position:absolute;width:1px;height:1px;opacity:0}
+.inventory-status-checkmark{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:1px solid #94a3b8;border-radius:4px;background:#fff}
+.inventory-status-toggle input:checked+.inventory-status-checkmark{border-color:#2563eb;background:#2563eb}
+.inventory-status-toggle input:checked+.inventory-status-checkmark::after{content:'✓';color:#fff;font-size:13px;font-weight:700;line-height:1}
+.inventory-status-toggle input:focus-visible+.inventory-status-checkmark{outline:2px solid #2563eb;outline-offset:2px}
+.inventory-status-field small{margin-left:28px;color:#64748b;font-size:11px}
+
 /* Fuentes e importación opcional para pulir la visualización */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 

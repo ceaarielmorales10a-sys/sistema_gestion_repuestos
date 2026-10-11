@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
 <body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -50,8 +52,7 @@
                     <i class="fa-solid fa-cart-shopping text-base w-5"></i> Ventas
                 </a>{% endif %}
                 {% if has_permission('prestamos', 'read') %}<a href="/prestamos" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl flex justify-between items-center hover:bg-slate-800/60 hover:text-white transition-all"><div class="flex items-center gap-3"><i class="fa-solid fa-handshake text-base w-5"></i> Préstamos</div>{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
-                <!-- Estado Activo en Devoluciones -->
-                {% if has_permission('devoluciones', 'read') %}<a href="{{ url_for('devoluciones') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-orange-600 text-white transition-all shadow-md shadow-orange-600/10">
+                {% if has_permission('devoluciones', 'read') %}<a href="{{ url_for('devoluciones') }}" aria-current="page" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl bg-blue-600 text-white transition-all shadow-md shadow-blue-600/10">
                     <i class="fa-solid fa-rotate-left text-base w-5"></i> Devoluciones
                 </a>{% endif %}
                 {% if has_permission('desarme', 'read') %}<a href="/desarme" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
@@ -81,13 +82,13 @@
 
     <!-- 2. ÁREA DE CONTENIDO DE DEVOLUCIONES -->
     <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto md:min-h-screen">
-<header><div><h1>Devoluciones</h1><p>Gestión de devoluciones por venta</p></div>{% if has_permission('devoluciones', 'write') %}<button class="new-return" type="button" id="open-return"><i class="fa-solid fa-plus"></i> Nueva Devolución</button>{% endif %}</header>
+<header><div><h1>Devoluciones</h1><p>Gestión de devoluciones por venta</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div>{% if has_permission('devoluciones', 'write') %}<button class="new-return" type="button" id="open-return"><i class="fa-solid fa-plus"></i> Nueva Devolución</button>{% endif %}</header>
 <div class="tabs"><button class="active" type="button" data-tab="list" aria-pressed="true"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Lista</button><button type="button" data-tab="report" aria-pressed="false"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Reportes</button></div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>{{ message }}</div>{% endfor %}{% endwith %}
 <section id="list-view">
 <div class="summary"><article class="count"><span>Total Devoluciones</span><b>{{ total_devoluciones }}</b><i class="fa-solid fa-rotate-left"></i></article><article class="amount"><span>Monto Total</span><b>Q {{ '{:,.2f}'.format(monto_total or 0) }}</b><i class="fa-solid fa-dollar-sign"></i></article></div>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="return-search" type="search" placeholder="Buscar por producto, cliente, código o # venta..."></div>
-<section class="card"><div class="table-wrap"><table><thead><tr><th>FECHA</th><th># VENTA</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>TOTAL</th><th>MOTIVO</th><th>ACCIONES</th></tr></thead><tbody>
+<section class="card"><div class="table-wrap"><table data-pagination-page-size="10"><thead><tr><th>FECHA</th><th># VENTA</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>TOTAL</th><th>MOTIVO</th><th>ACCIONES</th></tr></thead><tbody>
 {% for item in devoluciones %}{% for detail in item.get('items', []) %}
 <tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones"><div class="action-buttons"><button class="view-return" type="button" title="Ver detalle" aria-label="Ver detalle devolución V-{{ '%06d'|format(item.id_venta|int) }}" data-return="{{ {'id_devolucion': item.id_devolucion, 'id_venta': item.id_venta, 'cliente': item.cliente, 'fecha_devolucion': item.fecha_devolucion|string, 'total_devuelto': item.total_devuelto, 'items': item.get('items', [])}|tojson|forceescape }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button></div></td></tr>
 {% endfor %}{% else %}<tr><td class="empty" colspan="9">No hay devoluciones registradas.</td></tr>{% endfor %}
@@ -115,9 +116,38 @@
         <span>Cliente</span>
         <input type="search" name="cliente" placeholder="Buscar cliente...">
       </label>
+      <label class="report-field">
+        <span>Vendedor</span>
+        <input type="search" name="vendedor" placeholder="Buscar vendedor...">
+      </label>
       <label class="report-field report-field-wide">
         <span>Repuesto (nombre o código)</span>
         <input type="search" name="repuesto" placeholder="Buscar repuesto...">
+      </label>
+      <label class="report-field">
+        <span>Motivo</span>
+        <select name="motivo">
+          <option value="">Todos</option>
+          {% for motivo in motivos_devolucion %}
+          <option value="{{ motivo.id }}">{{ motivo.motivo }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="report-field">
+        <span>Estado Venta</span>
+        <select name="estado_venta">
+          <option value="">Todos</option>
+          <option value="1">Completadas</option>
+          <option value="2">Devueltas</option>
+        </select>
+      </label>
+      <label class="report-field">
+        <span>Monto Mín</span>
+        <input type="number" step="0.01" name="min_total" placeholder="0.00">
+      </label>
+      <label class="report-field">
+        <span>Monto Máx</span>
+        <input type="number" step="0.01" name="max_total" placeholder="99999.99">
       </label>
       <div class="report-actions">
         <button type="button" class="secondary-btn" id="clear-return-report">Limpiar filtros</button>
@@ -145,7 +175,7 @@
   </div>
 
   <div class="report-preview-table-wrap">
-    <table class="report-preview-table">
+    <table class="report-preview-table" data-pagination-page-size="10">
       <thead>
         <tr>
           <th># VENTA</th>
@@ -153,6 +183,7 @@
           <th>REPUESTO</th>
           <th>CÓDIGO</th>
           <th>CLIENTE</th>
+          <th>VENDEDOR</th>
           <th>CANTIDAD</th>
           <th>TOTAL (Q)</th>
           <th>MOTIVO</th>
@@ -161,20 +192,21 @@
       <tbody>
         {% for item in devoluciones %}
           {% for detail in item.get('items', []) %}
-            <tr class="return-report-row" data-date="{{ item.fecha_devolucion }}" data-client="{{ item.cliente|lower }}" data-repuesto="{{ (detail.nombre ~ ' ' ~ detail.codigo)|lower }}" data-total="{{ detail.subtotal or 0 }}">
+            <tr class="return-report-row" data-date="{{ item.fecha_devolucion }}" data-client="{{ item.cliente|lower }}" data-vendedor="{{ item.vendedor|lower }}" data-repuesto="{{ (detail.nombre ~ ' ' ~ detail.codigo)|lower }}" data-total="{{ detail.subtotal or 0 }}" data-motivo="{{ detail.motivo_id|lower }}">
               <td>V-{{ '%06d'|format(item.id_venta|int) }}</td>
               <td>{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td>
               <td>{{ detail.nombre }}</td>
               <td>{{ detail.codigo }}</td>
               <td>{{ item.cliente }}</td>
+              <td>{{ item.vendedor }}</td>
               <td>{{ detail.cantidad }}</td>
               <td class="money">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td>
-          <td>{{ detail.motivo }}</td>
-        </tr>
-      {% endfor %}
+              <td>{{ detail.motivo }}</td>
+            </tr>
+          {% endfor %}
         {% else %}
         {% endfor %}
-        <tr id="return-report-empty" hidden><td colspan="8" class="empty">No hay devoluciones que coincidan con los filtros.</td></tr>
+        <tr id="return-report-empty" hidden><td colspan="9" class="empty">No hay devoluciones que coincidan con los filtros.</td></tr>
       </tbody>
     </table>
   </div>
@@ -722,7 +754,12 @@ function updateReturnReport() {
   const fromDate = filters.get('from_date') || '';
   const toDate = filters.get('to_date') || '';
   const clientQuery = normalizeReportText(filters.get('cliente'));
+  const sellerQuery = normalizeReportText(filters.get('vendedor'));
   const partQuery = normalizeReportText(filters.get('repuesto'));
+  const motivoFilter = (filters.get('motivo') || '').trim().toLowerCase();
+  const estadoVentaFilter = (filters.get('estado_venta') || '').trim();
+  const minTotal = parseFloat(filters.get('min_total')) || 0;
+  const maxTotal = parseFloat(filters.get('max_total')) || Infinity;
   let visibleCount = 0;
   let totalCents = 0;
 
@@ -730,12 +767,17 @@ function updateReturnReport() {
     const date = (row.dataset.date || '').slice(0, 10);
     const matchesDate = (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
     const matchesClient = !clientQuery || normalizeReportText(row.dataset.client).includes(clientQuery);
+    const matchesSeller = !sellerQuery || normalizeReportText(row.dataset.vendedor).includes(sellerQuery);
     const matchesPart = !partQuery || normalizeReportText(row.dataset.repuesto).includes(partQuery);
-    const isVisible = matchesDate && matchesClient && matchesPart;
+    const matchesMotivo = !motivoFilter || (row.dataset.motivo || '').toLowerCase() === motivoFilter;
+    const matchesEstadoVenta = !estadoVentaFilter || (row.dataset.estadoVenta || '') === estadoVentaFilter;
+    const rowTotal = Number(row.dataset.total || 0);
+    const matchesAmount = rowTotal >= minTotal && rowTotal <= maxTotal;
+    const isVisible = matchesDate && matchesClient && matchesSeller && matchesPart && matchesMotivo && matchesEstadoVenta && matchesAmount;
     row.hidden = !isVisible;
     if (isVisible) {
       visibleCount += 1;
-      totalCents += Math.round(Number(row.dataset.total || 0) * 100);
+      totalCents += Math.round(rowTotal * 100);
     }
   });
 
@@ -823,5 +865,62 @@ resetSelection();
             overlay.classList.remove('hidden');
         }
     });
+
+    // DateTime display
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+        const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+        const el = document.getElementById('datetime-display');
+        if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Session auto-refresh on tab visibility change
+    (function() {
+        const KEEP_ALIVE_INTERVAL = 30000;
+        let keepAliveTimer = null;
+
+        function pingKeepAlive() {
+            fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'expired') {
+                        window.location.href = '{{ url_for("login") }}';
+                    }
+                })
+                .catch(() => {
+                    window.location.href = '{{ url_for("login") }}';
+                });
+        }
+
+        function startKeepAlive() {
+            if (keepAliveTimer) return;
+            keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveTimer) {
+                clearInterval(keepAliveTimer);
+                keepAliveTimer = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopKeepAlive();
+            } else {
+                // Tab became visible - immediately check session
+                pingKeepAlive();
+                startKeepAlive();
+            }
+        });
+
+        startKeepAlive();
+        window.addEventListener('beforeunload', stopKeepAlive);
+    })();
 </script>
-</body></html>
+<script src="{{ url_for('static', filename='pagination.js') }}" defer></script></body></html>

@@ -55,6 +55,89 @@
     font-weight: 700 !important;
 }
 
+.inventory-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.inventory-status-badge.is-active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.inventory-status-badge.is-inactive {
+    background: #ffe4e6;
+    color: #be123c;
+}
+
+.inventory-status-switch {
+    display: inline-flex;
+    gap: 0.35rem;
+    width: fit-content;
+    margin-bottom: 1rem;
+    padding: 0.3rem;
+    border: 1px solid #dbe3ed;
+    border-radius: 0.85rem;
+    background: #e9eef5;
+}
+
+.inventory-status-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid transparent;
+    border-radius: 0.65rem;
+    background: transparent;
+    color: #475569;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.inventory-status-option span {
+    display: inline-flex;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    border-radius: 9999px;
+    background: #dbe3ed;
+    font-size: 0.72rem;
+}
+
+.inventory-status-option.is-selected {
+    border-color: #dbeafe;
+    background: #fff;
+    color: #1d4ed8;
+    box-shadow: 0 1px 4px rgb(15 23 42 / 10%);
+}
+
+.inventory-status-option.is-selected span {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+@media (max-width: 480px) {
+    .inventory-status-switch {
+        display: flex;
+        width: 100%;
+    }
+
+    .inventory-status-option {
+        flex: 1;
+        justify-content: center;
+        padding-inline: 0.5rem;
+    }
+}
+
 .report-card {
     background: rgba(255, 255, 255, 0.75);
     border: 1px solid #dfe7ef;

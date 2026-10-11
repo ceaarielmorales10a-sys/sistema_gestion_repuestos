@@ -21,11 +21,35 @@ IF OBJECT_ID(N'dbo.ubicacion_bodega', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ubi
 IF OBJECT_ID(N'dbo.rol', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.rol', N'descripcion') IS NULL ALTER TABLE dbo.rol ADD descripcion NVARCHAR(250) NULL;
 IF OBJECT_ID(N'dbo.estado_desarme', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.estado_desarme', N'descripcion') IS NULL ALTER TABLE dbo.estado_desarme ADD descripcion NVARCHAR(250) NULL;
 
+/* Agregar columna id_estado a todos los catálogos para control de activo/inactivo */
+IF OBJECT_ID(N'dbo.marca_vehiculo', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.marca_vehiculo', N'id_estado') IS NULL ALTER TABLE dbo.marca_vehiculo ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.marca', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.marca', N'id_estado') IS NULL ALTER TABLE dbo.marca ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.color', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.color', N'id_estado') IS NULL ALTER TABLE dbo.color ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.color_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.color_repuesto', N'id_estado') IS NULL ALTER TABLE dbo.color_repuesto ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.estado_general', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.estado_general', N'id_estado') IS NULL ALTER TABLE dbo.estado_general ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.estado_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.estado_repuesto', N'id_estado') IS NULL ALTER TABLE dbo.estado_repuesto ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.vehiculo_origen', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.vehiculo_origen', N'id_estado') IS NULL ALTER TABLE dbo.vehiculo_origen ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.transmision', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.transmision', N'id_estado') IS NULL ALTER TABLE dbo.transmision ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.transmision_vehiculo', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.transmision_vehiculo', N'id_estado') IS NULL ALTER TABLE dbo.transmision_vehiculo ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.ubicacion', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ubicacion', N'id_estado') IS NULL ALTER TABLE dbo.ubicacion ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.bodega', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.bodega', N'id_estado') IS NULL ALTER TABLE dbo.bodega ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.ubicacion_bodega', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ubicacion_bodega', N'id_estado') IS NULL ALTER TABLE dbo.ubicacion_bodega ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.rol', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.rol', N'id_estado') IS NULL ALTER TABLE dbo.rol ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.estado_desarme', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.estado_desarme', N'id_estado') IS NULL ALTER TABLE dbo.estado_desarme ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.anio_vehiculo', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.anio_vehiculo', N'id_estado') IS NULL ALTER TABLE dbo.anio_vehiculo ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.anio', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.anio', N'id_estado') IS NULL ALTER TABLE dbo.anio ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.modelo_vehiculo', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.modelo_vehiculo', N'id_estado') IS NULL ALTER TABLE dbo.modelo_vehiculo ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.modelo', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.modelo', N'id_estado') IS NULL ALTER TABLE dbo.modelo ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.metodo_pago', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.metodo_pago', N'id_estado') IS NULL ALTER TABLE dbo.metodo_pago ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.tipo_desarme', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tipo_desarme', N'id_estado') IS NULL ALTER TABLE dbo.tipo_desarme ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.estado_pieza', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.estado_pieza', N'id_estado') IS NULL ALTER TABLE dbo.estado_pieza ADD id_estado INT NULL DEFAULT 1;
+IF OBJECT_ID(N'dbo.motivo_incidencia', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.motivo_incidencia', N'id_estado') IS NULL ALTER TABLE dbo.motivo_incidencia ADD id_estado INT NULL DEFAULT 1;
+
 /* Campos del catálogo tipo de repuesto. La ubicación es una clave al catálogo
    de ubicaciones, para que el formulario de alta pueda seleccionarla de forma
    automática. */
 IF OBJECT_ID(N'dbo.tipo_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tipo_repuesto', N'descripcion') IS NULL ALTER TABLE dbo.tipo_repuesto ADD descripcion NVARCHAR(250) NULL;
-IF OBJECT_ID(N'dbo.tipo_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tipo_repuesto', N'id_estado') IS NULL ALTER TABLE dbo.tipo_repuesto ADD id_estado INT NULL;
+IF OBJECT_ID(N'dbo.tipo_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tipo_repuesto', N'id_estado') IS NULL ALTER TABLE dbo.tipo_repuesto ADD id_estado INT NULL DEFAULT 1;
 IF OBJECT_ID(N'dbo.tipo_repuesto', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tipo_repuesto', N'id_ubicacion') IS NULL ALTER TABLE dbo.tipo_repuesto ADD id_ubicacion INT NULL;
 GO
 
@@ -35,7 +59,7 @@ BEGIN
         id_estado_pieza INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
         nombre NVARCHAR(100) NOT NULL,
         descripcion NVARCHAR(250) NULL,
-        id_estado INT NULL
+        id_estado INT NULL DEFAULT 1
     );
 END;
 GO
@@ -44,7 +68,18 @@ IF OBJECT_ID(N'dbo.motivo_devolucion', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.motivo_devolucion (
         id_motivo INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        motivo NVARCHAR(150) NOT NULL
+        motivo NVARCHAR(150) NOT NULL,
+        id_estado INT NULL DEFAULT 1
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.estado_prestamo', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.estado_prestamo (
+        id_estado_prestamo INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        estado NVARCHAR(100) NOT NULL,
+        id_estado INT NULL DEFAULT 1
     );
 END;
 GO
@@ -72,15 +107,6 @@ BEGIN
     FROM dbo.detalle_venta dv
     INNER JOIN inserted i ON dv.id_repuesto = i.id_repuesto
     INNER JOIN dbo.devolucion d ON d.id_devolucion = i.id_devolucion AND dv.id_venta = d.id_venta;
-END;
-GO
-
-IF OBJECT_ID(N'dbo.estado_prestamo', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.estado_prestamo (
-        id_estado_prestamo INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        estado NVARCHAR(100) NOT NULL
-    );
 END;
 GO
 

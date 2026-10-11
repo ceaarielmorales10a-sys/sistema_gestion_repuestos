@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='flash-notifications.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
 <body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -114,13 +116,14 @@
                     <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Administración de Usuarios</h1>
                     <p class="text-sm text-slate-500 mt-1">Gestiona los usuarios y sus permisos del sistema</p>
                 </div>
+                <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
                 <div class="flex items-center gap-3">
                     <button type="button" id="open-role-modal" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
                         <i class="fa-solid fa-plus"></i> Nuevo Rol
                     </button>
-                    <a href="/usuario/nuevo" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
+                    <button type="button" id="open-user-modal" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
                         <i class="fa-solid fa-plus"></i> Nuevo Usuario
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -211,7 +214,7 @@
                     </div>
 
                     <div class="overflow-x-auto">
-                        <table class="min-w-full border-separate border-spacing-y-3">
+                        <table class="min-w-full border-separate border-spacing-y-3" data-pagination-page-size="10">
                             <thead>
                                 <tr class="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
                                     <th class="px-4 py-3">Usuario</th>
@@ -237,7 +240,7 @@
                                         <span class="status-pill {% if user.estado|lower == 'activo' %}status-active{% else %}status-inactive{% endif %}">{{ user.estado }}</span>
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700 flex gap-3 items-center">
-                                        <a href="{{ url_for('modificar_usuario', id_usuario=user.id_usuario) }}" class="text-blue-600 hover:text-blue-800" title="Editar usuario"><i class="fa-solid fa-pencil"></i></a>
+                                        <button type="button" class="edit-user-btn text-blue-600 hover:text-blue-800" title="Editar usuario" data-user-id="{{ user.id_usuario }}" data-username="{{ user.username }}" data-full-name="{{ user.full_name }}" data-email="{{ user.email }}" data-telefono="{{ user.telefono }}" data-rol="{{ user.rol }}" data-role-id="{{ user.id_rol }}" data-activo="{{ '1' if user.estado|lower == 'activo' else '2' }}"><i class="fa-solid fa-pencil"></i></button>
                                     </td>
                                 </tr>
                                 {% else %}
@@ -299,7 +302,7 @@
                 </div>
 
                 <div class="preview-table-wrap">
-                    <table class="report-preview-table">
+                    <table class="report-preview-table" data-pagination-page-size="10">
                         <thead>
                             <tr>
                                 <th>Usuario</th>
@@ -388,6 +391,101 @@
                 <div class="flex justify-end gap-3 pt-2">
                     <button type="button" id="cancel-role-modal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50">Cancelar</button>
                     <button type="submit" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Guardar rol</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Usuario (Nuevo/Editar) -->
+    <div id="user-modal" class="fixed inset-0 bg-slate-900/45 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="user-modal-title" class="text-2xl font-bold text-slate-900">Nuevo Usuario</h2>
+                <button type="button" id="close-user-modal" class="text-slate-500 hover:text-slate-700 text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form method="post" id="user-form" action="">
+                <input type="hidden" id="user_id" name="user_id" value="">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Nombre de Usuario <span class="text-red-500">*</span></label>
+                        <input id="user_username" name="username" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required>
+                    </div>
+
+                    <div class="password-wrap relative">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Contraseña <span class="text-red-500" id="password-required">*</span></label>
+                        <input id="user_password" name="password" type="password" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 pr-10" autocomplete="new-password">
+                        <button type="button" class="toggle-password absolute right-3 top-[35px] text-slate-400 hover:text-slate-600" aria-label="Mostrar contraseña">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Primer Nombre <span class="text-red-500">*</span></label>
+                        <input id="user_primer_nombre" name="primer_nombre" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Segundo Nombre</label>
+                        <input id="user_segundo_nombre" name="segundo_nombre" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Primer Apellido <span class="text-red-500">*</span></label>
+                        <input id="user_primer_apellido" name="primer_apellido" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Segundo Apellido</label>
+                        <input id="user_segundo_apellido" name="segundo_apellido" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+" title="Solo se permiten letras y espacios.">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Rol <span class="text-red-500">*</span></label>
+                        <select id="user_rol_id" name="rol_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required>
+                            <option value="">Selecciona un rol</option>
+                            {% for role in roles %}
+                            <option value="{{ role.id }}" data-permisos='{{ role.permisos|tojson|safe }}' data-descripcion="{{ role.descripcion }}">{{ role.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Email <span class="text-red-500">*</span></label>
+                        <input id="user_email" name="email" type="email" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Teléfono <span class="text-red-500">*</span></label>
+                    <input id="user_telefono" name="telefono" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500" required>
+                </div>
+
+                <div class="checkbox-row mb-4">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="activo" id="user_activo" checked>
+                        <span class="checkmark"></span>
+                        <span>Usuario activo</span>
+                    </label>
+                    <small>Los usuarios inactivos no podrán iniciar sesión en el sistema</small>
+                </div>
+
+                <div id="user-permissions-box" class="permissions-box mb-4" aria-live="polite">
+                    <div id="user-permissions-content">
+                        <strong>Permisos del rol:</strong>
+                        <span>Selecciona un rol para ver sus permisos.</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" id="cancel-user-modal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" id="user-submit-btn" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Crear Usuario</button>
                 </div>
             </form>
         </div>
@@ -633,6 +731,278 @@
             const initialView = ['list', 'roles', 'report'].includes(hash) ? hash : 'list';
             setView(initialView);
         });
+
+        // ===== USER MODAL =====
+        const userModal = document.getElementById('user-modal');
+        const userModalTitle = document.getElementById('user-modal-title');
+        const userForm = document.getElementById('user-form');
+        const userIdInput = document.getElementById('user_id');
+        const userUsernameInput = document.getElementById('user_username');
+        const userPasswordInput = document.getElementById('user_password');
+        const userPrimerNombreInput = document.getElementById('user_primer_nombre');
+        const userSegundoNombreInput = document.getElementById('user_segundo_nombre');
+        const userPrimerApellidoInput = document.getElementById('user_primer_apellido');
+        const userSegundoApellidoInput = document.getElementById('user_segundo_apellido');
+        const userRolIdInput = document.getElementById('user_rol_id');
+        const userEmailInput = document.getElementById('user_email');
+        const userTelefonoInput = document.getElementById('user_telefono');
+        const userActivoInput = document.getElementById('user_activo');
+        const userSubmitBtn = document.getElementById('user-submit-btn');
+        const passwordRequired = document.getElementById('password-required');
+        const MODULOS = [
+            ['analytics', 'Analytics IA'],
+            ['clientes', 'Clientes'],
+            ['inventario', 'Inventario'],
+            ['ventas', 'Ventas'],
+            ['prestamos', 'Préstamos'],
+            ['devoluciones', 'Devoluciones'],
+            ['desarme', 'Desarme de Vehículos'],
+            ['usuarios', 'Usuarios'],
+            ['mantenimiento', 'Mantenimiento'],
+        ];
+
+        function getPermissionLabel(value) {
+            switch (value) {
+                case 'write': return { text: 'Lectura y escritura', class: 'perm-write' };
+                case 'read': return { text: 'Solo lectura', class: 'perm-read' };
+                default: return { text: 'Sin acceso', class: 'perm-none' };
+            }
+        }
+
+        function renderUserPermissions(permisos) {
+            const container = document.getElementById('user-permissions-content');
+            if (!permisos) {
+                container.innerHTML = '<strong>Permisos del rol:</strong><span>Selecciona un rol para ver sus permisos.</span>';
+                return;
+            }
+            let html = '<strong>Permisos del rol:</strong><div class="permisos-grid">';
+            MODULOS.forEach(([key, name]) => {
+                const perm = getPermissionLabel(permisos[key] || 'none');
+                html += `<span class="permiso-badge ${perm.class}"><span class="permiso-modulo">${name}</span><span class="permiso-nivel">${perm.text}</span></span>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function restrictTextInput(input) {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[0-9]/g, '');
+            });
+        }
+
+        function openUserModal(user = null) {
+            if (!userModal) return;
+            
+            // Reset form
+            userForm.reset();
+            userIdInput.value = '';
+            userPasswordInput.required = true;
+            passwordRequired.style.display = 'inline';
+            userSubmitBtn.textContent = 'Crear Usuario';
+            userModalTitle.textContent = 'Nuevo Usuario';
+            userForm.action = '{{ url_for("nuevo_usuario") }}';
+            
+            // Clear permissions
+            renderUserPermissions(null);
+            
+            if (user) {
+                // Edit mode
+                userModalTitle.textContent = 'Editar Usuario';
+                userIdInput.value = user.id || '';
+                userUsernameInput.value = user.username || '';
+                userPrimerNombreInput.value = user.primer_nombre || '';
+                userSegundoNombreInput.value = user.segundo_nombre || '';
+                userPrimerApellidoInput.value = user.primer_apellido || '';
+                userSegundoApellidoInput.value = user.segundo_apellido || '';
+                userRolIdInput.value = user.role_id || '';
+                userEmailInput.value = user.email || '';
+                userTelefonoInput.value = user.telefono || '';
+                userActivoInput.checked = user.activo === '1';
+                userPasswordInput.required = false;
+                passwordRequired.style.display = 'none';
+                userPasswordInput.value = '';
+                userPasswordInput.placeholder = 'Dejar en blanco para no cambiar';
+                userSubmitBtn.textContent = 'Guardar Cambios';
+                userForm.action = '{{ url_for("modificar_usuario", id_usuario=0) }}'.replace('/0', '/' + user.id);
+                
+                // Render permissions for selected role
+                const selectedOption = userRolIdInput.options[userRolIdInput.selectedIndex];
+                if (selectedOption && selectedOption.dataset.permisos) {
+                    renderUserPermissions(JSON.parse(selectedOption.dataset.permisos));
+                }
+            }
+            
+            userModal.classList.remove('hidden');
+            userModal.classList.add('flex');
+            userUsernameInput.focus();
+        }
+
+        function closeUserModal() {
+            if (!userModal) return;
+            userModal.classList.add('hidden');
+            userModal.classList.remove('flex');
+        }
+
+        // Open modal for new user
+        document.getElementById('open-user-modal')?.addEventListener('click', () => openUserModal());
+        
+        // Close modal buttons
+        document.getElementById('close-user-modal')?.addEventListener('click', closeUserModal);
+        document.getElementById('cancel-user-modal')?.addEventListener('click', closeUserModal);
+        
+        // Close on backdrop click
+        userModal?.addEventListener('click', (event) => {
+            if (event.target === userModal) closeUserModal();
+        });
+        
+        // Close on Escape
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeUserModal();
+        });
+
+        // Edit user buttons
+        document.querySelectorAll('.edit-user-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                // Fetch full user data
+                fetch('{{ url_for("usuario_get", id_usuario=0) }}'.replace('/0', '/' + button.dataset.userId))
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.usuario) {
+                            openUserModal(data.usuario);
+                        } else {
+                            alert('Error al cargar datos del usuario: ' + (data.error || 'Desconocido'));
+                        }
+                    })
+                    .catch(err => alert('Error de conexión: ' + err.message));
+            });
+        });
+
+        // Handle role change to show permissions
+        userRolIdInput?.addEventListener('change', (e) => {
+            const selectedOption = e.target.selectedOptions[0];
+            const permisos = selectedOption.dataset.permisos ? JSON.parse(selectedOption.dataset.permisos) : null;
+            renderUserPermissions(permisos);
+        });
+
+        // Restrict text inputs (names)
+        ['user_primer_nombre', 'user_segundo_nombre', 'user_primer_apellido', 'user_segundo_apellido'].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) restrictTextInput(input);
+        });
+
+        // Password toggle
+        document.querySelectorAll('.toggle-password').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const input = btn.previousElementSibling;
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+                } else {
+                    input.type = 'password';
+                    btn.innerHTML = '<i class="fa-regular fa-eye"></i>';
+                }
+            });
+        });
+
+        // Handle form submit via AJAX
+        userForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(userForm);
+            const submitBtn = userSubmitBtn;
+            const originalText = submitBtn.textContent;
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+            
+            try {
+                const response = await fetch(userForm.action, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                // Check if response is redirect (success) or HTML with errors
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + (data.error || 'No se pudo guardar'));
+                    }
+                } else {
+                    // HTML response with errors - reload to show flash messages
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert('Error de conexión: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+    // DateTime display
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+        const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+        const el = document.getElementById('datetime-display');
+        if (el) el.textContent = dateStr + ' \u2022 ' + timeStr;
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Session auto-refresh on tab visibility change
+    (function() {
+        const KEEP_ALIVE_INTERVAL = 30000;
+        let keepAliveTimer = null;
+
+        function pingKeepAlive() {
+            fetch('{{ url_for("keep_alive") }}', { method: 'POST', credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'expired') {
+                        window.location.href = '{{ url_for("login") }}';
+                    }
+                })
+                .catch(() => {
+                    window.location.href = '{{ url_for("login") }}';
+                });
+        }
+
+        function startKeepAlive() {
+            if (keepAliveTimer) return;
+            keepAliveTimer = setInterval(pingKeepAlive, KEEP_ALIVE_INTERVAL);
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveTimer) {
+                clearInterval(keepAliveTimer);
+                keepAliveTimer = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopKeepAlive();
+            } else {
+                // Tab became visible - immediately check session
+                pingKeepAlive();
+                startKeepAlive();
+            }
+        });
+
+        startKeepAlive();
+        window.addEventListener('beforeunload', stopKeepAlive);
+    })();
     </script>
+    <script src="{{ url_for('static', filename='pagination.js') }}" defer></script>
 </body>
 </html>

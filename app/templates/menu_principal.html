@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='sidebar-mobile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 </head>
 <body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -102,9 +103,12 @@
 
     <main class="flex-grow flex flex-col min-w-0 p-6 md:p-8 overflow-y-auto min-h-screen">
         <div class="flex-grow p-8 overflow-y-auto">
-            <div class="mb-6">
-                <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Menú Principal</h1>
-                <p class="text-sm text-gray-500 font-medium mt-0.5">Seleccione el módulo con el que desea trabajar</p>
+            <div class="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Menú Principal</h1>
+                    <p class="text-sm text-gray-500 font-medium mt-0.5">Seleccione el módulo con el que desea trabajar</p>
+                </div>
+                <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
@@ -323,6 +327,18 @@
             // Detener al cerrar la página
             window.addEventListener('beforeunload', stopKeepAlive);
         })();
+
+        // DateTime display
+        function updateDateTime() {
+            const now = new Date();
+            const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+            const dateStr = now.toLocaleDateString('es-ES', dateOptions);
+            const timeStr = now.toLocaleTimeString('es-ES', timeOptions);
+            document.getElementById('datetime-display').textContent = dateStr + ' \u2022 ' + timeStr;
+        }
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
     </script>
 </body>
 </html>
