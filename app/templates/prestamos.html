@@ -254,15 +254,17 @@
           <button type="button" class="close-form" id="close-loan" aria-label="Cerrar formulario"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </header>
         <section class="sale-fields loan-create-fields">
-          <label><span>Cliente <em>*</em></span><select name="id_cliente" required><option value="">Selecciona un cliente...</option>{% for cliente in clientes %}<option value="{{ cliente.id }}">{{ cliente.nombre }}</option>{% endfor %}</select></label>
+          <label><span>Cliente <em>*</em></span><div class="autocomplete loan-client-picker"><input class="loan-client-input" type="search" placeholder="Buscar cliente..." autocomplete="off" aria-label="Buscar cliente"><input class="loan-client-id" name="id_cliente" type="hidden"><div class="suggestions loan-client-suggestions"></div></div></label>
           <label><span>Devolución estimada <em>*</em></span><input type="date" name="fecha_devolucion" required></label>
+          <label><span>Registrado por</span><input value="{{ session.get('full_name', session.get('user', 'Usuario')) }}" disabled></label>
           <label class="observation-field"><span>Observaciones</span><textarea name="observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea></label>
         </section>
         <section class="items-section loan-create-items">
           <div class="items-heading"><span>Repuestos</span><button type="button" id="add-loan-item"><i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar repuesto</button></div>
           <div class="items-head"><span>REPUESTO</span><span>CANTIDAD</span><span>PRECIO UNITARIO</span><span></span></div>
-          <div id="loan-items"><div class="item-row loan-item"><select name="id_repuesto[]" aria-label="Repuesto" required><option value="">Selecciona un repuesto...</option>{% for repuesto in repuestos %}<option value="{{ repuesto.id }}" data-price="{{ repuesto.precio }}">{{ repuesto.codigo }} · {{ repuesto.nombre }} · Stock {{ repuesto.stock }}</option>{% endfor %}</select><input name="cantidad[]" type="number" min="1" value="1" aria-label="Cantidad" required><input name="precio[]" type="number" min="0" step="0.01" placeholder="Precio" aria-label="Precio unitario" required><button type="button" class="remove-item" title="Quitar repuesto" aria-label="Quitar repuesto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></div>
+          <div id="loan-items"></div>
         </section>
+        <section class="sale-total loan-total"><span>TOTAL DEL PRESTAMO</span><strong id="loan-total">Q 0.00</strong></section>
         <footer class="sale-form-actions">
           <button type="button" id="cancel-loan">Cancelar</button>
           <button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i> Registrar préstamo</button>
@@ -274,6 +276,8 @@
   <script>
     const modal = document.getElementById('loan-modal');
     const items = document.getElementById('loan-items');
+    const loanProducts = {{ repuestos|tojson }};
+    const loanClients = {{ clientes|tojson }};
     const loanDetailModal = document.getElementById('loan-detail-modal');
     let lastLoanDetailTrigger = null;
 
@@ -281,6 +285,33 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+
+    const loanClientInput = document.querySelector('.loan-client-input');
+    const loanClientId = document.querySelector('.loan-client-id');
+    const loanClientSuggestions = document.querySelector('.loan-client-suggestions');
+    loanClientInput?.addEventListener('input', () => {
+      loanClientId.value = '';
+      loanClientInput.classList.remove('selected');
+      loanClientSuggestions.replaceChildren();
+      const query = loanClientInput.value.trim().toLocaleLowerCase();
+      if (!query) {
+        loanClientSuggestions.classList.remove('open');
+        return;
+      }
+      loanClients.filter((client) => client.nombre.toLocaleLowerCase().includes(query)).slice(0, 8).forEach((client) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.textContent = client.nombre;
+        option.addEventListener('click', () => {
+          loanClientInput.value = client.nombre;
+          loanClientId.value = client.id;
+          loanClientInput.classList.add('selected');
+          loanClientSuggestions.classList.remove('open');
+        });
+        loanClientSuggestions.append(option);
+      });
+      loanClientSuggestions.classList.toggle('open', loanClientSuggestions.children.length > 0);
+    });
 
     function formatLoanDate(value, includeTime = false) {
       if (!value) return 'No registrada';
@@ -369,23 +400,79 @@
       if (event.key === 'Escape') closeLoanDetail();
     });
 
-    function bindItem(row) {
-      row.querySelector('select').addEventListener('change', (event) => {
-        const price = event.target.selectedOptions[0]?.dataset.price;
-        if (price) row.querySelector('[name="precio[]"]').value = price;
-      });
-      row.querySelector('.remove-item').addEventListener('click', () => {
-        if (items.children.length > 1) row.remove();
-      });
+    function updateLoanTotal() {
+      const total = [...(items?.querySelectorAll('.loan-item') || [])].reduce((sum, row) => {
+        const quantity = Number(row.querySelector('[name="cantidad[]"]').value) || 0;
+        const price = Number(row.querySelector('[name="precio[]"]').value) || 0;
+        return sum + quantity * price;
+      }, 0);
+      const totalElement = document.getElementById('loan-total');
+      if (totalElement) totalElement.textContent = formatLoanCurrency(total);
     }
 
-    if (items?.firstElementChild) bindItem(items.firstElementChild);
-    document.getElementById('add-loan-item')?.addEventListener('click', () => {
-      const row = items.firstElementChild.cloneNode(true);
-      row.querySelectorAll('input').forEach((input) => { input.value = input.name === 'cantidad[]' ? '1' : ''; });
-      row.querySelector('select').value = '';
-      items.appendChild(row);
-      bindItem(row);
+    function addLoanItem(focusInput = false) {
+      const row = document.createElement('div');
+      row.className = 'item-row loan-item';
+      row.innerHTML = '<div class="autocomplete loan-product-picker"><input class="product-input" type="search" placeholder="Buscar repuesto..." autocomplete="off" aria-label="Buscar repuesto"><input class="product-id" name="id_repuesto[]" type="hidden"><div class="suggestions loan-product-suggestions" role="listbox"></div></div><input name="cantidad[]" type="number" min="1" value="1" aria-label="Cantidad" required><input name="precio[]" type="number" min="0" step="0.01" placeholder="Precio" aria-label="Precio unitario" required><button type="button" class="remove-item" title="Quitar repuesto" aria-label="Quitar repuesto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+      const input = row.querySelector('.product-input');
+      const id = row.querySelector('.product-id');
+      const price = row.querySelector('[name="precio[]"]');
+      const suggestions = row.querySelector('.suggestions');
+
+      input.addEventListener('input', () => {
+        id.value = '';
+        price.value = '';
+        input.classList.remove('selected');
+        suggestions.replaceChildren();
+        const query = input.value.trim().toLocaleLowerCase();
+        if (!query) {
+          suggestions.classList.remove('open');
+          return;
+        }
+        loanProducts.filter((product) =>
+          `${product.codigo} ${product.nombre}`.toLocaleLowerCase().includes(query)
+        ).slice(0, 8).forEach((product) => {
+          const option = document.createElement('button');
+          option.type = 'button';
+          option.setAttribute('role', 'option');
+          option.append(document.createTextNode(`${product.codigo} — ${product.nombre}`));
+          const stock = document.createElement('small');
+          stock.textContent = `Stock disponible: ${product.stock}`;
+          option.append(stock);
+          option.addEventListener('click', () => {
+            input.value = `${product.codigo} — ${product.nombre}`;
+            id.value = product.id;
+            price.value = Number(product.precio || 0).toFixed(2);
+            input.classList.add('selected');
+            suggestions.classList.remove('open');
+            updateLoanTotal();
+          });
+          suggestions.append(option);
+        });
+        suggestions.classList.toggle('open', suggestions.children.length > 0);
+      });
+
+      row.querySelector('[name="cantidad[]"]').addEventListener('input', updateLoanTotal);
+      price.addEventListener('input', updateLoanTotal);
+      row.querySelector('.remove-item').addEventListener('click', () => { row.remove(); updateLoanTotal(); });
+      items.append(row);
+      if (focusInput) input.focus();
+    }
+
+    document.getElementById('add-loan-item')?.addEventListener('click', () => addLoanItem(true));
+    if (items) addLoanItem();
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.loan-product-picker')) {
+        document.querySelectorAll('.loan-product-suggestions').forEach((box) => box.classList.remove('open'));
+      }
+      if (!event.target.closest('.loan-client-picker')) loanClientSuggestions?.classList.remove('open');
+    });
+    document.querySelector('.loan-create-form')?.addEventListener('submit', (event) => {
+      const rows = [...items.querySelectorAll('.loan-item')];
+      if (!loanClientId?.value || !document.querySelector('[name="fecha_devolucion"]').value || !rows.length || rows.some((row) => !row.querySelector('.product-id').value)) {
+        event.preventDefault();
+        alert('Selecciona un cliente, una fecha y un repuesto en cada fila.');
+      }
     });
     document.getElementById('open-loan')?.addEventListener('click', () => { modal.hidden = false; });
     document.getElementById('close-loan')?.addEventListener('click', () => { modal.hidden = true; });

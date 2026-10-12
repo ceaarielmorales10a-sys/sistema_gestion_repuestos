@@ -809,8 +809,8 @@
 }
 
 .prestamos-page .loan-create-form {
-  width: min(720px, 100%);
-  max-height: min(820px, calc(100vh - 40px));
+  width: min(100%, 438px);
+  max-height: calc(100vh - 40px);
   overflow-y: auto;
 }
 
@@ -819,25 +819,25 @@
 }
 
 .prestamos-page .loan-create-form .sale-form-header {
-  padding: 18px 22px 15px;
+  padding: 11px 13px 9px;
 }
 
 .prestamos-page .loan-create-form .sale-form-header h1 {
   margin: 0;
   color: var(--loan-ink);
-  font-size: 19px;
+  font-size: 12px;
 }
 
 .prestamos-page .loan-create-form .sale-form-header p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: var(--loan-muted);
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .prestamos-page .loan-create-form .close-form {
   display: inline-grid;
-  width: 34px;
-  height: 34px;
+  width: 25px;
+  height: 25px;
   place-items: center;
   border: 0;
   border-radius: 8px;
@@ -852,13 +852,14 @@
 }
 
 .prestamos-page .loan-create-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 18px 22px 10px;
+  grid-template-columns: 1.35fr 1.1fr 1.35fr;
+  gap: 8px;
+  padding: 11px 13px 5px;
 }
 
 .prestamos-page .loan-create-fields label {
   color: var(--loan-ink);
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .prestamos-page .loan-create-fields label > span {
@@ -873,15 +874,14 @@
 .prestamos-page .loan-create-fields input,
 .prestamos-page .loan-create-fields select,
 .prestamos-page .loan-create-fields textarea {
-  min-height: 40px;
+  height: 25px;
   border-color: #cbd5e1;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 13px;
+  border-radius: 7px;
+  font: 10px Arial, sans-serif;
 }
 
 .prestamos-page .loan-create-fields textarea {
-  min-height: 76px;
+  height: 34px;
 }
 
 .prestamos-page .loan-create-fields input:focus,
@@ -892,24 +892,23 @@
 }
 
 .prestamos-page .loan-create-items {
-  padding: 8px 22px 0;
+  padding: 5px 13px 0;
 }
 
 .prestamos-page .loan-create-items .items-heading {
   color: var(--loan-ink);
-  font-size: 13px;
+  font-size: 10px;
 }
 
 .prestamos-page .loan-create-items .items-heading button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 11px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: #fff;
-  color: var(--loan-blue);
-  font-size: 12px;
+  gap: 5px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #00a844;
+  font-size: 9px;
 }
 
 .prestamos-page .loan-create-items .items-heading button:hover {
@@ -918,13 +917,13 @@
 
 .prestamos-page .loan-create-items .items-head,
 .prestamos-page .loan-create-items .loan-item {
-  grid-template-columns: minmax(0, 1fr) 76px 120px 24px;
-  gap: 8px;
+  grid-template-columns: minmax(110px, 1fr) 54px 70px 18px;
+  gap: 4px;
 }
 
 .prestamos-page .loan-create-items .items-head {
-  border-radius: 8px 8px 0 0;
-  font-size: 9px;
+  border-radius: 7px 7px 0 0;
+  font-size: 6px;
 }
 
 .prestamos-page .loan-create-items .loan-item {
@@ -934,15 +933,15 @@
 .prestamos-page .loan-create-items .loan-item select,
 .prestamos-page .loan-create-items .loan-item input {
   width: 100%;
-  height: 36px;
+  height: 24px;
   min-width: 0;
-  padding: 0 9px;
+  padding: 0 6px;
   border: 1px solid #cbd5e1;
-  border-radius: 7px;
+  border-radius: 5px;
   background: #fff;
   color: #334155;
   font: inherit;
-  font-size: 12px;
+  font-size: 8px;
 }
 
 .prestamos-page .loan-create-items .loan-item select:focus,
@@ -953,35 +952,44 @@
 }
 
 .prestamos-page .loan-create-form .sale-form-actions {
-  justify-content: flex-end;
-  padding: 14px 22px 18px;
+  gap: 7px;
+  padding: 9px 13px;
 }
 
 .prestamos-page .loan-create-form .sale-form-actions button {
   display: inline-flex;
-  flex: 0 0 auto;
-  min-height: 40px;
+  flex: 1;
+  height: 25px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
+  gap: 5px;
+  padding: 6px;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #fff;
   color: #52637a;
   font: inherit;
-  font-size: 13px;
+  font-size: 8px;
   font-weight: 700;
 }
 
 .prestamos-page .loan-create-form .sale-form-actions button[type="submit"] {
-  border-color: var(--loan-accent);
-  background: var(--loan-accent);
+  border-color: #00a844;
+  background: #00a844;
   color: #fff;
 }
 
 .prestamos-page .loan-create-form .sale-form-actions button[type="submit"]:hover {
-  background: #1d4ed8;
+  background: #008f3a;
+}
+
+.prestamos-page .loan-create-form .loan-total {
+  margin: 9px 13px 18px;
+}
+
+.prestamos-page .loan-product-picker .suggestions,
+.prestamos-page .loan-client-picker .suggestions {
+  z-index: 30;
 }
 
 
@@ -1420,15 +1428,20 @@ body.prestamos-page { min-height: 100%; margin: 0; }
     border-radius: 0;
   }
   .prestamos-page .loan-create-form .loan-create-fields {
-    grid-template-columns: 1fr;
-    padding: 16px;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px 8px 6px;
+  }
+  .prestamos-page .loan-create-fields label:first-child,
+  .prestamos-page .loan-create-fields .observation-field {
+    grid-column: 1 / -1;
   }
   .prestamos-page .loan-create-form .loan-create-items {
-    padding: 8px 16px 0;
+    padding: 6px 8px 0;
   }
   .prestamos-page .loan-create-items .items-head,
   .prestamos-page .loan-create-items .loan-item {
-    grid-template-columns: minmax(0, 1fr) 60px 90px 20px;
+    grid-template-columns: minmax(0, 1fr) 52px 72px 18px;
     gap: 5px;
   }
   .prestamos-page .loan-create-items .items-head {
@@ -1440,11 +1453,14 @@ body.prestamos-page { min-height: 100%; margin: 0; }
     padding-inline: 5px;
     font-size: 10px;
   }
+  .prestamos-page .loan-create-form .loan-total {
+    margin: 10px 8px 55px;
+  }
   .prestamos-page .loan-create-form .sale-form-actions {
     position: sticky;
     bottom: 0;
     z-index: 2;
-    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    padding: 9px 8px max(9px, env(safe-area-inset-bottom));
     background: #fff;
   }
 }

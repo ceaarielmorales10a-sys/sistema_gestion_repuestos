@@ -222,7 +222,7 @@
 
 .client-report-preview .client-report-table {
   width: 100%;
-  min-width: 940px;
+  min-width: 850px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -252,13 +252,12 @@
 
 .client-report-preview .client-report-table tbody tr:nth-child(even) { background: #fbfdff; }
 .client-report-preview .client-report-table tbody tr:hover { background: #f1f7ff; }
-.client-report-preview .client-report-table th:nth-child(1) { width: 22%; }
-.client-report-preview .client-report-table th:nth-child(2) { width: 10%; }
-.client-report-preview .client-report-table th:nth-child(3) { width: 11%; }
-.client-report-preview .client-report-table th:nth-child(4) { width: 18%; }
-.client-report-preview .client-report-table th:nth-child(5) { width: 17%; }
-.client-report-preview .client-report-table th:nth-child(6) { width: 10%; }
-.client-report-preview .client-report-table th:nth-child(7) { width: 12%; }
+.client-report-preview .client-report-table th:nth-child(1) { width: 24%; }
+.client-report-preview .client-report-table th:nth-child(2) { width: 11%; }
+.client-report-preview .client-report-table th:nth-child(3) { width: 12%; }
+.client-report-preview .client-report-table th:nth-child(4) { width: 20%; }
+.client-report-preview .client-report-table th:nth-child(5) { width: 21%; }
+.client-report-preview .client-report-table th:nth-child(6) { width: 12%; }
 
 .client-report-preview .client-report-table .client-status {
   padding: 5px 9px;

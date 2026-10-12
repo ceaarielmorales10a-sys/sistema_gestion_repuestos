@@ -120,11 +120,6 @@ AFTER INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
-    UPDATE r
-    SET id_estado_repuesto = CASE WHEN COALESCE(r.stock, 0) > 0 THEN 1 ELSE 3 END
-    FROM dbo.repuesto r
-    INNER JOIN inserted i ON r.id_repuesto = i.id_repuesto;
-
     INSERT INTO dbo.movimiento_inventario (id_repuesto, id_tipo_movimiento, fecha_movimiento, cantidad, detalle, id_usuario, id_estado)
     SELECT i.id_repuesto, 3, GETDATE(), i.cantidad, 'Salida por préstamo', p.id_usuario, 1
     FROM inserted i

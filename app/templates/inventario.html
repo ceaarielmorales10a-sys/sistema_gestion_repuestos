@@ -264,8 +264,11 @@
                         <span>Movimientos del inventario</span>
                     </div>
                 </div>
-                <form class="report-controls-row" id="movimientos-filter-form">
+                <form class="report-controls-row" id="movimientos-filter-form" method="GET">
                     <input type="hidden" name="movimientos_page" value="{{ request.args.get('movimientos_page', '1') }}">
+                    <input type="hidden" name="page" value="{{ current_page }}">
+                    <input type="hidden" name="tipo_repuesto" value="{{ selected_tipo_id }}">
+                    <input type="hidden" name="q" value="{{ search_query }}">
                     <div class="date-field">
                         <label>Desde</label>
                         <input type="date" name="from_date" value="{{ request.args.get('from_date', '') }}" class="report-input">
@@ -300,7 +303,7 @@
                         <button type="button" id="clear-movimientos-filters" class="secondary-btn bg-slate-200 text-slate-700 hover:bg-slate-300" onclick="clearMovimientosFilters()">Limpiar</button>
                     </div>
                     <div class="flex items-end gap-2">
-                        <a href="{{ url_for('exportar_pdf_movimientos', from_date=request.args.get('from_date',''), to_date=request.args.get('to_date',''), tipo=request.args.get('tipo',''), usuario=request.args.get('usuario',''), search=request.args.get('search','')) }}" class="primary-btn bg-emerald-600 text-white hover:bg-emerald-700" target="_blank">
+                        <a id="download-movimientos-report" href="{{ url_for('exportar_pdf_movimientos', from_date=request.args.get('from_date',''), to_date=request.args.get('to_date',''), tipo=request.args.get('tipo',''), usuario=request.args.get('usuario',''), search=request.args.get('search','')) }}" class="primary-btn bg-emerald-600 text-white hover:bg-emerald-700" target="_blank">
                             <i class="fa-solid fa-download"></i> Descargar reporte
                         </a>
                     </div>
@@ -360,7 +363,8 @@
                     </div>
                 </div>
 
-                <form class="report-controls-row" id="report-filter-form" autocomplete="off">
+                <form class="report-controls-row" id="report-filter-form" method="GET" autocomplete="off">
+                    <input type="hidden" name="page" value="{{ current_page }}">
                     <div class="date-field">
                         <label>Desde</label>
                         <input type="date" name="from_date" value="{{ request.args.get('from_date', '') }}" class="report-input">
@@ -374,7 +378,7 @@
                         <select name="tipo_repuesto" class="report-input">
                             <option value="">Todos</option>
                             {% for tipo in tipo_repuestos %}
-                            <option value="{{ tipo.id }}" {% if tipo.id|string == request.args.get('tipo_repuesto', '') %}selected{% endif %}>{{ tipo.nombre }}</option>
+                            <option value="{{ tipo.nombre }}" {% if tipo.nombre == request.args.get('tipo_repuesto', '') %}selected{% endif %}>{{ tipo.nombre }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -429,7 +433,7 @@
                         <button type="button" id="clear-report-filters" class="secondary-btn bg-slate-200 text-slate-700 hover:bg-slate-300" onclick="clearReportFilters()">Limpiar</button>
                     </div>
                     <div class="flex items-end gap-2">
-                        <a id="download-inventory-report" href="{{ url_for('exportar_pdf_inventario', from_date=request.args.get('from_date',''), to_date=request.args.get('to_date',''), tipo_repuesto=request.args.get('tipo_repuesto',''), marca=request.args.get('marca',''), estado_repuesto=request.args.get('estado_repuesto',''), ubicacion=request.args.get('ubicacion',''), stock_bajo=request.args.get('stock_bajo','')) }}" class="primary-btn bg-emerald-600 text-white hover:bg-emerald-700" target="_blank">
+                        <a id="download-inventory-report" href="{{ url_for('exportar_pdf_inventario', from_date=request.args.get('from_date',''), to_date=request.args.get('to_date',''), tipo_repuesto=request.args.get('tipo_repuesto',''), marca=request.args.get('marca',''), estado_repuesto=request.args.get('estado_repuesto',''), ubicacion=request.args.get('ubicacion',''), search=request.args.get('search',''), stock_min=request.args.get('stock_min',''), stock_max=request.args.get('stock_max',''), precio_compra_min=request.args.get('precio_compra_min',''), precio_venta_max=request.args.get('precio_venta_max',''), stock_bajo=request.args.get('stock_bajo','')) }}" class="primary-btn bg-emerald-600 text-white hover:bg-emerald-700" target="_blank">
                             <i class="fa-solid fa-download"></i> Descargar reporte
                         </a>
                     </div>
@@ -840,41 +844,37 @@ window.addEventListener('resize', normalizeSidebarOnResize);
         const reportFilterForm = document.getElementById('report-filter-form');
         console.log('reportFilterForm:', reportFilterForm);
         const reportTableBody = document.getElementById('report-table-body');
-        const exportLink = document.querySelector('a[href*="exportar_pdf_inventario"]');
+        const exportLink = document.getElementById('download-inventory-report');
+        let reportRequestSequence = 0;
+        let reportInputTimer;
 
         window.clearReportFilters = function() {
-            console.log('clearReportFilters called via onclick');
             if (!reportFilterForm) {
-                console.error('reportFilterForm not found in clearReportFilters');
                 return;
             }
-            console.log('Form before reset:', new FormData(reportFilterForm));
             reportFilterForm.reset();
-            console.log('Form after reset:', new FormData(reportFilterForm));
             reportFilterForm.querySelectorAll('select').forEach(select => {
                 select.selectedIndex = 0;
             });
-            reportFilterForm.querySelectorAll('input[type="date"]').forEach(input => {
+            reportFilterForm.querySelectorAll('input:not([type="hidden"])').forEach(input => {
                 input.value = '';
             });
             fetchReportData();
         };
 
         async function fetchReportData() {
-            console.log('fetchReportData called');
+            const requestSequence = ++reportRequestSequence;
             const formData = new FormData(reportFilterForm);
             const params = new URLSearchParams();
             for (const [key, value] of formData.entries()) {
                 if (value) params.append(key, value);
             }
-            console.log('Fetching with params:', params.toString());
             try {
                 const response = await fetch(`{{ url_for('inventario_report_data') }}?${params.toString()}`);
-                console.log('Response status:', response.status);
                 const data = await response.json();
-                console.log('Data received:', data);
+                if (requestSequence !== reportRequestSequence) return;
                 renderReportTable(data.repuestos);
-                updateExportLink(data.filters);
+                updateExportLink();
             } catch (error) {
                 console.error('Error fetching report data:', error);
             }
@@ -900,19 +900,30 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             `).join('');
         }
 
-        function updateExportLink(filters) {
+        function updateExportLink() {
             if (!exportLink) return;
             const params = new URLSearchParams();
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value) params.append(key, value);
+            ['from_date', 'to_date', 'tipo_repuesto', 'marca', 'estado_repuesto', 'ubicacion', 'search', 'stock_min', 'stock_max', 'precio_compra_min', 'precio_venta_max'].forEach(key => {
+                const value = reportFilterForm.elements.namedItem(key)?.value?.trim();
+                if (value) params.set(key, value);
             });
-            exportLink.href = `{{ url_for('exportar_pdf_inventario') }}?${params.toString()}`;
+            exportLink.href = `{{ url_for('exportar_pdf_inventario') }}${params.toString() ? `?${params.toString()}` : ''}`;
         }
 
         if (reportFilterForm) {
-            const inputs = reportFilterForm.querySelectorAll('input, select');
-            inputs.forEach(input => {
+            reportFilterForm.addEventListener('submit', event => {
+                event.preventDefault();
+                fetchReportData();
+            });
+            reportFilterForm.querySelectorAll('input:not([type="hidden"])').forEach(input => {
+                input.addEventListener('input', () => {
+                    clearTimeout(reportInputTimer);
+                    reportInputTimer = setTimeout(fetchReportData, 250);
+                });
                 input.addEventListener('change', fetchReportData);
+            });
+            reportFilterForm.querySelectorAll('select').forEach(select => {
+                select.addEventListener('change', fetchReportData);
             });
         }
 
@@ -921,9 +932,12 @@ window.addEventListener('resize', normalizeSidebarOnResize);
         // AJAX movimientos filters
         const movimientosFilterForm = document.getElementById('movimientos-filter-form');
         const movimientosTableBody = document.getElementById('movimientos-table-body');
-        const movimientosExportLink = document.querySelector('a[href*="exportar_pdf_movimientos"]');
+        const movimientosExportLink = document.getElementById('download-movimientos-report');
+        let movimientosRequestSequence = 0;
+        let movimientosInputTimer;
 
         async function fetchMovimientosData() {
+            const requestSequence = ++movimientosRequestSequence;
             const formData = new FormData(movimientosFilterForm);
             const params = new URLSearchParams();
             for (const [key, value] of formData.entries()) {
@@ -932,13 +946,14 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             try {
                 const response = await fetch(`{{ url_for('inventario_movimientos_report_data') }}?${params.toString()}`);
                 const data = await response.json();
+                if (requestSequence !== movimientosRequestSequence) return;
                 renderMovimientosTable(data.movimientos, data.page);
                 // Update hidden page input
                 const pageInput = movimientosFilterForm.querySelector('[name="movimientos_page"]');
                 if (pageInput) pageInput.value = data.page;
                 // Update pagination instead of hiding it
                 updateMovimientosPagination(data);
-                updateMovimientosExportLink(data.filters);
+                updateMovimientosExportLink();
             } catch (error) {
                 console.error('Error fetching movimientos data:', error);
             }
@@ -1003,19 +1018,41 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             `).join('');
         }
 
-        function updateMovimientosExportLink(filters) {
+        function updateMovimientosExportLink() {
             if (!movimientosExportLink) return;
             const params = new URLSearchParams();
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value) params.append(key, value);
+            ['from_date', 'to_date', 'tipo', 'usuario', 'search'].forEach(key => {
+                const value = movimientosFilterForm.elements.namedItem(key)?.value?.trim();
+                if (value) params.set(key, value);
             });
-            movimientosExportLink.href = `{{ url_for('exportar_pdf_movimientos') }}?${params.toString()}`;
+            movimientosExportLink.href = `{{ url_for('exportar_pdf_movimientos') }}${params.toString() ? `?${params.toString()}` : ''}`;
         }
 
         if (movimientosFilterForm) {
-            const inputs = movimientosFilterForm.querySelectorAll('input, select');
-            inputs.forEach(input => {
-                input.addEventListener('change', fetchMovimientosData);
+            movimientosFilterForm.addEventListener('submit', event => {
+                event.preventDefault();
+                const pageInput = movimientosFilterForm.querySelector('[name="movimientos_page"]');
+                if (pageInput) pageInput.value = '1';
+                fetchMovimientosData();
+            });
+            movimientosFilterForm.querySelectorAll('input:not([type="hidden"])').forEach(input => {
+                const applyFilters = () => {
+                    const pageInput = movimientosFilterForm.querySelector('[name="movimientos_page"]');
+                    if (pageInput) pageInput.value = '1';
+                    fetchMovimientosData();
+                };
+                input.addEventListener('input', () => {
+                    clearTimeout(movimientosInputTimer);
+                    movimientosInputTimer = setTimeout(applyFilters, 250);
+                });
+                input.addEventListener('change', applyFilters);
+            });
+            movimientosFilterForm.querySelectorAll('select').forEach(select => {
+                select.addEventListener('change', () => {
+                    const pageInput = movimientosFilterForm.querySelector('[name="movimientos_page"]');
+                    if (pageInput) pageInput.value = '1';
+                    fetchMovimientosData();
+                });
             });
         }
 
@@ -1026,6 +1063,9 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 select.selectedIndex = 0;
             });
             movimientosFilterForm.querySelectorAll('input[type="date"]').forEach(input => {
+                input.value = '';
+            });
+            movimientosFilterForm.querySelectorAll('input[name="search"]').forEach(input => {
                 input.value = '';
             });
             const pageInput = movimientosFilterForm.querySelector('[name="movimientos_page"]');

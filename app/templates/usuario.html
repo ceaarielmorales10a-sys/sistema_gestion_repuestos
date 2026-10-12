@@ -117,14 +117,14 @@
                     <p class="text-sm text-slate-500 mt-1">Gestiona los usuarios y sus permisos del sistema</p>
                 </div>
                 <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
-                <div class="flex items-center gap-3">
+                {% if has_permission('usuarios', 'write') %}<div class="flex items-center gap-3">
                     <button type="button" id="open-role-modal" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
                         <i class="fa-solid fa-plus"></i> Nuevo Rol
                     </button>
                     <button type="button" id="open-user-modal" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-lg shadow-violet-600/15 hover:bg-violet-700 transition-colors">
                         <i class="fa-solid fa-plus"></i> Nuevo Usuario
                     </button>
-                </div>
+                </div>{% endif %}
             </div>
 
             {% if not permission_tables_available %}
@@ -171,9 +171,9 @@
                                         <p class="text-sm text-slate-500">{{ role.descripcion or 'Sin descripción' }}</p>
                                     </div>
                                 </div>
-                                <button type="button" class="open-role-editor text-blue-600 hover:text-blue-800" data-role-id="{{ role.id }}" data-role-name="{{ role.nombre }}" data-role-description="{{ role.descripcion or '' }}" data-permissions='{{ role.permisos|tojson|safe }}'>
+                                {% if has_permission('usuarios', 'write') %}<button type="button" class="open-role-editor text-blue-600 hover:text-blue-800" data-role-id="{{ role.id }}" data-role-name="{{ role.nombre }}" data-role-description="{{ role.descripcion or '' }}" data-permissions='{{ role.permisos|tojson|safe }}'>
                                     <i class="fa-solid fa-pen"></i>
-                                </button>
+                                </button>{% endif %}
                             </div>
                             <div class="mt-4 pt-4 border-t border-slate-200">
                                 <p class="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Permisos por módulo</p>
@@ -227,23 +227,23 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for user in usuarios %}
-                                <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-role-id="{{ user.id_rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.telefono }} {{ user.rol }} {{ user.estado }}">
-                                    <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-600">
-                                        <span class="role-pill">{{ user.rol }}</span>
-                                    </td>
-                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.email }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-600">{{ user.telefono }}</td>
-                                    <td class="px-4 py-4">
-                                        <span class="status-pill {% if user.estado|lower == 'activo' %}status-active{% else %}status-inactive{% endif %}">{{ user.estado }}</span>
-                                    </td>
-                                    <td class="px-4 py-4 text-sm text-slate-700 flex gap-3 items-center">
-                                        <button type="button" class="edit-user-btn text-blue-600 hover:text-blue-800" title="Editar usuario" data-user-id="{{ user.id_usuario }}" data-username="{{ user.username }}" data-full-name="{{ user.full_name }}" data-email="{{ user.email }}" data-telefono="{{ user.telefono }}" data-rol="{{ user.rol }}" data-role-id="{{ user.id_rol }}" data-activo="{{ '1' if user.estado|lower == 'activo' else '2' }}"><i class="fa-solid fa-pencil"></i></button>
-                                    </td>
-                                </tr>
-                                {% else %}
+{% for user in usuarios %}
+                                 <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-role-id="{{ user.id_rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.telefono }} {{ user.rol }} {{ user.estado }}" data-user-id="{{ user.id_usuario }}">
+                                     <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
+                                     <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>
+                                     <td class="px-4 py-4 text-sm text-slate-600">
+                                         <span class="role-pill">{{ user.rol }}{% if current_user_id and user.id_usuario == current_user_id %} <span class="ml-2 text-xs text-blue-600 font-normal">(Tu cuenta actual)</span>{% endif %}</span>
+                                     </td>
+                                     <td class="px-4 py-4 text-sm text-slate-600">{{ user.email }}</td>
+                                     <td class="px-4 py-4 text-sm text-slate-600">{{ user.telefono }}</td>
+                                     <td class="px-4 py-4">
+                                         <span class="status-pill {% if user.estado|lower == 'activo' %}status-active{% else %}status-inactive{% endif %}">{{ user.estado }}</span>
+                                     </td>
+                                     <td class="px-4 py-4 text-sm text-slate-700 flex gap-3 items-center">
+                                         {% if has_permission('usuarios', 'write') and not (current_user_id and user.id_usuario == current_user_id) %}<button type="button" class="edit-user-btn text-blue-600 hover:text-blue-800" title="Editar usuario" data-user-id="{{ user.id_usuario }}" data-username="{{ user.username }}" data-full-name="{{ user.full_name }}" data-email="{{ user.email }}" data-telefono="{{ user.telefono }}" data-rol="{{ user.rol }}" data-role-id="{{ user.id_rol }}" data-activo="{{ '1' if user.estado|lower == 'activo' else '2' }}"><i class="fa-solid fa-pencil"></i></button>{% elif has_permission('usuarios', 'write') and current_user_id and user.id_usuario == current_user_id %}<span class="text-slate-400 text-xs" title="No puedes editar tu propia cuenta"><i class="fa-solid fa-lock mr-1"></i>Tu cuenta</span>{% endif %}
+                                     </td>
+                                 </tr>
+                                 {% else %}
                                 <tr>
                                     <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">No se encontraron usuarios.</td>
                                 </tr>
@@ -390,7 +390,7 @@
 
                 <div class="flex justify-end gap-3 pt-2">
                     <button type="button" id="cancel-role-modal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50">Cancelar</button>
-                    <button type="submit" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Guardar rol</button>
+                    {% if has_permission('usuarios', 'write') %}<button type="submit" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Guardar rol</button>{% endif %}
                 </div>
             </form>
         </div>
@@ -485,7 +485,7 @@
 
                 <div class="flex justify-end gap-3 pt-2">
                     <button type="button" id="cancel-user-modal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50">Cancelar</button>
-                    <button type="submit" id="user-submit-btn" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Crear Usuario</button>
+                    {% if has_permission('usuarios', 'write') %}<button type="submit" id="user-submit-btn" {% if not permission_tables_available %}disabled title="Ejecute database/roles_permisos.sql primero"{% endif %} class="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">Crear Usuario</button>{% endif %}
                 </div>
             </form>
         </div>

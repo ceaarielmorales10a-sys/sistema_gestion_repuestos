@@ -101,6 +101,43 @@ def restringir_modulos_bodeguero():
             flash('No tienes permisos para acceder a este módulo.', 'error')
             return redirect(url_for('dashboard'))
 
+    write_routes = (
+        ('/clientes', 'clientes', {'POST'}),
+        ('/inventario/agregar', 'inventario', {'GET', 'POST'}),
+        ('/inventario/modificar', 'inventario', {'GET', 'POST'}),
+        ('/inventario/eliminar', 'inventario', {'GET', 'POST'}),
+        ('/inventario/limpiar-duplicados', 'inventario', {'GET', 'POST'}),
+        ('/ventas/nueva', 'ventas', {'GET', 'POST'}),
+        ('/ventas/modificar', 'ventas', {'GET', 'POST'}),
+        ('/ventas/eliminar', 'ventas', {'POST'}),
+        ('/prestamos/nuevo', 'prestamos', {'POST'}),
+        ('/prestamos/', 'prestamos', {'POST'}),
+        ('/devoluciones/nueva', 'devoluciones', {'POST'}),
+        ('/devoluciones/eliminar', 'devoluciones', {'POST'}),
+        ('/desarme', 'desarme', {'POST'}),
+        ('/usuario/nuevo', 'usuarios', {'GET', 'POST'}),
+        ('/usuario/modificar', 'usuarios', {'GET', 'POST'}),
+        ('/usuario/eliminar', 'usuarios', {'POST'}),
+        ('/usuario/roles/save', 'usuarios', {'POST'}),
+        ('/mantenimiento/catalogo', 'mantenimiento', {'POST'}),
+        ('/mantenimiento/backup/restaurar', 'mantenimiento', {'POST'}),
+    )
+    write_module = next(
+        (module_key for prefix, module_key, methods in write_routes
+         if ruta.startswith(prefix) and request.method in methods),
+        None,
+    )
+    if write_module and not has_module_permission(role_permissions, write_module, 'write'):
+        if request.is_json:
+            return jsonify({'error': 'Tu rol solo tiene permiso de lectura en este modulo.'}), 403
+        flash('Tu rol solo tiene permiso de lectura en este modulo.', 'error')
+        destinations = {
+            'clientes': 'clientes', 'inventario': 'inventario', 'ventas': 'ventas',
+            'prestamos': 'prestamos', 'devoluciones': 'devoluciones',
+            'desarme': 'desarme', 'usuarios': 'usuarios', 'mantenimiento': 'mantenimiento',
+        }
+        return redirect(url_for(destinations.get(write_module, 'dashboard')))
+
     if ruta.startswith(inventory_admin_prefixes):
         if not has_module_permission(role_permissions, 'inventario', 'write'):
             flash('No tienes permisos para modificar el inventario.', 'error')
@@ -1367,7 +1404,7 @@ def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vend
     return filtered
 
 
-def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marca=None, estado_repuesto=None, ubicacion=None, stock_bajo_only=False):
+def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marca=None, estado_repuesto=None, ubicacion=None, stock_bajo_only=False, search=None, stock_min=None, stock_max=None, precio_compra_min=None, precio_venta_max=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     repuestos = []
@@ -1422,6 +1459,47 @@ def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marc
             if ubicacion:
                 if str(repuesto.get('ubicacion_bodega') or '').lower() != str(ubicacion).strip().lower():
                     continue
+            if search:
+                search_lower = search.lower()
+                searchable = ' '.join([
+                    str(repuesto.get('id_repuesto') or ''),
+                    str(repuesto.get('codigo_repuesto') or ''),
+                    str(repuesto.get('tipo_repuesto') or ''),
+                    str(repuesto.get('marca') or ''),
+                    str(repuesto.get('modelo') or ''),
+                    str(repuesto.get('anio') or ''),
+                    str(repuesto.get('color') or ''),
+                    str(repuesto.get('lado') or ''),
+                    str(repuesto.get('posicion') or ''),
+                    str(repuesto.get('estado_repuesto') or ''),
+                    str(repuesto.get('ubicacion_bodega') or ''),
+                ]).lower()
+                if search_lower not in searchable:
+                    continue
+            if stock_min:
+                try:
+                    if (repuesto.get('stock') or 0) < int(stock_min):
+                        continue
+                except Exception:
+                    pass
+            if stock_max:
+                try:
+                    if (repuesto.get('stock') or 0) > int(stock_max):
+                        continue
+                except Exception:
+                    pass
+            if precio_compra_min:
+                try:
+                    if (repuesto.get('precio_compra') or 0) < float(precio_compra_min):
+                        continue
+                except Exception:
+                    pass
+            if precio_venta_max:
+                try:
+                    if (repuesto.get('precio_venta') or 0) > float(precio_venta_max):
+                        continue
+                except Exception:
+                    pass
             if stock_bajo_only:
                 if int(repuesto.get('stock') or 0) > 5:
                     continue
@@ -1448,6 +1526,11 @@ def exportar_pdf_inventario():
     marca = request.args.get('marca', '').strip()
     estado_repuesto = request.args.get('estado_repuesto', '').strip()
     ubicacion = request.args.get('ubicacion', '').strip()
+    search = request.args.get('search', '').strip()
+    stock_min = request.args.get('stock_min', '').strip()
+    stock_max = request.args.get('stock_max', '').strip()
+    precio_compra_min = request.args.get('precio_compra_min', '').strip()
+    precio_venta_max = request.args.get('precio_venta_max', '').strip()
     stock_bajo_only = request.args.get('stock_bajo', '').strip().lower() in ('1', 'true', 'yes', 'on')
     repuestos = get_repuestos_reporte(
         from_date=from_date or None,
@@ -1456,6 +1539,11 @@ def exportar_pdf_inventario():
         marca=marca or None,
         estado_repuesto=estado_repuesto or None,
         ubicacion=ubicacion or None,
+        search=search or None,
+        stock_min=stock_min or None,
+        stock_max=stock_max or None,
+        precio_compra_min=precio_compra_min or None,
+        precio_venta_max=precio_venta_max or None,
         stock_bajo_only=stock_bajo_only,
     )
 
@@ -1504,6 +1592,11 @@ def inventario_report_data():
     marca = request.args.get('marca', '').strip()
     estado_repuesto = request.args.get('estado_repuesto', '').strip()
     ubicacion = request.args.get('ubicacion', '').strip()
+    search = request.args.get('search', '').strip()
+    stock_min = request.args.get('stock_min', '').strip()
+    stock_max = request.args.get('stock_max', '').strip()
+    precio_compra_min = request.args.get('precio_compra_min', '').strip()
+    precio_venta_max = request.args.get('precio_venta_max', '').strip()
 
     repuestos = get_repuestos_reporte(
         from_date=from_date or None,
@@ -1512,6 +1605,11 @@ def inventario_report_data():
         marca=marca or None,
         estado_repuesto=estado_repuesto or None,
         ubicacion=ubicacion or None,
+        search=search or None,
+        stock_min=stock_min or None,
+        stock_max=stock_max or None,
+        precio_compra_min=precio_compra_min or None,
+        precio_venta_max=precio_venta_max or None,
         stock_bajo_only=False,
     )
 
@@ -1935,6 +2033,11 @@ def modificar_usuario(id_usuario):
     if 'user' not in session:
         return redirect(url_for('login'))
 
+    current_user_id = session.get('user_id')
+    if current_user_id and id_usuario == current_user_id:
+        flash('No está permitido modificar los permisos o el rol de su propia cuenta de usuario activa.', 'error')
+        return redirect(url_for('usuarios'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -2051,7 +2154,7 @@ def eliminar_usuario(id_usuario):
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    if session.get('role') != 'Administrador del Sistema':
+    if not has_permission_in_session('usuarios', 'write'):
         flash('No tienes permisos para eliminar usuarios.', 'error')
         return redirect(url_for('usuarios'))
 
@@ -2075,7 +2178,7 @@ def eliminar_usuario(id_usuario):
 
 @app.route('/usuario/get/<int:id_usuario>')
 def usuario_get(id_usuario):
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('usuarios', 'read'):
         return jsonify({'error': 'No tienes permisos'}), 403
 
     try:
@@ -2132,7 +2235,7 @@ def usuario_get(id_usuario):
 def guardar_rol_usuario():
     if 'user' not in session:
         return redirect(url_for('login'))
-    if session.get('role') != 'Administrador del Sistema':
+    if not has_permission_in_session('usuarios', 'write'):
         flash('No tienes permisos para gestionar roles.', 'error')
         return redirect(url_for('usuarios'))
 
@@ -2274,6 +2377,7 @@ def usuarios():
                            roles=roles, modulos=MODULOS_SISTEMA,
                            permission_tables_available=permission_tables_available,
                            user_name=sidebar_user['name'], user_role=sidebar_user['role'],
+                           current_user_id=session.get('user_id'),
                            total_usuarios=total_usuarios,
                            usuarios_activos=usuarios_activos,
                            administradores=administradores,
@@ -2301,6 +2405,31 @@ def login():
             if user_id is None:
                 flash('No se pudo validar la cuenta de usuario.', 'error')
                 return redirect(url_for('login'))
+            audit_conn = None
+            audit_cursor = None
+            try:
+                audit_conn = get_db_connection()
+                audit_cursor = audit_conn.cursor()
+                audit_cursor.execute(
+                    "INSERT INTO [dbo].[bitacora_login] ([id_usuario], [ip_origen], [estado], [detalles]) "
+                    "VALUES (?, ?, 'EXITOSO', ?)",
+                    (user_id, request.remote_addr, 'Inicio de sesión exitoso'),
+                )
+                audit_conn.commit()
+            except Exception:
+                # An audit outage should not prevent a valid user from signing in.
+                app.logger.exception('No fue posible registrar el inicio de sesión en bitacora_login.')
+            finally:
+                if audit_cursor:
+                    try:
+                        audit_cursor.close()
+                    except Exception:
+                        pass
+                if audit_conn:
+                    try:
+                        audit_conn.close()
+                    except Exception:
+                        pass
             session['user_id'] = user_id
             session['user'] = cuenta_valida['user']
             session['full_name'] = get_user_full_name_by_id(user_id) or cuenta_valida['user']
@@ -2877,8 +3006,9 @@ def get_tipo_ubicacion(cursor, id_tipo_repuesto):
 MANTENIMIENTO_BITACORAS = {
     'clientes': {'label': 'Clientes', 'tables': ('bitacora_cliente',)},
     'repuestos': {'label': 'Repuestos', 'tables': ('bitacora_repuesto',)},
-    'ventas': {'label': 'Ventas', 'tables': ('bitacora_venta', 'bitacora_detalle_venta')},
-    'prestamos': {'label': 'Préstamos', 'tables': ('bitacora_prestamo', 'bitacora_detalle_prestamo')},
+    'ventas': {'label': 'Ventas', 'tables': ('bitacora_venta',)},
+    'prestamos': {'label': 'Préstamos', 'tables': ('bitacora_prestamo',)},
+    'login': {'label': 'Inicios de sesión', 'tables': ('bitacora_login',)},
 }
 
 
@@ -2956,12 +3086,9 @@ def _audit_state_display(cursor, column, value):
 
 
 REPUESTO_BITACORA_COLUMNS = [
-    'id_bitacora', 'id_repuesto', 'codigo_repuesto', 'id_vehiculo_origen',
-    'id_tipo_repuesto', 'id_marca', 'id_modelo', 'id_anio', 'id_color',
-    'id_lado', 'id_posicion', 'id_estado_repuesto', 'id_ubicacion',
-    'precio_compra', 'precio_venta', 'observaciones', 'stock',
-    'id_transmision', 'stock_minimo', 'stock_maximo',
-    'fecha_eliminacion', 'usuario_eliminacion',
+    'id_bitacora', 'id_repuesto', 'codigo_repuesto', 'accion',
+    'precio_anterior', 'precio_nuevo', 'stock_anterior', 'stock_nuevo',
+    'detalles', 'fecha_accion', 'usuario',
 ]
 
 
@@ -2997,11 +3124,11 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                 continue
 
             date_column = _audit_column(columns, (
-                'fecha_eliminacion', 'fecha_borrado', 'fecha_accion',
+                'fecha_accion', 'fecha_login', 'fecha_eliminacion', 'fecha_borrado',
                 'fecha_bitacora', 'fecha_registro', 'fecha', 'created_at',
             ))
             action_column = _audit_column(columns, (
-                'accion', 'tipo_accion', 'accion_realizada', 'operacion', 'evento',
+                'accion', 'estado', 'tipo_accion', 'accion_realizada', 'operacion', 'evento',
             ))
             user_column = _audit_column(columns, (
                 'id_usuario_cambio', 'id_usuario_accion', 'usuario_eliminacion',
@@ -3009,7 +3136,7 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
             ))
             record_column = _audit_column(columns, (
                 'id_detalle_venta', 'id_detalle_prestamo',
-                'id_cliente', 'id_repuesto', 'id_venta', 'id_prestamo',
+                'id_cliente', 'id_repuesto', 'id_venta', 'id_prestamo', 'id_usuario',
                 'id_registro', 'id_registro_eliminado',
             ))
             audit_id_column = _audit_column(columns, (
@@ -3037,33 +3164,34 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                     continue
 
                 raw_user = data.get(user_column) if user_column else None
-                if user_column and user_column.casefold().startswith('id_usuario') and raw_user is not None:
-                    user_value = (
-                        _audit_user_display(cursor, raw_user)
-                        or str(raw_user)
-                    )
+                raw_user_text = _audit_text(raw_user)
+                if raw_user is not None and re.fullmatch(r'\d+', raw_user_text):
+                    user_value = _audit_user_display(cursor, raw_user_text) or raw_user_text
                 else:
-                    user_value = _audit_text(raw_user) or 'No identificado'
+                    user_value = raw_user_text or 'No identificado'
                 action = _audit_text(data.get(action_column)) if action_column else ''
                 loan_id_column = _audit_column(result_columns, ('id_prestamo',)) if table == 'bitacora_prestamo' else None
                 loan_id = data.get(loan_id_column) if loan_id_column else None
-                observation_column = _audit_column(result_columns, ('observaciones', 'detalle', 'descripcion'))
+                observation_column = _audit_column(result_columns, ('detalles', 'observaciones', 'detalle', 'descripcion'))
                 observation = _audit_text(data.get(observation_column)) if observation_column else ''
+                actor_match = re.search(
+                    r'id_usuario\s*:\s*(\d+)',
+                    ' '.join(_audit_text(value) for value in data.values() if value is not None),
+                    re.IGNORECASE,
+                )
+                if actor_match and user_value == 'No identificado':
+                    user_value = _audit_user_display(cursor, actor_match.group(1)) or actor_match.group(1)
                 audit_user_note = ''
                 if module_key == 'clientes':
                     audit_user_note = ' '.join((action, _audit_text(raw_user), observation)).casefold()
+                    # Older client audit rows kept the actor ID inside the
+                    # serialized details instead of a dedicated user column.
                     if re.search(r'creaci[o\u00f3]n|cread[oa]|nuevo cliente|registro de cliente', audit_user_note):
                         action = 'Creaci\u00f3n'
-                        if user_value.casefold() in audit_user_note:
-                            user_value = 'No identificado'
                     elif re.search(r'actualizaci[o\u00f3]n|modificaci[o\u00f3]n|actualizad[oa]', audit_user_note):
                         action = 'Modificaci\u00f3n'
-                        if user_value.casefold() in audit_user_note:
-                            user_value = 'No identificado'
                     elif re.search(r'eliminaci[o\u00f3]n|eliminad[oa]', audit_user_note):
                         action = 'Eliminaci\u00f3n'
-                        if user_value.casefold() in audit_user_note:
-                            user_value = 'No identificado'
                     else:
                         action = action or 'Modificación'
                 if table == 'bitacora_prestamo':
@@ -3136,8 +3264,41 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                     'tabla': 'prestamo' if table == 'bitacora_prestamo' else ('cliente' if module_key == 'clientes' else table),
                 }
                 if table == 'bitacora_repuesto':
-                    record['raw_data'] = {col: _audit_text(data.get(col)) for col in REPUESTO_BITACORA_COLUMNS if col in data}
+                    record['accion'] = action or 'Modificación'
+                    record['detalle'] = _audit_text(data.get(_audit_column(result_columns, ('detalles',)))) or detail
+                    audit_user_id = data.get(_audit_column(result_columns, ('id_usuario',)))
+                    record['usuario'] = _audit_user_display(cursor, audit_user_id) or user_value
+                    record['registro'] = _audit_text(data.get(_audit_column(result_columns, ('id_repuesto',)))) or '—'
+                    record['raw_data'] = {
+                        col: _audit_text(data.get(col)) for col in REPUESTO_BITACORA_COLUMNS
+                        if col in data
+                    }
+                    record['raw_data']['usuario'] = record['usuario']
+                elif table == 'bitacora_login':
+                    record['accion'] = action or 'EXITOSO'
+                    record['detalle'] = _audit_text(data.get(observation_column)) if observation_column else ''
+                    record['usuario'] = _audit_user_display(cursor, data.get(_audit_column(result_columns, ('id_usuario',)))) or user_value
+                    record['registro'] = _audit_text(data.get(_audit_column(result_columns, ('id_usuario',)))) or '—'
                 records.append(record)
+        # Populate the filter from the complete user catalog, including users
+        # who have not generated an entry in the selected audit module yet.
+        try:
+            cursor.execute(
+                'SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, username '
+                'FROM [dbo].[usuario]'
+            )
+            for user_row in cursor.fetchall():
+                full_name = ' '.join(
+                    str(part).strip() for part in user_row[:4]
+                    if part and str(part).strip()
+                )
+                display = full_name or (str(user_row[4]).strip() if user_row[4] else '')
+                if display:
+                    users.add(display)
+        except Exception:
+            # Keep observed audit users available if the user catalog is
+            # temporarily inaccessible or uses a legacy schema.
+            pass
     finally:
         cursor.close()
         conn.close()
@@ -3150,7 +3311,7 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
 def mantenimiento():
     if 'user' not in session:
         return redirect(url_for('login'))
-    if session.get('role') != 'Administrador del Sistema':
+    if not has_permission_in_session('mantenimiento', 'read'):
         flash('No tienes permisos para acceder al módulo de mantenimiento.', 'error')
         return redirect(url_for('dashboard'))
 
@@ -3264,12 +3425,13 @@ def mantenimiento():
         total_registros=total_registros, tablas_sistema=tablas_sistema,
         user_name=sidebar_user['name'], user_role=sidebar_user['role'],
         initial_view='audit' if request.args.get('vista') == 'audit' else 'database',
+        maintenance_can_write=has_permission_in_session('mantenimiento', 'write'),
     )
 
 
 @app.route('/mantenimiento/auditoria')
 def mantenimiento_auditoria():
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'read'):
         return jsonify({'error': 'No tienes permisos para consultar las bitácoras.'}), 403
 
     module_key = request.args.get('modulo', 'clientes').strip()
@@ -3312,7 +3474,7 @@ def mantenimiento_auditoria():
 
 @app.route('/mantenimiento/auditoria/exportar/<file_format>')
 def exportar_mantenimiento_auditoria(file_format):
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'read'):
         return jsonify({'error': 'No tienes permisos para exportar las bitácoras.'}), 403
     if file_format not in {'csv', 'pdf'}:
         return jsonify({'error': 'Formato de exportación no válido.'}), 400
@@ -3379,7 +3541,7 @@ def exportar_mantenimiento_auditoria(file_format):
     ])
     table = Table(
         table_data,
-        colWidths=[62, 58, 52, 200, 90, 42],
+        colWidths=[540 / max(1, len(headers))] * len(headers),
         repeatRows=1,
         splitByRow=1,
     )
@@ -3410,7 +3572,7 @@ def exportar_mantenimiento_auditoria(file_format):
 
 @app.route('/mantenimiento/catalogo/<key>', methods=['POST'])
 def guardar_catalogo_mantenimiento(key):
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'write'):
         flash('No tienes permisos para modificar catálogos.', 'error')
         return redirect(url_for('dashboard'))
 
@@ -3508,7 +3670,7 @@ def guardar_catalogo_mantenimiento(key):
 
 @app.route('/mantenimiento/backup/descargar')
 def mantenimiento_backup_descargar():
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'read'):
         return jsonify({'error': 'No tienes permisos para crear backups.'}), 403
 
     try:
@@ -3581,7 +3743,7 @@ def mantenimiento_backup_descargar():
 
 @app.route('/mantenimiento/backup/restaurar', methods=['POST'])
 def mantenimiento_backup_restaurar():
-    if 'user' not in session or session.get('role') != 'Administrador del Sistema':
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'write'):
         return jsonify({'error': 'No tienes permisos para restaurar backups.'}), 403
 
     if 'archivo' not in request.files:
@@ -3772,6 +3934,11 @@ def inventario():
         report_marca = request.args.get('marca', '').strip()
         report_estado = request.args.get('estado_repuesto', '').strip()
         report_ubicacion = request.args.get('ubicacion', '').strip()
+        report_search = request.args.get('search', '').strip()
+        report_stock_min = request.args.get('stock_min', '').strip()
+        report_stock_max = request.args.get('stock_max', '').strip()
+        report_precio_compra_min = request.args.get('precio_compra_min', '').strip()
+        report_precio_venta_max = request.args.get('precio_venta_max', '').strip()
 
         # The general active/inactive status is separate from the physical part status.
         repuesto_columns = get_table_columns(cursor, 'repuesto')
@@ -4018,7 +4185,9 @@ def inventario():
 
     # Filtrar repuestos para el reporte usando los filtros del reporte
     report_repuestos = lista_repuestos
-    if report_from_date or report_to_date or report_tipo_repuesto or report_marca or report_estado or report_ubicacion:
+    if (report_from_date or report_to_date or report_tipo_repuesto or report_marca
+            or report_estado or report_ubicacion or report_search or report_stock_min
+            or report_stock_max or report_precio_compra_min or report_precio_venta_max):
         filtered_report = []
         for repuesto in lista_repuestos:
             fecha_ingreso = repuesto.get('fecha_ingreso')
@@ -4048,6 +4217,48 @@ def inventario():
             if report_ubicacion:
                 if str(repuesto.get('ubicacion_bodega') or '').lower() != str(report_ubicacion).strip().lower():
                     continue
+            if report_search:
+                search_lower = report_search.lower()
+                searchable = ' '.join([
+                    str(repuesto.get('id_repuesto') or ''),
+                    str(repuesto.get('codigo_repuesto') or ''),
+                    str(repuesto.get('tipo_repuesto') or ''),
+                    str(repuesto.get('marca') or ''),
+                    str(repuesto.get('modelo') or ''),
+                    str(repuesto.get('anio') or ''),
+                    str(repuesto.get('color') or ''),
+                    str(repuesto.get('lado') or ''),
+                    str(repuesto.get('posicion') or ''),
+                    str(repuesto.get('estado_repuesto') or ''),
+                    str(repuesto.get('ubicacion_bodega') or ''),
+                    str(repuesto.get('observaciones') or ''),
+                ]).lower()
+                if search_lower not in searchable:
+                    continue
+            if report_stock_min:
+                try:
+                    if (repuesto.get('stock') or 0) < int(report_stock_min):
+                        continue
+                except Exception:
+                    pass
+            if report_stock_max:
+                try:
+                    if (repuesto.get('stock') or 0) > int(report_stock_max):
+                        continue
+                except Exception:
+                    pass
+            if report_precio_compra_min:
+                try:
+                    if (repuesto.get('precio_compra') or 0) < float(report_precio_compra_min):
+                        continue
+                except Exception:
+                    pass
+            if report_precio_venta_max:
+                try:
+                    if (repuesto.get('precio_venta') or 0) > float(report_precio_venta_max):
+                        continue
+                except Exception:
+                    pass
             filtered_report.append(repuesto)
         report_repuestos = filtered_report
     else:
@@ -4099,6 +4310,11 @@ def inventario():
         report_marca=report_marca,
         report_estado=report_estado,
         report_ubicacion=report_ubicacion,
+        report_search=report_search,
+        report_stock_min=report_stock_min,
+        report_stock_max=report_stock_max,
+        report_precio_compra_min=report_precio_compra_min,
+        report_precio_venta_max=report_precio_venta_max,
         movimientos=movimientos_paginados,
         movimientos_total=movimientos_total,
         movimientos_page=movimientos_page,
@@ -4431,8 +4647,6 @@ def agregar_repuesto():
 
             insert_row_filtered(cursor, 'repuesto', insert_data)
             
-            conn.commit()
-
             repuesto_id = None
             try:
                 cursor.execute(
@@ -4447,6 +4661,15 @@ def agregar_repuesto():
 
             if repuesto_id is not None:
                 try:
+                    cursor.execute(
+                        'INSERT INTO [dbo].[bitacora_repuesto] '
+                        '([id_repuesto], [codigo_repuesto], [accion], [precio_anterior], [precio_nuevo], '
+                        '[stock_anterior], [stock_nuevo], [detalles], [id_usuario]) '
+                        "VALUES (?, ?, 'CREACION', NULL, ?, NULL, ?, ?, ?)",
+                        (repuesto_id, codigo_repuesto, precio_venta, parse_int_like(stock) or 0,
+                         f"Alta de repuesto; precio nuevo: {precio_venta}; stock nuevo: {parse_int_like(stock) or 0}",
+                         session.get('user_id')),
+                    )
                     registrar_movimiento_inventario(
                         cursor,
                         repuesto_id,
@@ -4466,9 +4689,10 @@ def agregar_repuesto():
                         "WHERE id_repuesto = ? AND detalle = ?",
                         (repuesto_id, 'Ingreso automático de repuesto'),
                     )
-                    conn.commit()
                 except Exception:
-                    pass
+                    raise
+
+            conn.commit()
 
             flash('¡Repuesto guardado exitosamente en el inventario!', 'success')
             return redirect(url_for('inventario'))
@@ -4571,6 +4795,14 @@ def modificar_repuesto(id_repuesto):
     cursor = conn.cursor()
     try:
         if request.method == 'POST':
+            cursor.execute(
+                'SELECT codigo_repuesto, precio_venta, stock FROM repuesto WHERE id_repuesto = ?',
+                (id_repuesto,),
+            )
+            old_values = cursor.fetchone()
+            if not old_values:
+                flash('No se encontró el repuesto para modificar.', 'error')
+                return redirect(url_for('inventario'))
             stock_maximo = request.form.get('stock_maximo')
             if stock_maximo == '':
                 stock_maximo = None
@@ -4625,6 +4857,20 @@ def modificar_repuesto(id_repuesto):
                 set_clause = ', '.join([f"{col} = ?" for col in set_cols])
                 params = [update_data[col] for col in set_cols] + [id_repuesto]
                 cursor.execute(f"UPDATE repuesto SET {set_clause} WHERE id_repuesto = ?", tuple(params))
+                cursor.execute(
+                    'INSERT INTO [dbo].[bitacora_repuesto] '
+                    '([id_repuesto], [codigo_repuesto], [accion], [precio_anterior], [precio_nuevo], '
+                    '[stock_anterior], [stock_nuevo], [detalles], [id_usuario]) '
+                    "VALUES (?, ?, 'MODIFICACION', ?, ?, ?, ?, ?, ?)",
+                    (
+                        id_repuesto, update_data.get('codigo_repuesto') or old_values[0],
+                        old_values[1], update_data.get('precio_venta'), old_values[2],
+                        update_data.get('stock'),
+                        f"Precio: {old_values[1]} -> {update_data.get('precio_venta')}; "
+                        f"stock: {old_values[2]} -> {update_data.get('stock')}",
+                        session.get('user_id'),
+                    ),
+                )
                 conn.commit()
                 flash('Repuesto actualizado correctamente.', 'success')
             else:
@@ -4957,14 +5203,14 @@ def exportar_pdf_clientes():
                         continue
                 except Exception:
                     pass
-            rows.append([nombre, nit, telefono, correo, direccion, estado_str, fecha_registro or '-'])
+            rows.append([nombre, nit, telefono, correo, direccion, estado_str])
 
         buffer = io.BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=letter)
         pdf.setTitle('Reporte de Clientes - Importadora Morales')
         draw_table_pdf(
             pdf, 'Reporte de Clientes — Importadora Morales',
-            ['Nombre completo', 'NIT', 'Teléfono', 'Correo', 'Dirección', 'Estado', 'Fecha registro'], rows
+            ['Nombre completo', 'NIT', 'Telefono', 'Correo', 'Direccion', 'Estado'], rows
         )
         pdf.showPage()
         pdf.save()
@@ -5326,8 +5572,12 @@ def nueva_venta():
                 raise ValueError('Agrega al menos un repuesto a la venta.')
 
             cursor.execute(
+                'SET NOCOUNT ON; '
+                'DECLARE @venta_insertada TABLE (id_venta INT); '
                 'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
-                'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, ?)',
+                'OUTPUT INSERTED.id_venta INTO @venta_insertada (id_venta) '
+                'VALUES (GETDATE(), ?, ?, ?, ?, ?, ?); '
+                'SELECT id_venta FROM @venta_insertada;',
                 (id_cliente, session.get('user_id'), total, observaciones, id_metodo_pago, 0)
             )
             id_venta = cursor.fetchone()[0]
@@ -6661,14 +6911,20 @@ def _desarme_available_inventory_state_id(cursor):
         )
         statuses = cursor.fetchall()
         for state_id, label in statuses:
-            if str(label or '').strip().casefold() in {'disponible', 'activo', 'activa'}:
+            normalized = str(label or '').strip().casefold()
+            if any(token in normalized for token in (
+                'dispon', 'activo', 'activa', 'apto', 'apta', 'usable',
+                'usado', 'reutil', 'aprovech', 'bueno',
+            )):
                 return state_id
-        # The inventory catalog uses ID 1 for parts with stock and ID 3 for
-        # parts without stock. Some databases label state 1 differently.
-        if table_name.lower() == 'estado_repuesto':
+        # Legacy catalogs sometimes use numeric states without a descriptive
+        # availability label. Keep the conventional first state as fallback.
+        if statuses and table_name.lower() in {'estado_repuesto', 'estado_general'}:
             for state_id, _ in statuses:
                 if str(state_id) == '1':
                     return state_id
+        if statuses and target and table_name.lower() == str(target[1]).lower():
+            return statuses[0][0]
     return None
 
 
@@ -6790,12 +7046,19 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
             raise ValueError('La tabla repuesto requiere una columna codigo_repuesto.')
         column_sql = ', '.join(f'[{column}]' for column, _ in insert_values)
         value_sql = ', '.join('?' for _ in insert_values)
+        identity_column = repuesto_columns['id_repuesto']
         cursor.execute(
+            'SET NOCOUNT ON; '
+            'DECLARE @inserted_repuesto TABLE (id_repuesto INT); '
             f'INSERT INTO dbo.repuesto ({column_sql}) '
-            f'VALUES ({value_sql})',
+            f'OUTPUT INSERTED.[{identity_column}] INTO @inserted_repuesto (id_repuesto) '
+            f'VALUES ({value_sql}); '
+            'SELECT id_repuesto FROM @inserted_repuesto',
             tuple(value for _, value in insert_values),
         )
-        cursor.execute('SELECT CAST(SCOPE_IDENTITY() AS INT)')
+        while cursor.description is None:
+            if not cursor.nextset():
+                break
         row = cursor.fetchone()
         if not row or row[0] is None:
             raise ValueError('No se pudo recuperar el identificador del repuesto registrado.')
@@ -7047,6 +7310,11 @@ def agregar_pieza_desarme(vehicle_id):
             'observaciones': request.form.get('observaciones', '').strip() or None,
             'estado_pieza': request.form.get('estado_pieza', '').strip() or None,
         }
+        if 'id_usuario_registro' in columns:
+            registered_by = session.get('user_id')
+            if registered_by is None:
+                raise ValueError('No se pudo identificar al usuario que registra la pieza.')
+            values['id_usuario_registro'] = int(registered_by)
         price_column = next(
             (name for name in ('precio_venta', 'precio') if name in columns),
             None,
@@ -7054,7 +7322,7 @@ def agregar_pieza_desarme(vehicle_id):
         if price_column:
             values[price_column] = price
         state_column = next(
-            (name for name in ('id_estado_pieza', 'id_estado_pieza_desarme') if name in columns),
+            (name for name in ('id_estado_pieza', 'id_estado_pieza_desarme', 'id_estado') if name in columns),
             None,
         )
         if state_column:
@@ -7069,6 +7337,10 @@ def agregar_pieza_desarme(vehicle_id):
             )
             if state_id is not None:
                 values[state_column] = state_id
+            else:
+                raise ValueError(
+                    'No se pudo identificar el estado seleccionado en el catálogo de estados de pieza.'
+                )
 
         photo_column = next(
             (name for name in ('ruta_fotografia', 'fotografia', 'foto') if name in columns),
@@ -7078,7 +7350,10 @@ def agregar_pieza_desarme(vehicle_id):
         if photo_file and photo_column:
             values[photo_column] = save_repuesto_photo(photo_file)
 
-        update_values = [(name, value) for name, value in values.items() if name in columns]
+        update_values = [
+            (name, value) for name, value in values.items()
+            if name in columns and name != 'id_usuario_registro'
+        ]
         if detail_id:
             if not detail_id_column:
                 raise ValueError('La tabla de detalle no tiene un identificador de pieza editable.')
@@ -7104,6 +7379,8 @@ def agregar_pieza_desarme(vehicle_id):
             flash('La pieza se actualizó correctamente.', 'success')
         else:
             insert_values = [(process_column, process_id)] + update_values
+            if 'id_usuario_registro' in columns:
+                insert_values.append(('id_usuario_registro', int(session['user_id'])))
             if not insert_values:
                 raise ValueError('No se encontraron campos compatibles para guardar la pieza.')
             column_list = ', '.join(f'[{name}]' for name, _ in insert_values)
@@ -7214,7 +7491,8 @@ def prestamos():
         metodos_pago = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
         cursor.execute(
             "SELECT id_repuesto, codigo_repuesto, precio_venta, stock FROM repuesto "
-            "WHERE id_estado_repuesto <> 3 OR id_estado_repuesto IS NULL ORDER BY codigo_repuesto"
+            "WHERE COALESCE(stock, 0) > 0 "
+            "AND (id_estado_general <> 2 OR id_estado_general IS NULL) ORDER BY codigo_repuesto"
         )
         for row in cursor.fetchall():
             repuestos.append({
@@ -7265,11 +7543,13 @@ def nuevo_prestamo():
             if quantity < 1 or price < 0:
                 raise ValueError('Revisa cantidades y precios del préstamo.')
             cursor.execute(
-                'SELECT id_repuesto, stock, id_estado_repuesto FROM repuesto WHERE id_repuesto = ?', (repuesto_id,)
+                'SELECT id_repuesto, stock, id_estado_general FROM repuesto WHERE id_repuesto = ?', (repuesto_id,)
             )
             repuesto = cursor.fetchone()
-            if not repuesto or (repuesto[2] == 3):
-                raise ValueError('Uno de los repuestos seleccionados no está disponible.')
+            if not repuesto:
+                raise ValueError('Uno de los repuestos seleccionados no existe.')
+            if repuesto[2] == 2:
+                raise ValueError('Uno de los repuestos seleccionados está inactivo y no puede ser prestado.')
             if repuesto[1] is not None and quantity > repuesto[1]:
                 raise ValueError('La cantidad solicitada supera el stock disponible.')
             items.append((repuesto[0], quantity, price))
@@ -7281,7 +7561,7 @@ def nuevo_prestamo():
         # condición evita sobrepasar el stock ante solicitudes concurrentes.
         for id_repuesto, quantity in requested_quantities.items():
             cursor.execute(
-                'UPDATE repuesto SET stock = stock - ?, id_estado_repuesto = 3 '
+                'UPDATE repuesto SET stock = stock - ? '
                 'WHERE id_repuesto = ? AND stock >= ?',
                 (quantity, id_repuesto, quantity),
             )
@@ -7289,8 +7569,12 @@ def nuevo_prestamo():
                 raise ValueError('La cantidad solicitada supera el stock disponible.')
 
         cursor.execute(
+            'SET NOCOUNT ON; '
+            'DECLARE @prestamo_insertado TABLE (id_prestamo INT); '
             'INSERT INTO prestamo (fecha_prestamo, fecha_devolucion_estimada, id_cliente, id_usuario, observaciones, id_estado) '
-            'OUTPUT INSERTED.id_prestamo VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, 1)',
+            'OUTPUT INSERTED.id_prestamo INTO @prestamo_insertado (id_prestamo) '
+            'VALUES (CAST(GETDATE() AS DATE), ?, ?, ?, ?, 1); '
+            'SELECT id_prestamo FROM @prestamo_insertado;',
             (fecha_devolucion, id_cliente, session.get('user_id'), observaciones)
         )
         id_prestamo = cursor.fetchone()[0]
@@ -7298,14 +7582,6 @@ def nuevo_prestamo():
             cursor.execute(
                 'INSERT INTO detalle_prestamo (id_prestamo, id_repuesto, observaciones, cantidad, precio) VALUES (?, ?, ?, ?, ?)',
                 (id_prestamo, id_repuesto, observaciones, quantity, price)
-            )
-        # Compatible con la migración anterior: su trigger marca como
-        # prestado el repuesto completo, aunque aún queden unidades.
-        for id_repuesto in requested_quantities:
-            cursor.execute(
-                'UPDATE repuesto SET id_estado_repuesto = CASE WHEN COALESCE(stock, 0) > 0 THEN 1 ELSE 3 END '
-                'WHERE id_repuesto = ?',
-                (id_repuesto,),
             )
         conn.commit()
         flash('Préstamo registrado correctamente.', 'success')
@@ -7360,7 +7636,7 @@ def actualizar_estado_prestamo(id_prestamo):
                 )
                 for id_repuesto, quantity in cursor.fetchall():
                     cursor.execute(
-                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ?, id_estado_repuesto = 1 '
+                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ? '
                         'WHERE id_repuesto = ?',
                         (quantity, id_repuesto),
                     )
@@ -7402,8 +7678,12 @@ def actualizar_estado_prestamo(id_prestamo):
                 observaciones = f'Convertido de préstamo P-{id_prestamo:06d}'
                 
                 cursor.execute(
+                    'SET NOCOUNT ON; '
+                    'DECLARE @venta_insertada TABLE (id_venta INT); '
                     'INSERT INTO venta (fecha_venta, id_cliente, id_usuario, total, observaciones, id_metodo_pago, descuento) '
-                    'OUTPUT INSERTED.id_venta VALUES (GETDATE(), ?, ?, ?, ?, ?, 0)',
+                    'OUTPUT INSERTED.id_venta INTO @venta_insertada (id_venta) '
+                    'VALUES (GETDATE(), ?, ?, ?, ?, ?, 0); '
+                    'SELECT id_venta FROM @venta_insertada;',
                     (id_cliente, session.get('user_id'), total, observaciones, id_metodo_pago)
                 )
                 id_venta = cursor.fetchone()[0]
@@ -7414,7 +7694,7 @@ def actualizar_estado_prestamo(id_prestamo):
                     # por eso se acredita la cantidad temporalmente en esta
                     # transaccion; el trigger la descuenta al insertar el detalle.
                     cursor.execute(
-                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ?, id_estado_repuesto = 1 '
+                        'UPDATE repuesto SET stock = COALESCE(stock, 0) + ? '
                         'WHERE id_repuesto = ?',
                         (quantity, id_repuesto),
                     )
@@ -7424,12 +7704,6 @@ def actualizar_estado_prestamo(id_prestamo):
                         'INSERT INTO detalle_venta (id_venta, id_repuesto, precio_unitario, subtotal, cantidad) '
                         'VALUES (?, ?, ?, ?, ?)',
                         (id_venta, id_repuesto, price, float(price or 0) * (quantity or 0), quantity)
-                    )
-                    cursor.execute(
-                        'UPDATE repuesto SET id_estado_repuesto = '
-                        'CASE WHEN COALESCE(stock, 0) > 0 THEN 1 ELSE 3 END '
-                        'WHERE id_repuesto = ?',
-                        (id_repuesto,),
                     )
                     registrar_movimiento_inventario(cursor, id_repuesto, 1, quantity, f'Venta por préstamo pagado P-{id_prestamo:06d}', session.get('user_id'))
                 
@@ -7711,12 +7985,15 @@ def exportar_pdf_devoluciones():
                 continue
             if to_date and dev_date > to_date:
                 continue
-            client_name = ' '.join(filter(None, [row[12], row[13], row[14], row[15]])).strip()
+            client_name = ' '.join(
+                str(part).strip() for part in (row[13], row[14], row[15], row[16])
+                if part is not None and str(part).strip()
+            )
             if not client_name:
-                client_name = row[16] or row[17] or f'Cliente #{row[11] or "-" }'
+                client_name = str(row[17] or row[18] or f'Cliente #{row[10] or "-"}')
             if cliente and cliente not in client_name.lower():
                 continue
-            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[12]) or 'Sistema'
+            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[11]) or 'Sistema'
             if vendedor and vendedor not in vendedor_name.lower():
                 continue
             repuesto_text = f'{row[7] or ""} {get_repuesto_display_name(cursor, row[4]) or ""}'.lower()
@@ -7724,21 +8001,33 @@ def exportar_pdf_devoluciones():
                 continue
             if motivo and str(row[8] or '') != str(motivo):
                 continue
-            if estado_venta and str(row[13] or '1') != estado_venta:
+            if estado_venta and str(row[12] or '1') != estado_venta:
                 continue
             subtotal = float(row[6] or 0)
             if min_total and subtotal < float(min_total):
                 continue
             if max_total and subtotal > float(max_total):
                 continue
-            rows.append((row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9]))
+            rows.append((
+                row[0], row[1], row[2], row[4], row[7],
+                get_repuesto_display_name(cursor, row[4]) or '-',
+                client_name, vendedor_name, row[5], row[6], row[9],
+            ))
     finally:
         cursor.close()
         conn.close()
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle('Reporte de Devoluciones - Importadora Morales')
-    draw_table_pdf(pdf, 'Reporte de Devoluciones — Importadora Morales', ['N° Devolución', 'N° Venta', 'Fecha', 'Repuesto', 'Código', 'Cliente', 'Vendedor', 'Cantidad', 'Total (Q)', 'Motivo'], [[f'D-{r[0]:06d}', f'V-{r[1]:06d}', str(r[2])[:10], get_repuesto_display_name(None, r[4]) or '-', r[7] or '-', 'Cliente', 'Vendedor', str(r[5]), f'Q {float(r[6] or 0):,.2f}', r[9] or '-'] for r in rows])
+    draw_table_pdf(
+        pdf, 'Reporte de Devoluciones - Importadora Morales',
+        ['No. Devolucion', 'No. Venta', 'Fecha', 'Repuesto', 'Codigo', 'Cliente', 'Vendedor', 'Cantidad', 'Total (Q)', 'Motivo'],
+        [[
+            f'D-{row[0]:06d}', f'V-{row[1]:06d}', str(row[2])[:10],
+            row[5], row[4] or '-', row[6] or '-', row[7] or '-',
+            str(row[8]), f'Q {float(row[9] or 0):,.2f}', row[10] or '-',
+        ] for row in rows],
+    )
     pdf.showPage()
     pdf.save()
     buffer.seek(0)

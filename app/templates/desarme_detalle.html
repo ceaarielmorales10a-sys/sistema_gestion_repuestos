@@ -138,13 +138,13 @@
                             <i class="fa-solid fa-pen" aria-hidden="true"></i>
                         </button>
                         {% endif %}
-                        <button class="detail-piece-incident-button" type="button" data-open-incident-modal
+                        {% if can_create %}<button class="detail-piece-incident-button" type="button" data-open-incident-modal
                             data-piece-id="{{ piece.id_detalle_desarme }}"
                             data-piece-label="DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }} — {{ piece.tipo_repuesto or 'Pieza' }}"
                             title="Registrar incidencia para esta pieza"
                             aria-label="Registrar incidencia para DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}">
                             <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                        </button>
+                        </button>{% endif %}
                     </td>
                 </tr>{% endfor %}
             </tbody></table></div>

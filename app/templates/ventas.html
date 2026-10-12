@@ -14,9 +14,12 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='ventas-responsive.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='ventas-report.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='clientes-ventas-mobile.css') }}">
 </head>
 <body class="module-theme">
-<aside class="sidebar"><div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div><nav>
+<div class="mobile-menu-trigger"><button id="mobile-menu-button" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button></div>
+<div id="mobile-sidebar-overlay" class="hidden" aria-hidden="true"></div>
+<aside id="sidebar" class="sidebar -translate-x-full"><div><div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div><nav>
 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
 {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
@@ -24,9 +27,9 @@
 {% if has_permission('prestamos', 'read') %}<a href="/prestamos"><i class="fa-solid fa-handshake"></i> Préstamos{% if vencidos > 0 %}<span class="loan-overdue-badge" aria-label="{{ vencidos }} préstamos vencidos">{{ vencidos }}</span>{% endif %}</a>{% endif %}
 {% if has_permission('devoluciones', 'read') %}<a href="/devoluciones"><i class="fa-solid fa-rotate-left"></i> Devoluciones</a>{% endif %}
 {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}{% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
-</nav><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
+</nav></div><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name', session.get('user', 'Usuario')) }}</strong><span>{{ session.get('role', 'ADMINISTRADOR') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
 <main>
-<header><div><h1>Ventas</h1><p>Registro de ventas con múltiples repuestos</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div><a href="/ventas/nueva" class="new-sale"><i class="fa-solid fa-plus"></i> Nueva Venta</a></header>
+<header><div><h1>Ventas</h1><p>Registro de ventas con múltiples repuestos</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div>{% if has_permission('ventas', 'write') %}<a href="/ventas/nueva" class="new-sale"><i class="fa-solid fa-plus"></i> Nueva Venta</a>{% endif %}</header>
 <section class="summary"><article class="income"><span>Ingresos Totales</span><b>Q {{ '{:,.2f}'.format(ingresos_totales or 0) }}</b></article><article class="today"><span>Ventas Hoy</span><b>Q {{ '{:,.2f}'.format(ventas_hoy or 0) }}</b></article><article class="transactions"><span>Transacciones</span><b>{{ total_transacciones }}</b></article></section>
 <div class="tabs"><button type="button" class="active" data-sales-tab="list"><i class="fa-solid fa-cart-shopping"></i> Ventas</button><button type="button" data-sales-tab="report"><i class="fa-solid fa-chart-column"></i> Reportes</button></div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
@@ -59,9 +62,10 @@
 <section class="report-preview"><div class="report-preview-header"><span>Vista previa del reporte</span><small><b id="report-preview-count">0</b> registros</small></div><div class="report-table-wrap"><table data-pagination-page-size="10"><thead><tr><th>N° VENTA</th><th>FECHA</th><th>CLIENTE</th><th>VENDEDOR</th><th>PAGO</th><th>REPUESTOS VENDIDOS</th><th>TOTAL</th><th>ESTADO</th></tr></thead><tbody id="sales-report-body"></tbody></table></div></section>
 </section>
 </main>
-{% if show_new_sale %}{% include 'nueva_venta_modal.html' %}{% endif %}
+{% if show_new_sale and has_permission('ventas', 'write') %}{% include 'nueva_venta_modal.html' %}{% endif %}
 {% if show_edit_sale and edit_sale %}{% include 'editar_venta_modal.html' %}{% endif %}
 <script>
+(()=>{const s=document.getElementById("sidebar"),o=document.getElementById("mobile-sidebar-overlay"),b=document.getElementById("mobile-menu-button"),close=()=>{s.classList.add("-translate-x-full");o.classList.add("hidden");b.setAttribute("aria-expanded","false")};b.addEventListener("click",()=>{const open=s.classList.contains("-translate-x-full");s.classList.toggle("-translate-x-full",!open);o.classList.toggle("hidden",!open);b.setAttribute("aria-expanded",String(open))});o.addEventListener("click",close);s.querySelectorAll("nav a").forEach(a=>a.addEventListener("click",close));addEventListener("resize",()=>{if(innerWidth>=768){s.classList.remove("-translate-x-full");o.classList.add("hidden");b.setAttribute("aria-expanded","false")}else if(b.getAttribute("aria-expanded")!=="true")s.classList.add("-translate-x-full")})})();
 document.querySelectorAll('.toggle').forEach(b=>b.onclick=()=>{let d=document.getElementById(b.getAttribute('aria-controls')),o=d.hidden;d.hidden=!o;b.setAttribute('aria-expanded',o)});
 document.getElementById('sale-search').oninput=e=>{let q=e.target.value.toLowerCase();document.querySelectorAll('.sale').forEach(r=>{let s=r.dataset.search.toLowerCase().includes(q);r.hidden=!s;if(!s)document.getElementById(r.querySelector('.toggle').getAttribute('aria-controls')).hidden=true})};
 const reportData={{ report_ventas|tojson }};

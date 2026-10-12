@@ -1,8 +1,10 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Clientes - Importadora Morales</title><link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="{{ url_for('static',filename='clientes.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='clientes-report.css') }}"></head>
+<title>Clientes - Importadora Morales</title><link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="{{ url_for('static',filename='clientes.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='modulos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='clientes-report.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='clientes-ventas-mobile.css') }}"></head>
 <body class="module-theme">
-<aside class="sidebar"><div><div class="brand"><img src="{{ url_for('static',filename='logo.png') }}" alt="Importadora Morales"></div><nav>
+<div class="mobile-menu-trigger"><button id="mobile-menu-button" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button></div>
+<div id="mobile-sidebar-overlay" class="hidden" aria-hidden="true"></div>
+<aside id="sidebar" class="sidebar -translate-x-full"><div><div class="brand"><img src="{{ url_for('static',filename='logo.png') }}" alt="Importadora Morales"></div><nav>
 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
 {% if has_permission('clientes', 'read') %}<a class="active" href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
@@ -12,13 +14,13 @@
 {% if has_permission('desarme', 'read') %}<a href="/desarme"><i class="fa-solid fa-car-side"></i> Desarme de Vehículos</a>{% endif %}
 {% if has_permission('usuarios', 'read') %}<a href="/usuario"><i class="fa-solid fa-users"></i> Usuarios</a>{% endif %}{% if has_permission('mantenimiento', 'read') %}<a href="/mantenimiento"><i class="fa-solid fa-gears"></i> Mantenimiento</a>{% endif %}
 </nav></div><div class="session-panel"><small>SESIÓN ACTIVA</small><strong>{{ session.get('full_name',session.get('user','Usuario')) }}</strong><span>{{ session.get('role','Administrador') }}</span><a href="/logout"><i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión</a></div></aside>
-<main><header><div><h1>Clientes</h1><p>Gestión del registro de clientes</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div><button class="primary" onclick="openModal()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button></header>
+<main><header><div><h1>Clientes</h1><p>Gestión del registro de clientes</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div>{% if has_permission('clientes', 'write') %}<button class="primary" onclick="openModal()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button>{% endif %}</header>
 <div class="tabs"><button class="active" data-tab="list"><i class="fa-solid fa-users"></i> Lista</button><button data-tab="report"><i class="fa-solid fa-file-lines"></i> Reportes</button></div>
 {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
 <section id="list" class="panel active"><article class="metric"><span>Total Clientes</span><b>{{ total_clientes }}</b><i class="fa-solid fa-users"></i></article>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="search" placeholder="Buscar por nombre, NIT, correo o teléfono..."></div>
 <div class="card"><table data-pagination-page-size="10"><thead><tr><th>Cliente</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-{% for cliente in clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td><td class="actions" data-label="Acciones"><button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
+{% for cliente in clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td><td class="actions" data-label="Acciones">{% if has_permission('clientes', 'write') %}<button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
 </tbody></table><footer><span>Mostrando {{ clientes|length }} de {{ total_clientes }} registros. Página {{ current_page }} de {{ total_pages }}.</span><div class="pagination">{% if current_page > 1 %}<a href="{{ url_for('clientes', page=current_page - 1) }}">‹</a>{% endif %}{% for page in range(1, total_pages + 1) %}<a class="{{ 'current' if page == current_page else '' }}" href="{{ url_for('clientes', page=page) }}">{{ page }}</a>{% endfor %}{% if current_page < total_pages %}<a href="{{ url_for('clientes', page=current_page + 1) }}">›</a>{% endif %}</div></footer></div></section>
 <section id="report" class="panel">
   <div class="client-report-card">
@@ -55,7 +57,7 @@
     <header class="client-report-preview-heading"><span><i class="fa-solid fa-table-list" aria-hidden="true"></i> Vista previa del reporte</span><small><b id="report-preview-count">{{ report_clientes|length }}</b> registros</small></header>
     <div class="report-table-wrap">
       <table class="client-report-table" data-pagination-page-size="10">
-        <thead><tr><th>Nombre completo</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Fecha registro</th></tr></thead>
+        <thead><tr><th>Nombre completo</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th></tr></thead>
         <tbody id="report-table-body">
           {% for cliente in report_clientes %}
           <tr data-report-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}" data-date="{{ cliente.fecha }}" data-estado="{{ 'activo' if cliente.activo else 'inactivo' }}">
@@ -65,10 +67,9 @@
             <td data-label="Correo">{{ cliente.correo }}</td>
             <td data-label="Dirección">{{ cliente.direccion }}</td>
             <td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td>
-            <td data-label="Fecha registro">{{ cliente.fecha or '—' }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="empty">No hay clientes registrados.</td></tr>
+          <tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -82,9 +83,9 @@
 <p class="form-section"><i class="fa-solid fa-phone"></i> Contacto</p><label>NIT <em>*</em><span class="input-icon"><i class="fa-solid fa-hashtag"></i><input name="nit" id="nit" required placeholder="Ej: 1234567-8"></span></label><label>Teléfono<span class="input-icon"><i class="fa-solid fa-phone"></i><input name="telefono" id="telefono" placeholder="Ej: +502 5551-1001"></span></label>
 <label class="wide">Correo Electrónico<span class="input-icon"><i class="fa-regular fa-envelope"></i><input name="correo" id="correo" type="email" placeholder="Ej: cliente@correo.com"></span></label><label class="wide"><i class="fa-solid fa-location-dot label-icon"></i> Dirección<input name="direccion" id="direccion" placeholder="Ej: Zona 8, Guatemala"></label>
 {% if has_client_status %}<div id="client-status-field" class="wide" hidden><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="activo" id="client-active" style="display:inline-block;width:16px;height:16px;margin:0"><span>Cliente activo</span></label><small>Los clientes inactivos no estarán disponibles para ventas ni préstamos.</small></div>{% endif %}
-<div class="modal-actions"><button type="button" onclick="closeModal()">Cancelar</button><button class="primary" id="submit">Registrar Cliente</button></div></form></div>
+<div class="modal-actions"><button type="button" onclick="closeModal()">Cancelar</button>{% if has_permission('clientes', 'write') %}<button class="primary" id="submit">Registrar Cliente</button>{% endif %}</div></form></div>
 <script>
-  const modal=document.getElementById('modal');
+  (()=>{const s=document.getElementById("sidebar"),o=document.getElementById("mobile-sidebar-overlay"),b=document.getElementById("mobile-menu-button"),close=()=>{s.classList.add("-translate-x-full");o.classList.add("hidden");b.setAttribute("aria-expanded","false")};b.addEventListener("click",()=>{const open=s.classList.contains("-translate-x-full");s.classList.toggle("-translate-x-full",!open);o.classList.toggle("hidden",!open);b.setAttribute("aria-expanded",String(open))});o.addEventListener("click",close);s.querySelectorAll("nav a").forEach(a=>a.addEventListener("click",close));addEventListener("resize",()=>{if(innerWidth>=768){s.classList.remove("-translate-x-full");o.classList.add("hidden");b.setAttribute("aria-expanded","false")}else if(b.getAttribute("aria-expanded")!=="true")s.classList.add("-translate-x-full")})})();const modal=document.getElementById('modal');
   function openModal(){document.querySelector('.modal-box').reset();action.value='create';id_cliente.value='';document.getElementById('modal-title').textContent='Nuevo Cliente';submit.textContent='Registrar Cliente';modal.hidden=false}
   function closeModal(){modal.hidden=true}
   function editClient(b){const d=JSON.parse(b.dataset.client);openModal();action.value='edit';id_cliente.value=d.id_cliente||'';document.getElementById('modal-title').textContent='Editar Cliente';submit.textContent='Guardar Cambios';Object.entries(d).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v||''})}
@@ -179,7 +180,7 @@ window.editClient = function (button) {
   clientActiveCheckbox.checked = Boolean(status && String(status[1]) === activeClientStatusId);
 };
 </script>{% endif %}
-<script>document.getElementById('report-search').oninput=e=>document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=!r.dataset.reportSearch.toLowerCase().includes(e.target.value.toLowerCase()));document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};document.querySelector('.filter-actions .primary').onclick=()=>{window.location='/clientes/reporte-pdf?q='+encodeURIComponent(document.getElementById('report-search').value)};</script>
+<script>document.getElementById('report-search').oninput=e=>document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=!r.dataset.reportSearch.toLowerCase().includes(e.target.value.toLowerCase()));document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};</script>
 <script>
 function updateDateTime(){const n=new Date(),d=n.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),t=n.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:!1}),e=document.getElementById('datetime-display');e&&(e.textContent=d+' \u2022 '+t)}updateDateTime(),setInterval(updateDateTime,1e3);
 // Session auto-refresh on tab visibility change
