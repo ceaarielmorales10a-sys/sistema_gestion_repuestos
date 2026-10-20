@@ -120,6 +120,7 @@ def restringir_modulos_bodeguero():
         ('/usuario/eliminar', 'usuarios', {'POST'}),
         ('/usuario/roles/save', 'usuarios', {'POST'}),
         ('/mantenimiento/catalogo', 'mantenimiento', {'POST'}),
+        ('/mantenimiento/tablas/', 'mantenimiento', {'POST'}),
         ('/mantenimiento/backup/restaurar', 'mantenimiento', {'POST'}),
     )
     write_module = next(
@@ -306,6 +307,29 @@ def negative_form_number_label(values):
     return None
 
 
+def matches_multiword_search(search_query, record, fields):
+    """Check if all words in search_query match any of the fields in record.
+    Returns True if every word in the query is found in at least one field.
+    """
+    if not search_query:
+        return True
+    
+    words = [w.strip().lower() for w in search_query.split() if w.strip()]
+    if not words:
+        return True
+    
+    for word in words:
+        found = False
+        for field in fields:
+            value = str(record.get(field, '')).lower()
+            if word in value:
+                found = True
+                break
+        if not found:
+            return False
+    return True
+
+
 def choose_numeric_column_by_sample(columns, rows):
     """Choose a numeric column from the first row sample if name heuristics fail."""
     if not rows or not columns:
@@ -339,7 +363,7 @@ def choose_numeric_column_by_sample(columns, rows):
     return None
 
 
-def fetch_catalog_for_candidates(cursor, candidates):
+def fetch_catalog_for_candidates(cursor, candidates, include_inactive=False):
     """Try candidate table names and return list of {'id','nombre'} or None."""
     for table in candidates:
         cols = get_table_columns(cursor, table)
@@ -354,7 +378,7 @@ def fetch_catalog_for_candidates(cursor, candidates):
         has_estado = any(c.lower() == 'id_estado' for c in cols)
         if id_col and display_col:
             try:
-                if has_estado:
+                if has_estado and not include_inactive:
                     cursor.execute(f"SELECT {id_col} AS id, {display_col} AS nombre FROM {table} WHERE id_estado = 1 ORDER BY {display_col}")
                 else:
                     cursor.execute(f"SELECT {id_col} AS id, {display_col} AS nombre FROM {table} ORDER BY {display_col}")
@@ -403,6 +427,25 @@ def get_display_name_by_id(cursor, table_candidates, id_value):
             except Exception:
                 continue
     return None
+
+
+def get_user_full_name(cursor, user_id):
+    """Return the user's complete name, falling back to their username."""
+    if user_id is None:
+        return None
+    try:
+        cursor.execute(
+            "SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, username "
+            "FROM usuario WHERE id_usuario = ?",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        full_name = ' '.join(str(part).strip() for part in row[:4] if part and str(part).strip())
+        return full_name or (str(row[4]).strip() if row[4] else None)
+    except Exception:
+        return None
 
 
 def lookup_foreign_key_display(cursor, fk_column, fk_value, table_candidates=None):
@@ -495,6 +538,20 @@ def get_repuesto_display_name(cursor, id_repuesto):
     except Exception:
         pass
     return None
+
+
+def get_repuesto_year(cursor, id_repuesto):
+    """Devuelve el año asociado al repuesto sin alterar su nombre visible."""
+    if id_repuesto is None:
+        return None
+    try:
+        cursor.execute('SELECT id_anio FROM repuesto WHERE id_repuesto = ?', (id_repuesto,))
+        row = cursor.fetchone()
+        if not row or row[0] is None:
+            return None
+        return lookup_foreign_key_display(cursor, 'id_anio', row[0], ['anio_vehiculo']) or str(row[0])
+    except Exception:
+        return None
 
 
 def get_repuestos_registrados(cursor):
@@ -678,7 +735,7 @@ def get_movimientos_inventario(cursor):
                     user_row = cursor.fetchone()
                     if user_row:
                         nombre_parts = [p for p in [user_row[1], user_row[2], user_row[3], user_row[4]] if p]
-                        usuario_nombre = (user_row[0] if user_row[0] else ' '.join(nombre_parts))
+                        usuario_nombre = ' '.join(nombre_parts) or user_row[0]
                 except Exception:
                     usuario_nombre = None
             repuesto_nombre = get_repuesto_display_name(cursor, data.get('id_repuesto')) or (data.get('codigo_repuesto') or f"ID {data.get('id_repuesto') or '-'}")
@@ -740,7 +797,7 @@ def parse_int_like(val):
     return 0
 
 MODULOS_SISTEMA = [
-    ('analytics', 'Analytics IA'),
+    ('analytics', 'Analítica IA'),
     ('clientes', 'Clientes'),
     ('inventario', 'Inventario'),
     ('ventas', 'Ventas'),
@@ -1344,7 +1401,7 @@ def get_ventas_reporte():
             sale = dict(zip(sale_cols, sale_row))
             sale_id = sale.get('id_venta')
             cliente = get_cliente_full_name(cursor, sale.get('id_cliente')) or 'Sin cliente frecuente'
-            vendedor = get_user_full_name_by_id(sale.get('id_usuario')) or '-'
+            vendedor = get_user_full_name(cursor, sale.get('id_usuario')) or get_user_full_name_by_id(sale.get('id_usuario')) or '-'
             metodo_pago = lookup_foreign_key_display(
                 cursor, 'id_metodo_pago', sale.get('id_metodo_pago'), ['metodo_pago', 'forma_pago']
             ) or '-'
@@ -2034,7 +2091,10 @@ def modificar_usuario(id_usuario):
         return redirect(url_for('login'))
 
     current_user_id = session.get('user_id')
-    if current_user_id and id_usuario == current_user_id:
+    current_user_role = (session.get('role') or '').strip()
+    is_self = current_user_id and id_usuario == current_user_id
+    is_administrator = current_user_role.casefold() in ('administrador', 'administrador del sistema')
+    if is_self and not is_administrator:
         flash('No está permitido modificar los permisos o el rol de su propia cuenta de usuario activa.', 'error')
         return redirect(url_for('usuarios'))
 
@@ -2098,6 +2158,11 @@ def modificar_usuario(id_usuario):
             telefono = request.form.get('telefono', '').strip()
             rol_id = request.form.get('rol_id', '')
             activo = request.form.get('activo') == 'on'
+
+            # Los administradores pueden editar sus datos, pero no su rol ni el estado de su cuenta.
+            if is_self:
+                rol_id = str(usuario['id_rol'])
+                activo = usuario['id_estado'] == 1
 
             if not username or not primer_nombre or not primer_apellido or not email or not telefono or not rol_id:
                 flash('Completa los campos obligatorios.', 'error')
@@ -2474,12 +2539,12 @@ def _analytics_quote(identifier):
     return f'[{str(identifier).replace("]", "]]")}]'
 
 
-def _get_openai_api_key():
-    api_key = os.getenv('OPENAI_API_KEY', '').strip()
+def _get_gemini_api_key():
+    api_key = os.getenv('GEMINI_API_KEY', '').strip()
     if api_key:
         return api_key
     env_values = dotenv_values(os.path.join(base_dir, '.env'))
-    return str(env_values.get('OPENAI_API_KEY') or '').strip()
+    return str(env_values.get('GEMINI_API_KEY') or '').strip()
 
 
 def _analytics_dashboard_data(cursor, days):
@@ -2650,18 +2715,23 @@ def _analytics_dashboard_data(cursor, days):
     cursor.execute(
         f'SELECT r.{inventory_id_column}, r.{inventory_code_column}, '
         f'COALESCE(r.{stock_column}, 0), COALESCE(r.{stock_threshold_column}, 0), '
-        f'{type_label}, COALESCE(ventas.vendidas, 0) AS vendidas '
+        f'{type_label}, COALESCE(ventas.vendidas, 0) AS vendidas, '
+        'COALESCE(ventas.vendidas_90_dias, 0) AS vendidas_90_dias '
         'FROM dbo.repuesto r '
         f'{type_join} '
         'LEFT JOIN ('
-        'SELECT dv.id_repuesto, SUM(dv.cantidad) AS vendidas '
+        'SELECT dv.id_repuesto, '
+        'SUM(CASE WHEN v.fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE())) '
+        'THEN dv.cantidad ELSE 0 END) AS vendidas, '
+        'SUM(dv.cantidad) AS vendidas_90_dias '
         'FROM dbo.detalle_venta dv '
         'INNER JOIN dbo.venta v ON v.id_venta = dv.id_venta '
         'WHERE v.fecha_venta >= DATEADD(day, -(? - 1), CONVERT(date, GETDATE())) '
+        'OR v.fecha_venta >= DATEADD(day, -89, CONVERT(date, GETDATE())) '
         'GROUP BY dv.id_repuesto'
         ') ventas ON ventas.id_repuesto = r.'
         f'{inventory_id_column} ORDER BY COALESCE(r.{stock_column}, 0) ASC',
-        (days,),
+        (days, days),
     )
     prediction_rows = cursor.fetchall()
     predictions = []
@@ -2672,6 +2742,9 @@ def _analytics_dashboard_data(cursor, days):
         stock = float(row[2] or 0)
         minimum = float(row[3] or 0)
         average_daily_sales = float(row[5] or 0) / days
+        if average_daily_sales <= 0:
+            historical_sales = float(row[6] or 0) if len(row) > 6 else 0
+            average_daily_sales = historical_sales / 90
         days_remaining = stock / average_daily_sales if average_daily_sales > 0 else None
         needs_restock = stock <= minimum or (days_remaining is not None and days_remaining <= 14)
         if needs_restock:
@@ -2722,7 +2795,7 @@ def _analytics_dashboard_data(cursor, days):
 @app.route('/analytics')
 def analytics():
     if not has_permission_in_session('analytics', 'read'):
-        flash('No tienes permisos para acceder a Analytics IA.', 'error')
+        flash('No tienes permisos para acceder a Analítica IA.', 'error')
         return redirect(url_for('dashboard'))
     try:
         days = _analytics_days(request.args.get('dias', '30'))
@@ -2739,7 +2812,7 @@ def analytics():
         analytics_data = None
         data_error = str(error)
     except Exception:
-        app.logger.exception('No se pudieron cargar las métricas de Analytics IA.')
+        app.logger.exception('No se pudieron cargar las métricas de Analítica IA.')
         days = 30
         analytics_data = None
         data_error = 'No fue posible consultar los datos de Analytics en SQL Server.'
@@ -2769,7 +2842,7 @@ def analytics_dashboard_api():
     except ValueError as error:
         return jsonify({'success': False, 'error': str(error)}), 400
     except Exception:
-        app.logger.exception('No se pudieron consultar las métricas de Analytics IA.')
+        app.logger.exception('No se pudieron consultar las métricas de Analítica IA.')
         return jsonify({
             'success': False,
             'error': 'No fue posible consultar los datos de Analytics en SQL Server.',
@@ -2784,11 +2857,11 @@ def analizar_inventario_analytics():
     except ValueError as error:
         return jsonify({'success': False, 'error': str(error)}), 400
 
-    api_key = _get_openai_api_key()
+    api_key = _get_gemini_api_key()
     if not api_key:
         return jsonify({
             'success': False,
-            'error': 'Configura OPENAI_API_KEY en el archivo .env para habilitar las recomendaciones de IA.',
+            'error': 'Configura GEMINI_API_KEY en el archivo .env para habilitar las recomendaciones de IA.',
         }), 503
 
     try:
@@ -2807,57 +2880,29 @@ def analizar_inventario_analytics():
         }), 503
 
     try:
-        from openai import OpenAI, OpenAIError
+        from google import genai
 
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model='gpt-4o-mini',
-            messages=[
-                {
-                    'role': 'system',
-                    'content': (
-                        'Eres un analista experto en inventario de repuestos. '
-                        'Responde en español con recomendaciones concretas, concisas y '
-                        'priorizadas. Usa únicamente los datos proporcionados; aclara '
-                        'cuando una conclusión sea una estimación. No solicites ni '
-                        'incluyas datos personales.'
-                    ),
-                },
-                {
-                    'role': 'user',
-                    'content': (
-                        'Analiza estos indicadores agregados de inventario y ventas. '
-                        'Identifica reabastecimientos urgentes, productos con riesgo de '
-                        'agotamiento, categorías más rentables y tres acciones recomendadas. '
-                        'Período analizado: '
-                        f'{days} días. Datos: {json.dumps(analytics_data, ensure_ascii=False)}'
-                    ),
-                },
-            ],
-            temperature=0.3,
+        client = genai.Client(api_key=api_key)
+        prompt = (
+            "Analiza el siguiente inventario de repuestos de mi taller en Guatemala,"
+            " identifica cuáles tienen stock bajo (menor o igual al mínimo) y dame"
+            " recomendaciones breves de reabastecimiento. IMPORTANTE: Todos los montos"
+            " y valores monetarios deben expresarse estrictamente en **Quetzales (Q)**"
+            f" y no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        analysis = response.choices[0].message.content
-        if not analysis:
-            raise RuntimeError('La API de IA devolvió una respuesta vacía.')
-        return jsonify({'success': True, 'analisis': analysis})
-    except ImportError:
-        app.logger.exception('El paquete OpenAI no está instalado.')
+
+        response = client.models.generate_content(
+            model='gemini-3.8-flash',
+            contents=prompt,
+        )
+
+        return jsonify({'success': True, 'analisis': response.text})
+    except Exception:
+        app.logger.exception('No se pudo generar el análisis de inventario con Gemini.')
         return jsonify({
             'success': False,
-            'error': 'Falta instalar el paquete OpenAI. Ejecuta pip install -r requirements.txt.',
+            'error': 'El servicio de IA no está disponible temporalmente. Intenta de nuevo más tarde.',
         }), 503
-    except OpenAIError:
-        app.logger.exception('No se pudo generar el análisis con OpenAI.')
-        return jsonify({
-            'success': False,
-            'error': 'No se pudo generar la recomendación de IA. Revisa la clave y la conexión con OpenAI.',
-        }), 502
-    except RuntimeError:
-        app.logger.exception('OpenAI devolvió una respuesta sin contenido.')
-        return jsonify({
-            'success': False,
-            'error': 'OpenAI no devolvió recomendaciones. Inténtalo nuevamente.',
-        }), 502
 
 
 # Catálogos que se administran desde el módulo de mantenimiento.  Se prueban
@@ -3098,7 +3143,7 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
         raise ValueError('El módulo de bitácora solicitado no existe.')
 
     filters = filters or {}
-    query = str(filters.get('q') or '').strip().casefold()
+    query = str(filters.get('q') or '').strip()
     from_date = str(filters.get('from_date') or '').strip()
     to_date = str(filters.get('to_date') or '').strip()
     selected_user = str(filters.get('usuario') or '').strip().casefold()
@@ -3249,10 +3294,10 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                     else:
                         detail_parts.append(f'{column.replace("_", " ").capitalize()}: {_audit_text(value)}')
                 detail = ' · '.join(detail_parts)
-                searchable = ' '.join(
+                searchable_text = ' '.join(
                     _audit_text(value) for value in data.values() if value is not None
-                ).casefold()
-                if query and query not in searchable:
+                )
+                if query and not matches_multiword_search(query, {'text': searchable_text}, ['text']):
                     continue
 
                 record = {
@@ -3330,7 +3375,7 @@ def mantenimiento():
                 columns = get_table_columns(cursor, catalogo['table'])
                 marca_column = next((c for c in columns if c.lower() == 'id_marca'), None)
                 descripcion_column = next((c for c in columns if 'descripcion' in c.lower() or 'observacion' in c.lower()), None)
-                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {catalogo['id_column']} DESC")
+                cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {catalogo['display_column']} ASC")
                 column_names = [column[0] for column in cursor.description]
                 rows = []
                 for raw_row in cursor.fetchall():
@@ -3355,8 +3400,12 @@ def mantenimiento():
                 columns = get_table_columns(cursor, catalogo['table'])
                 # Motivo de devolución debe conservar el orden definido en la
                 # tabla (id_motivo), no el alfabético de la descripción.
-                order_column = catalogo['id_column']
-                order_direction = 'ASC' if key == 'motivo_devolucion' else 'DESC'
+                if key == 'motivo_devolucion':
+                    order_column = catalogo['id_column']
+                    order_direction = 'ASC'
+                else:
+                    order_column = catalogo['display_column']
+                    order_direction = 'ASC'
                 cursor.execute(f"SELECT * FROM {catalogo['table']} ORDER BY {order_column} {order_direction}")
                 column_names = [column[0] for column in cursor.description]
                 rows = []
@@ -3427,6 +3476,68 @@ def mantenimiento():
         initial_view='audit' if request.args.get('vista') == 'audit' else 'database',
         maintenance_can_write=has_permission_in_session('mantenimiento', 'write'),
     )
+
+
+@app.route('/mantenimiento/tablas/<key>/limpiar', methods=['POST'])
+def limpiar_tabla_mantenimiento(key):
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'write'):
+        return jsonify({'error': 'No tienes permisos para limpiar tablas.'}), 403
+
+    # El cliente sólo puede elegir entre estas tablas; nunca se usa un nombre
+    # de tabla arbitrario recibido en el cuerpo de la petición.
+    tables = {
+        'repuesto': ('repuesto', 'Productos'),
+        'venta': ('venta', 'Ventas'),
+        'prestamo': ('prestamo', 'Préstamos'),
+        'usuario': ('usuario', 'Usuarios'),
+        'devolucion': ('devolucion', 'Devoluciones'),
+    }
+    if key not in tables:
+        return jsonify({'error': 'La tabla seleccionada no está disponible para limpieza.'}), 404
+
+    table, label = tables[key]
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if not get_table_columns(cursor, table):
+            return jsonify({'error': f'No se encontró la tabla {label}.'}), 404
+
+        # Los detalles forman parte de estas tablas transaccionales y deben
+        # eliminarse primero para respetar sus relaciones.
+        cleanup = {
+            'venta': [
+                ('detalle_devolucion', 'id_devolucion IN (SELECT id_devolucion FROM dbo.devolucion WHERE id_venta IN (SELECT id_venta FROM dbo.venta))'),
+                ('devolucion', 'id_venta IN (SELECT id_venta FROM dbo.venta)'),
+                ('detalle_venta', 'id_venta IN (SELECT id_venta FROM dbo.venta)'),
+            ],
+            'prestamo': [
+                ('detalle_prestamo', 'id_prestamo IN (SELECT id_prestamo FROM dbo.prestamo)'),
+            ],
+            'devolucion': [
+                ('detalle_devolucion', 'id_devolucion IN (SELECT id_devolucion FROM dbo.devolucion)'),
+            ],
+        }
+        for child, condition in cleanup.get(table, []):
+            if get_table_columns(cursor, child):
+                cursor.execute(f'DELETE FROM dbo.[{child}] WHERE {condition}')
+
+        # Evita borrar productos o usuarios que aún son usados por registros
+        # históricos. El mensaje de FK que retorne SQL Server se presenta al usuario.
+        cursor.execute(f'DELETE FROM dbo.[{table}]')
+        deleted = max(cursor.rowcount, 0)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'{label}: se limpiaron {deleted} registros.'})
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception('No fue posible limpiar la tabla de mantenimiento %s.', table)
+        return jsonify({'error': 'No se pudo limpiar la tabla. Puede tener registros relacionados; limpia primero sus tablas dependientes.'}), 409
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @app.route('/mantenimiento/auditoria')
@@ -4018,7 +4129,7 @@ def inventario():
             # Support schemas that use either id_ubicacion or id_bodega as the FK
             loc_id = data.get('id_ubicacion') or data.get('id_bodega')
             ubicacion_bodega = get_display_name_by_id(cursor, ['bodega', 'ubicacion', 'ubicacion_bodega'], loc_id) or '-'
-            usuario_registro = get_display_name_by_id(cursor, ['usuario'], data.get('id_usuario_registro')) or '-'
+            usuario_registro = get_user_full_name(cursor, data.get('id_usuario_registro')) or get_display_name_by_id(cursor, ['usuario'], data.get('id_usuario_registro')) or '-'
             # Prefer the explicit repuesto estado FK if present; fall back to any
             # legacy `id_estado` if it exists in the schema (some installs may
             # still have it). This avoids SQL errors when `id_estado` column
@@ -4083,34 +4194,29 @@ def inventario():
         conn.close()
 
         if search_query:
-            search_lower = search_query.lower()
-            def matches_search(repuesto):
-                return any(
-                    search_lower in str(repuesto.get(field, '')).lower()
-                    for field in [
-                        'id_repuesto',
-                        'codigo_repuesto',
-                        'vehiculo_origen',
-                        'marca',
-                        'modelo',
-                        'anio',
-                        'color',
-                        'lado',
-                        'posicion',
-                        'estado_repuesto',
-                        'ubicacion_bodega',
-                        'precio_compra',
-                        'precio_venta',
-                        'observaciones',
-                        'fecha_ingreso',
-                        'usuario_registro',
-                        'estado',
-                        'stock',
-                        'stock_minimo',
-                        'stock_maximo'
-                    ]
-                )
-            lista_repuestos = [r for r in lista_repuestos if matches_search(r)]
+            search_fields = [
+                'id_repuesto',
+                'codigo_repuesto',
+                'vehiculo_origen',
+                'marca',
+                'modelo',
+                'anio',
+                'color',
+                'lado',
+                'posicion',
+                'estado_repuesto',
+                'ubicacion_bodega',
+                'precio_compra',
+                'precio_venta',
+                'observaciones',
+                'fecha_ingreso',
+                'usuario_registro',
+                'estado',
+                'stock',
+                'stock_minimo',
+                'stock_maximo'
+            ]
+            lista_repuestos = [r for r in lista_repuestos if matches_multiword_search(search_query, r, search_fields)]
 
         if stock_bajo_filter:
             lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
@@ -4415,7 +4521,7 @@ def inventario_list_data():
             estado_repuesto_text = get_display_name_by_id(cursor, ['estado_repuesto'], data.get('id_estado_repuesto')) or '-'
             loc_id = data.get('id_ubicacion') or data.get('id_bodega')
             ubicacion_bodega = get_display_name_by_id(cursor, ['bodega', 'ubicacion', 'ubicacion_bodega'], loc_id) or '-'
-            usuario_registro = get_display_name_by_id(cursor, ['usuario'], data.get('id_usuario_registro')) or '-'
+            usuario_registro = get_user_full_name(cursor, data.get('id_usuario_registro')) or get_display_name_by_id(cursor, ['usuario'], data.get('id_usuario_registro')) or '-'
             estado_general = get_display_name_by_id(
                 cursor, ['estado_general'], data.get('id_estado_general')
             ) or '-'
@@ -4469,34 +4575,29 @@ def inventario_list_data():
         conn.close()
 
         if search_query:
-            search_lower = search_query.lower()
-            def matches_search(repuesto):
-                return any(
-                    search_lower in str(repuesto.get(field, '')).lower()
-                    for field in [
-                        'id_repuesto',
-                        'codigo_repuesto',
-                        'vehiculo_origen',
-                        'marca',
-                        'modelo',
-                        'anio',
-                        'color',
-                        'lado',
-                        'posicion',
-                        'estado_repuesto',
-                        'ubicacion_bodega',
-                        'precio_compra',
-                        'precio_venta',
-                        'observaciones',
-                        'fecha_ingreso',
-                        'usuario_registro',
-                        'estado',
-                        'stock',
-                        'stock_minimo',
-                        'stock_maximo'
-                    ]
-                )
-            lista_repuestos = [r for r in lista_repuestos if matches_search(r)]
+            search_fields = [
+                'id_repuesto',
+                'codigo_repuesto',
+                'vehiculo_origen',
+                'marca',
+                'modelo',
+                'anio',
+                'color',
+                'lado',
+                'posicion',
+                'estado_repuesto',
+                'ubicacion_bodega',
+                'precio_compra',
+                'precio_venta',
+                'observaciones',
+                'fecha_ingreso',
+                'usuario_registro',
+                'estado',
+                'stock',
+                'stock_minimo',
+                'stock_maximo'
+            ]
+            lista_repuestos = [r for r in lista_repuestos if matches_multiword_search(search_query, r, search_fields)]
 
         if stock_bajo_filter:
             lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
@@ -4887,7 +4988,11 @@ def modificar_repuesto(id_repuesto):
         repuesto = dict(zip(cols, row))
 
         vehiculo_origen_candidates = ['vehiculo_origen']
-        vehiculos_origen = fetch_catalog_for_candidates(cursor, vehiculo_origen_candidates) or []
+        # En edición incluir orígenes inactivos también, para que un valor ya
+        # guardado siga disponible y seleccionado en el formulario.
+        vehiculos_origen = fetch_catalog_for_candidates(
+            cursor, vehiculo_origen_candidates, include_inactive=True
+        ) or []
 
         tipos = fetch_tipos_repuesto(cursor, only_active=False)
 
@@ -5165,7 +5270,7 @@ def exportar_pdf_clientes():
         if not id_column:
             raise ValueError('No se encontró el identificador de clientes.')
 
-        query = request.args.get('q', '').strip().lower()
+        query = request.args.get('q', '').strip()
         from_date = request.args.get('from_date', '').strip()
         to_date = request.args.get('to_date', '').strip()
         estado = request.args.get('estado', '').strip().lower()
@@ -5179,8 +5284,14 @@ def exportar_pdf_clientes():
             telefono = data.get(cliente_field(columns, 'telefono', 'celular')) or '-'
             correo = data.get(cliente_field(columns, 'correo', 'email')) or '-'
             direccion = data.get(cliente_field(columns, 'direccion')) or '-'
-            searchable = f'{nombre} {nit} {telefono} {correo}'.lower()
-            if query and query not in searchable:
+            search_fields = ['nombre', 'nit', 'telefono', 'correo']
+            searchable_record = {
+                'nombre': nombre,
+                'nit': nit,
+                'telefono': telefono,
+                'correo': correo
+            }
+            if query and not matches_multiword_search(query, searchable_record, search_fields):
                 continue
             # Filter by estado
             cliente_activo = data.get(cliente_field(columns, 'activo')) or data.get('id_estado_general') == 1
@@ -5257,7 +5368,10 @@ def ventas():
 
         cursor.execute(
             f"SELECT dv.id_venta, dv.id_repuesto, dv.precio_unitario, "
-            f"dv.subtotal, dv.cantidad, r.{repuesto_display_col} AS repuesto_nombre "
+            f"dv.subtotal, dv.cantidad, r.{repuesto_display_col} AS repuesto_nombre, "
+            "COALESCE((SELECT SUM(dd.cantidad) FROM detalle_devolucion dd "
+            "INNER JOIN devolucion d ON d.id_devolucion = dd.id_devolucion "
+            "WHERE d.id_venta = dv.id_venta AND dd.id_repuesto = dv.id_repuesto), 0) AS cantidad_devuelta "
             "FROM detalle_venta dv "
             "LEFT JOIN repuesto r ON r.id_repuesto = dv.id_repuesto"
         )
@@ -5270,12 +5384,20 @@ def ventas():
             id_repuesto = detail.get('id_repuesto')
             if id_venta_detalle is None or id_repuesto is None:
                 continue
+            cantidad = int(detail.get('cantidad') or 0)
+            cantidad_devuelta = int(detail.get('cantidad_devuelta') or 0)
+            if cantidad < 0:
+                cantidad += cantidad_devuelta * 2
+                detail['cantidad'] = cantidad
+                detail['subtotal'] = cantidad * float(detail.get('precio_unitario') or 0)
             detalles_por_venta.setdefault(id_venta_detalle, []).append({
                 'codigo': id_repuesto,
                 'repuesto': get_repuesto_display_name(cursor, id_repuesto) or detail.get('repuesto_nombre') or str(id_repuesto),
+                'anio': get_repuesto_year(cursor, id_repuesto),
                 'precio_unitario': detail.get('precio_unitario') or 0.0,
                 'subtotal': detail.get('subtotal') or 0.0,
                 'cantidad': detail.get('cantidad') or 0,
+                'cantidad_devuelta': cantidad_devuelta,
             })
 
         ventas_por_id = {}
@@ -5285,8 +5407,8 @@ def ventas():
             raw_cliente = data.get('id_cliente') or data.get('cliente')
             raw_usuario = data.get('id_usuario') or data.get('usuario')
             raw_metodo_pago = data.get('id_metodo_pago')
-            cliente = get_cliente_full_name(cursor, data.get('id_cliente')) or raw_cliente or '-'
-            usuario = lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or raw_usuario or '-'
+            cliente = get_cliente_full_name(cursor, data.get('id_cliente')) or raw_cliente or 'Cliente no frecuente'
+            usuario = get_user_full_name(cursor, data.get('id_usuario')) or lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or raw_usuario or '-'
             metodo_pago = lookup_foreign_key_display(cursor, 'id_metodo_pago', raw_metodo_pago, ['metodo_pago', 'forma_pago']) or raw_metodo_pago or '-'
             id_venta = data.get('id_venta')
             if id_venta not in ventas_por_id:
@@ -5373,6 +5495,7 @@ def ventas():
                     'id': row[0],
                     'codigo': row[1] or str(row[0]),
                     'nombre': get_repuesto_display_name(cursor, row[0]) or row[1] or str(row[0]),
+                    'anio': get_repuesto_year(cursor, row[0]) or 'No registrado',
                     'precio': float(row[2] or 0),
                     'stock': row[3] or 0,
                 })
@@ -5409,7 +5532,8 @@ def ventas():
                             'stock': item_data.get('stock') or 0,
                         })
                     usuario_nombre = (
-                        lookup_foreign_key_display(cursor, 'id_usuario', sale_data.get('id_usuario'), ['usuario'])
+                        get_user_full_name(cursor, sale_data.get('id_usuario'))
+                        or lookup_foreign_key_display(cursor, 'id_usuario', sale_data.get('id_usuario'), ['usuario'])
                         or ' '.join(
                             part for part in [
                                 sale_data.get('primer_nombre'),
@@ -5770,7 +5894,7 @@ def devoluciones():
                 'id_devolucion': id_devolucion,
                 'id_venta': data.get('id_venta'),
                 'fecha_devolucion': data.get('fecha_devolucion'),
-                'usuario': lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or 'Sistema',
+                'usuario': get_user_full_name(cursor, data.get('id_usuario')) or lookup_foreign_key_display(cursor, 'id_usuario', data.get('id_usuario'), ['usuario']) or 'Sistema',
                 'cliente': get_cliente_full_name(cursor, None),
                 'total_devuelto': Decimal('0.00'),
                 'items': [],
@@ -5782,6 +5906,7 @@ def devoluciones():
                 current['items'].append({
                     'codigo': data.get('codigo_repuesto') or str(id_repuesto),
                     'nombre': get_repuesto_display_name(cursor, id_repuesto) or data.get('codigo_repuesto') or str(id_repuesto),
+                    'anio': get_repuesto_year(cursor, id_repuesto) or 'No registrado',
                     'cantidad': data.get('cantidad') or 0,
                     'precio_unitario': float(data.get('precio_unitario') or 0),
                     'subtotal': float(subtotal),
@@ -5830,15 +5955,20 @@ def devoluciones():
                 (sale['id'],)
             )
             for item_row in cursor.fetchall():
-                cantidad_disponible = item_row[1] or 0
-                cantidad_devuelta = item_row[4] or 0
+                cantidad_disponible = int(item_row[1] or 0)
+                cantidad_devuelta = int(item_row[4] or 0)
+                if cantidad_disponible < cantidad_devuelta:
+                    cantidad_disponible += cantidad_devuelta * 2
+                cantidad_vendida = cantidad_disponible
+                cantidad_disponible = max(cantidad_vendida - cantidad_devuelta, 0)
                 sale['items'].append({
                     'id': item_row[0], 'cantidad': cantidad_disponible,
-                    'cantidad_vendida': cantidad_disponible + cantidad_devuelta,
+                    'cantidad_vendida': cantidad_vendida,
                     'cantidad_devuelta': cantidad_devuelta,
                     'precio': float(item_row[2] or 0),
                     'codigo': item_row[3] or str(item_row[0]),
                     'nombre': get_repuesto_display_name(cursor, item_row[0]) or item_row[3] or str(item_row[0]),
+                    'anio': get_repuesto_year(cursor, item_row[0]) or 'No registrado',
                 })
             # La venta se mantiene localizable por cliente o número aun cuando
             # ya no tenga unidades disponibles. La interfaz indicará ese caso
@@ -5848,10 +5978,10 @@ def devoluciones():
         cursor.execute('SELECT id_motivo, motivo FROM motivo_devolucion ORDER BY motivo')
         motivos = [{'id': row[0], 'nombre': row[1]} for row in cursor.fetchall()]
         cursor.execute(
-            'SELECT COUNT(*), COALESCE((SELECT SUM(subtotal) FROM detalle_devolucion), 0) '
-            'FROM devolucion'
+            'SELECT COUNT(*), COALESCE(SUM(subtotal), 0) FROM detalle_devolucion'
         )
         total_devoluciones, monto_total = cursor.fetchone()
+        total_items_devueltos = sum(len(d.get('items', [])) for d in devoluciones_rows)
     finally:
         cursor.close()
         conn.close()
@@ -5859,6 +5989,7 @@ def devoluciones():
     return render_template(
         'devoluciones.html', devoluciones=devoluciones_rows, ventas_disponibles=ventas_disponibles,
         motivos=motivos, total_devoluciones=total_devoluciones or 0, monto_total=float(monto_total or 0),
+        total_items_devueltos=total_items_devueltos,
     )
 
 
@@ -6220,12 +6351,12 @@ def desarme():
                 continue
             if filters['origen'] and str(vehicle['id_origen']).strip().casefold() != filters['origen'].strip().casefold():
                 continue
-            search_value = ' '.join(str(value or '') for value in (
-                vehicle['id'], vehicle['marca'], vehicle['modelo'], vehicle['anio'],
-                vehicle['placa'], vehicle['vin_chasis'], vehicle['origen'],
-                vehicle['estado'], vehicle['observaciones'],
-            )).casefold()
-            if filters['q'] and filters['q'].casefold() not in search_value:
+            search_fields = [
+                'id', 'marca', 'modelo', 'anio',
+                'placa', 'vin_chasis', 'origen',
+                'estado', 'observaciones',
+            ]
+            if filters['q'] and not matches_multiword_search(filters['q'], vehicle, search_fields):
                 continue
 
             if normalized_state.startswith('pendiente'):
@@ -6278,6 +6409,272 @@ def desarme():
         process_link_ready=process_link_ready,
         schema_ready=schema_ready,
     )
+
+
+@app.route('/desarme/list-data')
+def desarme_list_data():
+    if 'user' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    filters = {
+        'q': request.args.get('q', '').strip(),
+        'estado': request.args.get('estado', '').strip(),
+        'origen': request.args.get('origen', '').strip(),
+    }
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        estados = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['estado_desarme']) or [])
+        ]
+        origenes = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['vehiculo_origen']) or [])
+        ]
+        marcas = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['marca_vehiculo', 'marca']) or [])
+        ]
+        anios = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['anio_vehiculo', 'anio']) or [])
+        ]
+        colores = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(cursor, ['color', 'color_repuesto']) or [])
+        ]
+        transmisiones = [
+            {'id': row[0], 'nombre': row[1]}
+            for row in (fetch_catalog_for_candidates(
+                cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision']
+            ) or [])
+        ]
+        pending_state_id = next(
+            (
+                state['id'] for state in estados
+                if str(state['nombre']).strip().casefold().startswith('pendiente')
+            ),
+            None,
+        )
+
+        desarme_columns = {
+            column.lower() for column in get_table_columns(cursor, 'desarme')
+        }
+        vehicle_columns = {
+            column.lower() for column in get_table_columns(cursor, 'vehiculo_desarme')
+        }
+        process_link_ready = 'id_vehiculo_desarme' in desarme_columns
+
+        process_join = (
+            '(d.id_vehiculo_desarme = vd.id_vehiculo_desarme OR '
+            '(d.id_vehiculo_desarme IS NULL '
+            'AND d.id_desarme = vd.id_vehiculo_desarme '
+            'AND NOT EXISTS (SELECT 1 FROM dbo.desarme linked '
+            'WHERE linked.id_vehiculo_desarme = vd.id_vehiculo_desarme)))'
+            if process_link_ready
+            else 'd.id_desarme = vd.id_vehiculo_desarme'
+        )
+        cursor.execute(
+            'SELECT vd.id_vehiculo_desarme, vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, '
+            'vd.vin_chasis, vd.placa, vd.fecha_adquisicion, vd.origen_adquisicion, '
+            'd.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre AS estado, d.id_vehiculo_origen, vo.origen, '
+            'COALESCE(SUM(dd.cantidad), 0) AS piezas, vd.id_transmision '
+            'FROM dbo.vehiculo_desarme vd '
+            'LEFT JOIN dbo.desarme d ON ' + process_join + ' '
+            'LEFT JOIN dbo.estado_desarme ed ON ed.id_estado_desarme = d.id_estado_desarme '
+            'LEFT JOIN dbo.vehiculo_origen vo ON vo.id_origen = d.id_vehiculo_origen '
+            'LEFT JOIN dbo.detalle_desarme dd ON dd.id_desarme = d.id_desarme '
+            'GROUP BY vd.id_vehiculo_desarme, vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, '
+            'vd.vin_chasis, vd.placa, vd.fecha_adquisicion, vd.origen_adquisicion, '
+            'd.id_desarme, d.fecha_inicio, d.fecha_finalizacion, d.observaciones, '
+            'd.id_estado_desarme, ed.nombre, d.id_vehiculo_origen, vo.origen, vd.id_transmision '
+            'ORDER BY vd.id_vehiculo_desarme DESC'
+        )
+        columns = [column[0] for column in cursor.description]
+        vehicles = []
+        summary = {'pending': 0, 'in_progress': 0, 'completed': 0, 'parts': 0}
+
+        for row in cursor.fetchall():
+            item = dict(zip(columns, row))
+            label = item.get('estado') or 'Pendiente'
+            normalized_state = str(label).strip().casefold()
+            pieces = int(item.get('piezas') or 0)
+            vehicle = {
+                'id': item.get('id_vehiculo_desarme'),
+                'id_marca': item.get('id_marca'),
+                'id_modelo': item.get('id_modelo'),
+                'id_anio': item.get('id_anio'),
+                'id_color': item.get('id_color'),
+                'id_transmision': item.get('id_transmision'),
+                'marca': get_display_name_by_id(
+                    cursor, ['marca_vehiculo', 'marca'], item.get('id_marca')
+                ) or '—',
+                'modelo': get_display_name_by_id(
+                    cursor, ['modelo_vehiculo', 'modelo'], item.get('id_modelo')
+                ) or '—',
+                'anio': get_display_name_by_id(
+                    cursor, ['anio_vehiculo', 'anio'], item.get('id_anio')
+                ) or '—',
+                'color': get_display_name_by_id(
+                    cursor, ['color', 'color_repuesto'], item.get('id_color')
+                ) or '—',
+                'transmision': get_display_name_by_id(
+                    cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'],
+                    item.get('id_transmision'),
+                ) or '—',
+                'vin_chasis': item.get('vin_chasis'),
+                'placa': item.get('placa'),
+                'fecha_adquisicion': item.get('fecha_adquisicion'),
+                'process_id': item.get('id_desarme'),
+                'fecha_inicio': item.get('fecha_inicio'),
+                'fecha_finalizacion': item.get('fecha_finalizacion'),
+                'observaciones': item.get('observaciones'),
+                'state_id': item.get('id_estado_desarme') or pending_state_id,
+                'estado': label,
+                'state_class': _desarme_state_class(label),
+                'origen': item.get('origen_adquisicion') or item.get('origen') or 'Sin especificar',
+                'id_origen': item.get('origen_adquisicion') or item.get('origen') or '',
+                'piezas': pieces,
+            }
+            if filters['estado'] and str(vehicle['state_id']) != filters['estado']:
+                continue
+            if filters['origen'] and str(vehicle['id_origen']).strip().casefold() != filters['origen'].strip().casefold():
+                continue
+            search_fields = [
+                'id', 'marca', 'modelo', 'anio',
+                'placa', 'vin_chasis', 'origen',
+                'estado', 'observaciones',
+            ]
+            if filters['q'] and not matches_multiword_search(filters['q'], vehicle, search_fields):
+                continue
+
+            if normalized_state.startswith('pendiente'):
+                summary['pending'] += 1
+            elif normalized_state.startswith('en proceso'):
+                summary['in_progress'] += 1
+            elif _desarme_state_class(label) == 'completed':
+                summary['completed'] += 1
+            summary['parts'] += pieces
+            vehicles.append(vehicle)
+
+        # Pagination
+        page_size = 10
+        total_items = len(vehicles)
+        total_pages = max(1, (total_items + page_size - 1) // page_size)
+        page = min(page, total_pages)
+        start = (page - 1) * page_size
+        end = start + page_size
+        vehicles_page = vehicles[start:end]
+
+        # Render table rows HTML
+        can_create = has_permission_in_session('desarme', 'write')
+        rows_html = ''
+        if vehicles_page:
+            for vehicle in vehicles_page:
+                fecha_adq = vehicle['fecha_adquisicion'].strftime('%d/%m/%Y') if vehicle['fecha_adquisicion'] and hasattr(vehicle['fecha_adquisicion'], 'strftime') else vehicle['fecha_adquisicion'] or '—'
+                fecha_fin = vehicle['fecha_finalizacion'].strftime('%d/%m/%Y') if vehicle['fecha_finalizacion'] and hasattr(vehicle['fecha_finalizacion'], 'strftime') else vehicle['fecha_finalizacion'] or '—'
+                rows_html += f'''
+<tr>
+    <td class="vehicle-id" data-label="ID vehículo">VEH-{{"%06d"|format({vehicle['id']}|int)}}</td>
+    <td class="vehicle-make" data-label="Marca">{vehicle['marca']}</td>
+    <td data-label="Modelo">{vehicle['modelo']}</td>
+    <td data-label="Año">{vehicle['anio']}</td>
+    <td data-label="Color">{vehicle['color']}</td>
+    <td class="vehicle-identifier" data-label="Placa / VIN">
+        {f'<span>{vehicle["placa"]}</span>' if vehicle['placa'] else ''}
+        {f'<small>{vehicle["vin_chasis"]}</small>' if vehicle['vin_chasis'] else ''}
+        {'—' if not vehicle['placa'] and not vehicle['vin_chasis'] else ''}
+    </td>
+    <td data-label="Origen">{vehicle['origen']}</td>
+    <td data-label="Fecha adq.">{fecha_adq}</td>
+    <td data-label="Estado"><span class="state-badge {vehicle['state_class']}">{vehicle['estado']}</span></td>
+    <td data-label="Desarme">{fecha_fin}</td>
+    <td data-label="Piezas"><span class="parts-count">{vehicle['piezas']}</span></td>
+    <td data-label="Acciones">
+        <div class="vehicle-row-actions">
+            <a class="vehicle-detail-button" href="{{{{ url_for('desarme_detalle', vehicle_id={vehicle['id']}) }}}}" title="Ver todos los detalles del desarme" aria-label="Ver todos los detalles del desarme VEH-{{"%06d"|format({vehicle['id']}|int)}}"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></a>
+'''
+                if can_create:
+                    rows_html += f'''
+            <button class="vehicle-edit-button" type="button" title="Modificar vehículo" aria-label="Modificar vehículo VEH-{{"%06d"|format({vehicle['id']}|int)}}" data-edit-vehicle data-id="{vehicle['id']}" data-brand="{vehicle['id_marca'] or ''}" data-model="{vehicle['id_modelo'] or ''}" data-year="{vehicle['id_anio'] or ''}" data-color="{vehicle['id_color'] or ''}" data-transmission="{vehicle['id_transmision'] or ''}" data-plate="{vehicle['placa'] or ''}" data-vin="{vehicle['vin_chasis'] or ''}" data-origin="{vehicle['origen'] if vehicle['origen'] != 'Sin especificar' else ''}" data-acquired="{vehicle['fecha_adquisicion'].strftime('%Y-%m-%d') if vehicle['fecha_adquisicion'] and hasattr(vehicle['fecha_adquisicion'], 'strftime') else vehicle['fecha_adquisicion'] or ''}" data-state="{vehicle['state_id'] or ''}"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+'''
+                rows_html += '''
+        </div>
+    </td>
+</tr>
+'''
+        else:
+            has_filters = any(filters.values())
+            rows_html = f'''
+<tr>
+    <td colspan="12" class="empty-state">
+        <i class="fa-solid fa-car-side" aria-hidden="true"></i>
+        <p>{'No hay vehículos registrados para desarme' if not has_filters else 'No se encontraron vehículos con esos filtros'}</p>
+    </td>
+</tr>
+'''
+
+        # Summary cards
+        summary_cards = [
+            {'label': 'Pendientes', 'value': summary['pending'], 'color': 'pending'},
+            {'label': 'En proceso', 'value': summary['in_progress'], 'color': 'in-progress'},
+            {'label': 'Desarmados', 'value': summary['completed'], 'color': 'completed'},
+            {'label': 'Total piezas', 'value': summary['parts'], 'color': 'parts'},
+        ]
+
+        # Pagination HTML
+        pagination_html = ''
+        if total_pages > 1:
+            pagination_html = '<div class="table-pagination">'
+            pagination_html += f'<span class="table-pagination-summary">Mostrando {start + 1}–{min(end, total_items)} de {total_items} registros</span>'
+            pagination_html += '<div class="table-pagination-controls">'
+            if page > 1:
+                pagination_html += f'<button type="button" class="table-pagination-previous" data-page="{page - 1}" aria-label="Página anterior">‹</button>'
+            else:
+                pagination_html += '<button type="button" class="table-pagination-previous" disabled aria-label="Página anterior">‹</button>'
+
+            page_numbers = set([1, total_pages])
+            for p in range(max(1, page - 2), min(total_pages, page + 2) + 1):
+                page_numbers.add(p)
+            prev = 0
+            for p in sorted(page_numbers):
+                if p - prev > 1:
+                    pagination_html += '<span class="table-pagination-gap">…</span>'
+                pagination_html += f'<button type="button" class="table-pagination-page {"is-current" if p == page else ""}" data-page="{p}" aria-label="Ir a la página {p}"{" aria-current=\"page\"" if p == page else ""}>{p}</button>'
+                prev = p
+
+            if page < total_pages:
+                pagination_html += f'<button type="button" class="table-pagination-next" data-page="{page + 1}" aria-label="Página siguiente">›</button>'
+            else:
+                pagination_html += '<button type="button" class="table-pagination-next" disabled aria-label="Página siguiente">›</button>'
+            pagination_html += '</div></div>'
+
+        return jsonify({
+            'success': True,
+            'vehicles': vehicles_page,
+            'rows_html': rows_html,
+            'pagination_html': pagination_html,
+            'summary': summary,
+            'summary_cards': summary_cards,
+            'total_items': total_items,
+            'total_pages': total_pages,
+            'current_page': page,
+            'has_filters': any(filters.values()),
+            'filters': filters,
+        })
+    except Exception as error:
+        app.logger.exception('No se pudo cargar la lista de desarme.')
+        return jsonify({'error': 'No fue posible cargar los datos del desarme.'}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @app.route('/desarme/<int:vehicle_id>')
@@ -6480,7 +6877,7 @@ def desarme_detalle(vehicle_id):
                     'piezas_no_aptas': result_row[4],
                     'observaciones': result_row[5],
                     'fecha_registro': result_row[6],
-                    'usuario': lookup_foreign_key_display(
+                    'usuario': get_user_full_name(cursor, result_row[7]) or lookup_foreign_key_display(
                         cursor, 'id_usuario', result_row[7], ['usuario']
                     ) or '—',
                     'estado': _desarme_result_state_name(cursor, result_row[8]) or '—',
@@ -6528,7 +6925,7 @@ def desarme_detalle(vehicle_id):
                     ),
                     'descripcion': incident_row[2],
                     'fecha_incidencia': incident_row[3],
-                    'usuario': lookup_foreign_key_display(
+                    'usuario': get_user_full_name(cursor, incident_row[4]) or lookup_foreign_key_display(
                         cursor, 'id_usuario', incident_row[4], ['usuario']
                     ) or '—',
                     'estado': incident_status_names.get(
@@ -6963,6 +7360,45 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
     if 'id_repuesto' in piece_columns and piece.get('id_repuesto'):
         repuesto_id = int(piece['id_repuesto'])
 
+    if repuesto_id is None:
+        match_columns = []
+        match_params = []
+        if 'id_tipo_repuesto' in repuesto_columns:
+            match_columns.append(f'[{repuesto_columns["id_tipo_repuesto"]}] = ?')
+            match_params.append(id_tipo_repuesto)
+        if 'id_marca' in repuesto_columns and id_marca is not None:
+            match_columns.append(f'[{repuesto_columns["id_marca"]}] = ?')
+            match_params.append(id_marca)
+        if 'id_modelo' in repuesto_columns and id_modelo is not None:
+            match_columns.append(f'[{repuesto_columns["id_modelo"]}] = ?')
+            match_params.append(id_modelo)
+        if 'id_anio' in repuesto_columns and id_anio is not None:
+            match_columns.append(f'[{repuesto_columns["id_anio"]}] = ?')
+            match_params.append(id_anio)
+        if 'id_color' in repuesto_columns and id_color is not None:
+            match_columns.append(f'[{repuesto_columns["id_color"]}] = ?')
+            match_params.append(id_color)
+        if 'id_transmision' in repuesto_columns and id_transmision is not None:
+            match_columns.append(f'[{repuesto_columns["id_transmision"]}] = ?')
+            match_params.append(id_transmision)
+        if 'id_lado' in repuesto_columns and id_lado is not None:
+            match_columns.append(f'[{repuesto_columns["id_lado"]}] = ?')
+            match_params.append(id_lado)
+        if 'id_posicion' in repuesto_columns and id_posicion is not None:
+            match_columns.append(f'[{repuesto_columns["id_posicion"]}] = ?')
+            match_params.append(id_posicion)
+
+        if match_columns:
+            where_clause = ' AND '.join(match_columns)
+            cursor.execute(
+                f'SELECT TOP 1 [{repuesto_columns["id_repuesto"]}], [{repuesto_columns["stock"]}] '
+                f'FROM dbo.repuesto WHERE {where_clause}',
+                tuple(match_params),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                repuesto_id = int(existing[0])
+
     if repuesto_id is not None:
         if 'stock' not in repuesto_columns:
             raise ValueError('La tabla repuesto no tiene la columna de stock requerida.')
@@ -7004,7 +7440,7 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
         if 'id_repuesto' not in repuesto_columns:
             raise ValueError('La tabla repuesto no tiene identificador para crear inventario.')
         detail_id_column = piece_columns.get('id_detalle_desarme') or piece_columns.get('id_detalle')
-        code = f'DSR-DEFAULT-{int(detail_id):06d}'
+        code = f'REP-{int(detail_id):06d}'
         data = {
             'codigo_repuesto': code,
             'id_vehiculo_origen': id_vehiculo_origen,
@@ -7461,7 +7897,7 @@ def prestamos():
             loan['id_prestamo'] = id_prestamo
             loan['id_estado'] = id_estado
             loan['cliente'] = get_cliente_full_name(cursor, id_cliente) or 'Sin cliente frecuente'
-            loan['usuario'] = lookup_foreign_key_display(cursor, 'id_usuario', id_usuario, ['usuario']) or 'Sistema'
+            loan['usuario'] = get_user_full_name(cursor, id_usuario) or lookup_foreign_key_display(cursor, 'id_usuario', id_usuario, ['usuario']) or 'Sistema'
             loan['estado'] = estado or 'Activo'
             cursor.execute(
                 'SELECT dp.id_repuesto, dp.cantidad, dp.precio, dp.observaciones, r.codigo_repuesto '
@@ -7477,6 +7913,7 @@ def prestamos():
                 loan['items'].append({
                     'id': detail[0], 'codigo': detail[4] or str(detail[0]),
                     'nombre': get_repuesto_display_name(cursor, detail[0]) or detail[4] or str(detail[0]),
+                    'anio': get_repuesto_year(cursor, detail[0]),
                     'cantidad': quantity, 'precio': price, 'observaciones': detail[3] or '',
                 })
                 loan['total'] += price * quantity
@@ -7794,7 +8231,7 @@ def exportar_pdf_prestamos():
             return_date = str(row[2] or '')[:10]
             loan_state = str(row[4] or 'Activo').strip().lower()
             client_name = get_cliente_full_name(cursor, row[3]) or 'Sin cliente frecuente'
-            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[6]) or 'Sistema'
+            vendedor_name = get_user_full_name(cursor, row[6]) or get_display_name_by_id(cursor, ['usuario'], row[6]) or 'Sistema'
             cursor.execute(
                 'SELECT dp.id_repuesto, r.codigo_repuesto '
                 'FROM detalle_prestamo dp LEFT JOIN repuesto r ON r.id_repuesto = dp.id_repuesto '
@@ -7871,15 +8308,26 @@ def nueva_devolucion():
                 raise ValueError('Falta el motivo de devolución de al menos un repuesto.')
             motivo_id = int(motives[index])
             cursor.execute(
-                'SELECT id_repuesto, cantidad, precio_unitario FROM detalle_venta WHERE id_venta = ? AND id_repuesto = ?',
+                'SELECT dv.id_repuesto, dv.cantidad, dv.precio_unitario, '
+                'COALESCE((SELECT SUM(dd.cantidad) FROM detalle_devolucion dd '
+                'INNER JOIN devolucion d ON d.id_devolucion = dd.id_devolucion '
+                'WHERE d.id_venta = dv.id_venta AND dd.id_repuesto = dv.id_repuesto), 0) '
+                'FROM detalle_venta dv WHERE dv.id_venta = ? AND dv.id_repuesto = ?',
                 (id_venta, repuesto_id)
             )
             detail = cursor.fetchone()
-            if not detail or quantity > detail.cantidad:
+            if not detail:
+                raise ValueError('La cantidad devuelta supera la cantidad disponible de la venta.')
+            cantidad_devuelta = int(detail[3] or 0)
+            cantidad_vendida = int(detail.cantidad or 0)
+            if cantidad_vendida < cantidad_devuelta:
+                cantidad_vendida += cantidad_devuelta * 2
+            cantidad_disponible = cantidad_vendida - cantidad_devuelta
+            if quantity > cantidad_disponible:
                 raise ValueError('La cantidad devuelta supera la cantidad disponible de la venta.')
             price = Decimal(str(detail.precio_unitario or 0)).quantize(Decimal('0.01'))
             subtotal = (price * quantity).quantize(Decimal('0.01'))
-            items.append((detail.id_repuesto, quantity, motivo_id, price, subtotal))
+            items.append((detail.id_repuesto, quantity, motivo_id, price, subtotal, cantidad_vendida))
             total += subtotal
         if not items:
             raise ValueError('Selecciona al menos un repuesto para devolver.')
@@ -7890,18 +8338,30 @@ def nueva_devolucion():
             (id_venta, session.get('user_id'), total)
         )
         id_devolucion = cursor.fetchone()[0]
-        for id_repuesto, quantity, motivo_id, price, subtotal in items:
+        for id_repuesto, quantity, motivo_id, price, subtotal, cantidad_vendida in items:
             cursor.execute(
                 'INSERT INTO detalle_devolucion (id_devolucion, id_repuesto, cantidad, id_motivo, precio_unitario, subtotal) '
                 'VALUES (?, ?, ?, ?, ?, ?)',
                 (id_devolucion, id_repuesto, quantity, motivo_id, price, subtotal)
             )
             cursor.execute(
-                'UPDATE detalle_venta SET cantidad = cantidad - ?, subtotal = (cantidad - ?) * precio_unitario WHERE id_venta = ? AND id_repuesto = ?',
-                (quantity, quantity, id_venta, id_repuesto)
+                'UPDATE detalle_venta SET cantidad = ?, subtotal = ? WHERE id_venta = ? AND id_repuesto = ?',
+                (cantidad_vendida, cantidad_vendida * float(price), id_venta, id_repuesto)
             )
             registrar_movimiento_inventario(cursor, id_repuesto, 4, quantity, f'Devolucion de venta V-{id_venta:06d}', session.get('user_id'))
-        cursor.execute('UPDATE venta SET id_estado_venta = 2 WHERE id_venta = ?', (id_venta,))
+        cursor.execute(
+            'SELECT COUNT(*) FROM detalle_venta dv '
+            'WHERE dv.id_venta = ? AND dv.cantidad > '
+            '(SELECT COALESCE(SUM(dd.cantidad), 0) FROM detalle_devolucion dd '
+            'INNER JOIN devolucion d ON d.id_devolucion = dd.id_devolucion '
+            'WHERE d.id_venta = dv.id_venta AND dd.id_repuesto = dv.id_repuesto)',
+            (id_venta,),
+        )
+        has_items_not_fully_returned = cursor.fetchone()[0] > 0
+        cursor.execute(
+            'UPDATE venta SET id_estado_venta = ? WHERE id_venta = ?',
+            (1 if has_items_not_fully_returned else 2, id_venta),
+        )
         conn.commit()
         flash('Devolución registrada correctamente.', 'success')
     except (TypeError, ValueError) as error:
@@ -7930,10 +8390,6 @@ def eliminar_devolucion(id_devolucion):
             raise ValueError('No se encontró la devolución.')
         for id_repuesto, quantity, id_venta in items:
             cursor.execute('UPDATE repuesto SET stock = stock - ? WHERE id_repuesto = ?', (quantity, id_repuesto))
-            cursor.execute(
-                'UPDATE detalle_venta SET cantidad = cantidad + ?, subtotal = (cantidad + ?) * precio_unitario WHERE id_venta = ? AND id_repuesto = ?',
-                (quantity, quantity, id_venta, id_repuesto)
-            )
         cursor.execute('DELETE FROM detalle_devolucion WHERE id_devolucion = ?', (id_devolucion,))
         cursor.execute('DELETE FROM devolucion WHERE id_devolucion = ?', (id_devolucion,))
         conn.commit()
@@ -7993,7 +8449,7 @@ def exportar_pdf_devoluciones():
                 client_name = str(row[17] or row[18] or f'Cliente #{row[10] or "-"}')
             if cliente and cliente not in client_name.lower():
                 continue
-            vendedor_name = get_display_name_by_id(cursor, ['usuario'], row[11]) or 'Sistema'
+            vendedor_name = get_user_full_name(cursor, row[11]) or get_display_name_by_id(cursor, ['usuario'], row[11]) or 'Sistema'
             if vendedor and vendedor not in vendedor_name.lower():
                 continue
             repuesto_text = f'{row[7] or ""} {get_repuesto_display_name(cursor, row[4]) or ""}'.lower()

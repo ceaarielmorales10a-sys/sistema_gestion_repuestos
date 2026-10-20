@@ -10,8 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
         administrador: { label: 'Admin', text: 'Acceso total al sistema' },
         'administrador del sistema': { label: 'Admin', text: 'Acceso total al sistema' },
         vendedor: { label: 'Vendedor', text: 'Ventas, consulta de inventario' },
-        bodeguero: { label: 'Bodeguero', text: 'Inventario, Analytics IA y desarme' },
-        almacenista: { label: 'Bodeguero', text: 'Inventario, Analytics IA y desarme' }
+        bodeguero: { label: 'Bodeguero', text: 'Inventario, Analítica IA y desarme' },
+        almacenista: { label: 'Bodeguero', text: 'Inventario, Analítica IA y desarme' }
     };
 
     function disableAutocompleteForAllFields() {

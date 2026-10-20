@@ -5,7 +5,7 @@
 <div class="mobile-menu-trigger"><button id="mobile-menu-button" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button></div>
 <div id="mobile-sidebar-overlay" class="hidden" aria-hidden="true"></div>
 <aside id="sidebar" class="sidebar -translate-x-full"><div><div class="brand"><img src="{{ url_for('static',filename='logo.png') }}" alt="Importadora Morales"></div><nav>
-<a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analytics IA</a>{% endif %}
+<a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house"></i> Menú Principal</a>{% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain"></i> Analítica IA</a>{% endif %}
 {% if has_permission('clientes', 'read') %}<a class="active" href="/clientes"><i class="fa-solid fa-users"></i> Clientes</a>{% endif %}
 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box"></i> Inventario</a>{% endif %}
 {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping"></i> Ventas</a>{% endif %}
@@ -17,6 +17,7 @@
 <main><header><div><h1>Clientes</h1><p>Gestión del registro de clientes</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div>{% if has_permission('clientes', 'write') %}<button class="primary" onclick="openModal()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button>{% endif %}</header>
 <div class="tabs"><button class="active" data-tab="list"><i class="fa-solid fa-users"></i> Lista</button><button data-tab="report"><i class="fa-solid fa-file-lines"></i> Reportes</button></div>
 {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+{% include '_flash_notifications_script.html' %}
 <section id="list" class="panel active"><article class="metric"><span>Total Clientes</span><b>{{ total_clientes }}</b><i class="fa-solid fa-users"></i></article>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="search" placeholder="Buscar por nombre, NIT, correo o teléfono..."></div>
 <div class="card"><table data-pagination-page-size="10"><thead><tr><th>Cliente</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
@@ -89,7 +90,7 @@
   function openModal(){document.querySelector('.modal-box').reset();action.value='create';id_cliente.value='';document.getElementById('modal-title').textContent='Nuevo Cliente';submit.textContent='Registrar Cliente';modal.hidden=false}
   function closeModal(){modal.hidden=true}
   function editClient(b){const d=JSON.parse(b.dataset.client);openModal();action.value='edit';id_cliente.value=d.id_cliente||'';document.getElementById('modal-title').textContent='Editar Cliente';submit.textContent='Guardar Cambios';Object.entries(d).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v||''})}
-  document.getElementById('search').oninput=e=>document.querySelectorAll('tbody tr[data-search]').forEach(r=>r.hidden=!r.dataset.search.toLowerCase().includes(e.target.value.toLowerCase()));
+  document.getElementById('search').oninput=e=>{const terms=(e.target.value||'').toLowerCase().trim().split(/\s+/).filter(Boolean);document.querySelectorAll('tbody tr[data-search]').forEach(r=>{const s=(r.dataset.search||'').toLowerCase();r.hidden=terms.length>0 && !terms.every(t=>s.includes(t))});};
   document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.panel').forEach(e=>e.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});
 
   // Report filters
@@ -180,7 +181,7 @@ window.editClient = function (button) {
   clientActiveCheckbox.checked = Boolean(status && String(status[1]) === activeClientStatusId);
 };
 </script>{% endif %}
-<script>document.getElementById('report-search').oninput=e=>document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=!r.dataset.reportSearch.toLowerCase().includes(e.target.value.toLowerCase()));document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};</script>
+<script>document.getElementById('report-search').oninput=e=>{const terms=(e.target.value||'').toLowerCase().trim().split(/\s+/).filter(Boolean);document.querySelectorAll('tr[data-report-search]').forEach(r=>{const s=(r.dataset.reportSearch||'').toLowerCase();r.hidden=terms.length>0 && !terms.every(t=>s.includes(t))});};document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};</script>
 <script>
 function updateDateTime(){const n=new Date(),d=n.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),t=n.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:!1}),e=document.getElementById('datetime-display');e&&(e.textContent=d+' \u2022 '+t)}updateDateTime(),setInterval(updateDateTime,1e3);
 // Session auto-refresh on tab visibility change

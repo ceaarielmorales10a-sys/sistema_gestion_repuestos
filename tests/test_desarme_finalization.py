@@ -30,11 +30,20 @@ class InventoryInsertCursor:
 
     def __init__(self):
         self.executed = []
+        self._select_called = False
+        self.description = [('id_repuesto',)]
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
+        if query.strip().upper().startswith('SELECT') and 'FROM DBO.REPUESTO' in query.upper():
+            self._select_called = True
+        elif 'INSERT INTO DBO.REPUESTO' in query.upper():
+            self.description = [('id_repuesto',)]
 
     def fetchone(self):
+        if self._select_called:
+            self._select_called = False
+            return None
         return (91,)
 
 
@@ -166,14 +175,14 @@ def test_finalized_dismantled_piece_is_created_active_with_vehicle_transmission(
 
     insert_query, insert_params = next(
         (query, params) for query, params in cursor.executed
-        if query.startswith('INSERT INTO dbo.repuesto')
+        if 'INSERT INTO dbo.repuesto' in query
     )
     assert '[id_transmision]' in insert_query
     assert '[id_estado_general]' in insert_query
     assert 8 in insert_params
     assert 9 in insert_params
     assert 7 in insert_params
-    assert 'DSR-000012-000021' in insert_params
+    assert 'REP-000021' in insert_params
 
 
 def test_desarme_inventory_state_uses_named_available_status():

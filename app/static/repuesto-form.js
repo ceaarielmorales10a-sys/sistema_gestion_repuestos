@@ -25,6 +25,8 @@
   const brandSelect = form.querySelector('#id_marca');
   const modelSelect = form.querySelector('#id_modelo');
   const typeSelect = form.querySelector('#id_tipo_repuesto');
+  const typeInput = form.querySelector('#tipo-repuesto-search');
+  const typeMenu = form.querySelector('#tipo-repuesto-options');
   const locationSelect = form.querySelector('#id_ubicacion');
 
   const resetModels = (message) => {
@@ -52,13 +54,67 @@
   brandSelect?.addEventListener('change', () => loadModels(brandSelect.value));
   if (form.dataset.mode === 'add' && modelSelect) resetModels('Seleccionar primero la marca...');
 
-  const syncWarehouse = () => {
-    const option = typeSelect?.options[typeSelect.selectedIndex];
-    const locationId = option?.dataset.ubicacionId;
-    if (locationSelect && locationId) locationSelect.value = locationId;
+  const closeTypeMenu = () => {
+    if (!typeMenu || !typeInput) return;
+    typeMenu.hidden = true;
+    typeInput.setAttribute('aria-expanded', 'false');
   };
-  typeSelect?.addEventListener('change', syncWarehouse);
-  syncWarehouse();
+  const chooseType = (option) => {
+    if (!option || !typeInput || !typeSelect) return;
+    typeInput.value = option.textContent.trim();
+    typeSelect.value = option.value;
+    typeInput.setCustomValidity('');
+    if (locationSelect && option.dataset.ubicacionId) locationSelect.value = option.dataset.ubicacionId;
+    closeTypeMenu();
+  };
+  const showTypeOptions = () => {
+    if (!typeMenu || !typeInput || !typeSelect) return;
+    const query = typeInput.value.trim().toLocaleLowerCase();
+    typeSelect.value = '';
+    typeInput.setCustomValidity(query ? 'Selecciona un tipo de repuesto de la lista.' : 'Escribe y selecciona un tipo de repuesto del catálogo.');
+    if (locationSelect) locationSelect.value = '';
+    typeMenu.replaceChildren();
+    const matches = [...typeSelect.options].filter((option) => option.value && option.textContent.trim().toLocaleLowerCase().includes(query));
+    if (!query) {
+      closeTypeMenu();
+      return;
+    }
+    if (!matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'type-autocomplete-empty';
+      empty.textContent = 'No se encontraron tipos de repuesto';
+      typeMenu.append(empty);
+    } else {
+      matches.forEach((option) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'type-autocomplete-option';
+        item.setAttribute('role', 'option');
+        item.textContent = option.textContent.trim();
+        item.addEventListener('click', () => chooseType(option));
+        typeMenu.append(item);
+      });
+    }
+    typeMenu.hidden = false;
+    typeInput.setAttribute('aria-expanded', 'true');
+  };
+  if (typeInput && typeSelect) {
+    if (typeSelect.value) {
+      typeInput.value = typeSelect.selectedOptions[0]?.textContent.trim() || '';
+      typeInput.setCustomValidity('');
+    }
+    typeInput.addEventListener('input', showTypeOptions);
+    typeInput.addEventListener('focus', () => { if (typeInput.value.trim()) showTypeOptions(); });
+    typeInput.addEventListener('blur', () => window.setTimeout(closeTypeMenu, 120));
+    typeInput.addEventListener('keydown', (event) => {
+      const first = typeMenu?.querySelector('.type-autocomplete-option');
+      if (event.key === 'ArrowDown' && first) { event.preventDefault(); first.focus(); }
+      if (event.key === 'Escape') closeTypeMenu();
+    });
+    typeMenu?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { closeTypeMenu(); typeInput.focus(); }
+    });
+  }
 
   const photoInput = form.querySelector('#fotografia-upload');
   const preview = form.querySelector('#photo-preview');
@@ -89,6 +145,7 @@
   });
   form.querySelector('input:not([type="file"]):not([readonly]), select:not(:disabled)')?.focus({ preventScroll: true });
   form.addEventListener('submit', () => {
+    if (!typeSelect?.value) typeInput?.setCustomValidity('Escribe y selecciona un tipo de repuesto del catálogo.');
     const submitButton = form.querySelector('button[type="submit"]');
     if (submitButton) {
       submitButton.disabled = true;

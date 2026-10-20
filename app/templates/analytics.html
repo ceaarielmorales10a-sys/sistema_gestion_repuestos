@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics IA - Importadora Morales</title>
+    <title>Analítica IA - Importadora Morales</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -23,7 +23,7 @@
             <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
             <nav aria-label="Navegación principal">
                 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
-                {% if has_permission('analytics', 'read') %}<a class="active" href="{{ url_for('analytics') }}" aria-current="page"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('analytics', 'read') %}<a class="active" href="{{ url_for('analytics') }}" aria-current="page"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analítica IA</a>{% endif %}
                 {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
                 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
                 {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
@@ -44,7 +44,7 @@
         <header class="analytics-header">
             <div class="analytics-title">
                 <span><i class="fa-solid fa-brain" aria-hidden="true"></i></span>
-                <div><h1>Analytics IA</h1><p>Análisis inteligente y generación de reportes</p></div>
+                <div><h1>Analítica IA</h1><p>Análisis inteligente y generación de reportes</p></div>
             </div>
             <div class="datetime-display" id="datetime-display" aria-live="polite"></div>
             <div class="analytics-period" role="group" aria-label="Período del análisis">
@@ -100,7 +100,7 @@
                     <article class="prediction-card{% if item.requiere_reabastecimiento %} needs-restock{% endif %}">
                         <div class="prediction-name"><strong>{{ item.nombre }}</strong><i class="fa-regular {% if item.requiere_reabastecimiento %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}" aria-hidden="true"></i></div>
                         <p>Código: {{ item.codigo }} · {{ item.categoria }}</p>
-                        <div class="prediction-facts"><span>Stock actual/min.: <b>{{ item.stock|int }} / {{ item.minimo|int }}</b></span><span>Agotamiento estimado: <b>{{ item.dias_agotamiento if item.dias_agotamiento is not none else '—' }} días</b></span></div>
+                        <div class="prediction-facts"><span>Stock actual/min.: <b>{{ item.stock|int }} / {{ item.minimo|int }}</b></span><span>Agotamiento estimado: <b>{{ (item.dias_agotamiento|string + ' días') if item.dias_agotamiento is not none else 'No estimable (sin ventas)' }}</b></span></div>
                         <span class="prediction-status{% if item.requiere_reabastecimiento %} warning{% endif %}">{{ item.urgencia }}</span>
                     </article>
                     {% endfor %}
@@ -144,7 +144,7 @@
                 </article>
                 <article class="recommendation-note note-purple">
                     <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
-                    <div><strong>Análisis con ChatGPT</strong><p id="ai-recommendation">Selecciona “Generar análisis IA” para recibir recomendaciones basadas en los datos del período.</p></div>
+                    <div class="recommendation-content"><strong>Análisis con inteligencia artificial</strong><div id="ai-recommendation" class="ai-analysis">Selecciona “Generar análisis IA” para recibir recomendaciones basadas en los datos del período.</div></div>
                 </article>
             </div>
             <p class="analytics-ai-error" id="ai-error" role="alert" hidden></p>

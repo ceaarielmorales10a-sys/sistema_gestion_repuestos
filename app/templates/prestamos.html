@@ -29,7 +29,7 @@
       <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
       <nav aria-label="Navegación principal">
       <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
-      {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+      {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analítica IA</a>{% endif %}
       {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
       {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
       {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
@@ -63,6 +63,7 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}<div class="flash {{ category }}" role="status"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}" aria-hidden="true"></i>{{ message }}</div>{% endfor %}
     {% endwith %}
+    {% include '_flash_notifications_script.html' %}
 
     <section id="list-view" role="tabpanel">
       <div class="summary loan-summary">
@@ -94,7 +95,7 @@
                   <td data-label="Préstamo">P-{{ '%06d'|format(loan.id_prestamo|int) }}</td>
                   <td class="product" data-label="Repuestos">
                     {% if loan['items'] %}
-                      <strong>{{ loan['items'][0].nombre }}</strong>
+                      <strong>{{ loan['items'][0].nombre }}</strong>{% if loan['items'][0].anio %}<small class="item-year">A&#241;o: {{ loan['items'][0].anio }}</small>{% endif %}
                       {% if loan['items']|length > 1 %}<small>y {{ loan['items']|length - 1 }} repuesto(s) más</small>{% endif %}
                     {% else %}Sin repuestos{% endif %}
                   </td>
@@ -170,7 +171,7 @@
               <tr class="loan-report-row{% if not loop.first %} loan-report-row-continuation{% endif %}" data-loan-id="{{ loan.id_prestamo }}" data-date="{{ loan.fecha_prestamo }}" data-return-date="{{ loan.fecha_devolucion_estimada }}" data-state="{{ loan.estado|lower }}" data-client="{{ loan.cliente|lower }}" data-vendedor="{{ loan.vendedor|lower }}" data-repuesto="{{ (item.nombre ~ ' ' ~ item.codigo)|lower }}" data-total="{{ (item.precio or 0) * (item.cantidad or 0) }}">
                 {% if loop.first %}
                   <td rowspan="{{ item_count }}">P-{{ '%06d'|format(loan.id_prestamo|int) }}</td>
-                  <td rowspan="{{ item_count }}">{{ item.nombre }} · {{ item.codigo }}</td>
+                  <td rowspan="{{ item_count }}">{{ item.nombre }} · {{ item.codigo }}{% if item.anio %}<small class="item-year">A&#241;o: {{ item.anio }}</small>{% endif %}</td>
                   <td rowspan="{{ item_count }}">{{ loan.cliente }}</td>
                   <td rowspan="{{ item_count }}">{{ loan.vendedor }}</td>
                   <td>{{ item.cantidad }}</td>
@@ -360,9 +361,17 @@
         info.className = 'detail-item-info';
         const name = document.createElement('strong');
         name.textContent = item.nombre || 'Repuesto';
+        if (item.anio) {
+          const year = document.createElement('small');
+          year.className = 'item-year';
+          year.textContent = `Año: ${item.anio}`;
+          info.append(name, year);
+        } else {
+          info.append(name);
+        }
         const code = document.createElement('small');
         code.textContent = item.codigo || 'Sin código';
-        info.append(name, code);
+        info.append(code);
 
         const quantity = document.createElement('span');
         quantity.className = 'detail-item-value detail-item-quantity';
@@ -429,9 +438,11 @@
           suggestions.classList.remove('open');
           return;
         }
-        loanProducts.filter((product) =>
-          `${product.codigo} ${product.nombre}`.toLocaleLowerCase().includes(query)
-        ).slice(0, 8).forEach((product) => {
+        const terms = query.split(/\s+/).filter(t => t);
+        loanProducts.filter((product) => {
+          const text = `${product.codigo} ${product.nombre}`.toLocaleLowerCase();
+          return terms.every(t => text.includes(t));
+        }).slice(0, 8).forEach((product) => {
           const option = document.createElement('button');
           option.type = 'button';
           option.setAttribute('role', 'option');
@@ -517,6 +528,7 @@
 
     function filterLoans() {
       const query = document.getElementById('loan-search').value.trim().toLowerCase();
+      const terms = query.split(/\s+/).filter(t => t);
       const state = document.getElementById('state-filter').value;
       const loanGroups = new Map();
       document.querySelectorAll('.loan-row').forEach((row) => {
@@ -526,7 +538,8 @@
       });
       loanGroups.forEach((rows) => {
         const firstRow = rows[0];
-        const matches = firstRow.dataset.search.toLowerCase().includes(query) && (!state || firstRow.dataset.state === state);
+        const searchText = firstRow.dataset.search.toLowerCase();
+        const matches = terms.every(t => searchText.includes(t)) && (!state || firstRow.dataset.state === state);
         rows.forEach((row) => { row.hidden = !matches; });
       });
     }
@@ -558,8 +571,11 @@
       const returnTo = values.return_to || '';
       const state = (values.estado || '').toLowerCase();
       const client = (values.cliente || '').toLowerCase().trim();
+      const clientTerms = client.split(/\s+/).filter(t => t);
       const seller = (values.vendedor || '').toLowerCase().trim();
+      const sellerTerms = seller.split(/\s+/).filter(t => t);
       const part = (values.repuesto || '').toLowerCase().trim();
+      const partTerms = part.split(/\s+/).filter(t => t);
       const metodoPago = (values.metodo_pago || '').toLowerCase().trim();
       const minTotal = parseFloat(values.min_total) || 0;
       const maxTotal = parseFloat(values.max_total) || Infinity;
@@ -570,12 +586,15 @@
         const date = String(row.dataset.date || '').slice(0, 10);
         const returnDate = String(row.dataset.returnDate || '').slice(0, 10);
         const rowTotal = Number(row.dataset.total || 0);
+        const repuestoText = row.dataset.repuesto.toLowerCase();
+        const clientText = row.dataset.client.toLowerCase();
+        const sellerText = row.dataset.vendedor.toLowerCase();
         const matches = (!from || date >= from) && (!to || date <= to) &&
           (!returnFrom || returnDate >= returnFrom) && (!returnTo || returnDate <= returnTo) &&
           (!state || row.dataset.state === state) &&
-          (!client || row.dataset.client.includes(client)) &&
-          (!seller || row.dataset.vendedor.includes(seller)) &&
-          (!part || row.dataset.repuesto.includes(part)) &&
+          (!client || clientTerms.every(t => clientText.includes(t))) &&
+          (!seller || sellerTerms.every(t => sellerText.includes(t))) &&
+          (!part || partTerms.every(t => repuestoText.includes(t))) &&
           (!metodoPago || row.dataset.metodoPago === metodoPago) &&
           (rowTotal >= minTotal) && (rowTotal <= maxTotal);
         row.hidden = !matches;

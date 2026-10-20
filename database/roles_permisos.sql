@@ -29,7 +29,7 @@ GO
 
 MERGE dbo.modulo AS destino
 USING (VALUES
-    ('analytics', N'Analytics IA'),
+    ('analytics', N'Analítica IA'),
     ('clientes', N'Clientes'),
     ('inventario', N'Inventario'),
     ('ventas', N'Ventas'),

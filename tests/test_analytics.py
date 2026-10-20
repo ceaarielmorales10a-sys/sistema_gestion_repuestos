@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from run import _analytics_dashboard_data, _analytics_days, _get_openai_api_key, app
+from run import _analytics_dashboard_data, _analytics_days, _get_gemini_api_key, app
 
 
 class AnalyticsCursor:
@@ -44,20 +44,20 @@ def test_analytics_days_only_accepts_supported_ranges():
     assert [_analytics_days(value) for value in ('7', '30', '90')] == [7, 30, 90]
 
 
-def test_openai_api_key_reads_updated_dotenv_when_environment_is_empty():
+def test_gemini_api_key_reads_updated_dotenv_when_environment_is_empty():
     with (
-        patch.dict('run.os.environ', {'OPENAI_API_KEY': ''}),
-        patch('run.dotenv_values', return_value={'OPENAI_API_KEY': 'test-key'}),
+        patch.dict('run.os.environ', {'GEMINI_API_KEY': ''}),
+        patch('run.dotenv_values', return_value={'GEMINI_API_KEY': 'test-key'}),
     ):
-        assert _get_openai_api_key() == 'test-key'
+        assert _get_gemini_api_key() == 'test-key'
 
 
-def test_openai_api_key_prefers_nonempty_environment_variable():
+def test_gemini_api_key_prefers_nonempty_environment_variable():
     with (
-        patch.dict('run.os.environ', {'OPENAI_API_KEY': 'environment-key'}),
-        patch('run.dotenv_values', return_value={'OPENAI_API_KEY': 'dotenv-key'}),
+        patch.dict('run.os.environ', {'GEMINI_API_KEY': 'environment-key'}),
+        patch('run.dotenv_values', return_value={'GEMINI_API_KEY': 'dotenv-key'}),
     ):
-        assert _get_openai_api_key() == 'environment-key'
+        assert _get_gemini_api_key() == 'environment-key'
 
 
 def test_analytics_predictions_only_sum_sales_within_selected_period():
@@ -132,7 +132,7 @@ def test_analytics_page_renders_metrics_and_chart_containers():
         response = client.get('/analytics')
 
     assert response.status_code == 200
-    assert b'Analytics IA' in response.data
+    assert b'Analítica IA' in response.data
     assert b'Predicciones Inteligentes de Stock' in response.data
     assert b'id="temporal-chart"' in response.data
     assert b'id="inventory-chart"' in response.data
@@ -162,9 +162,7 @@ def test_analytics_apis_require_module_permission(path, method):
 
 def test_ai_endpoint_uses_dotenv_key_and_returns_analysis():
     connection = AnalyticsConnection()
-    openai_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content='Recomendación de prueba'))],
-    )
+    gemini_response = SimpleNamespace(text='Recomendación de prueba')
     client = app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -172,16 +170,52 @@ def test_ai_endpoint_uses_dotenv_key_and_returns_analysis():
         session['role'] = 'Administrador del Sistema'
 
     with (
-        patch.dict('run.os.environ', {'OPENAI_API_KEY': ''}),
-        patch('run.dotenv_values', return_value={'OPENAI_API_KEY': 'test-key'}),
+        patch.dict('run.os.environ', {'GEMINI_API_KEY': ''}),
+        patch('run.dotenv_values', return_value={'GEMINI_API_KEY': 'test-key'}),
         patch('run.get_db_connection', return_value=connection),
         patch('run._analytics_dashboard_data', return_value={'metricas': {}}),
         patch('run.get_overdue_loan_count', return_value=0),
-        patch('openai.OpenAI') as openai_client,
+        patch('google.genai.Client') as gemini_client,
     ):
-        openai_client.return_value.chat.completions.create.return_value = openai_response
+        gemini_client.return_value.models.generate_content.return_value = gemini_response
         response = client.post('/api/analytics/stock', json={'dias': 30})
 
     assert response.status_code == 200
     assert response.json == {'success': True, 'analisis': 'Recomendación de prueba'}
-    openai_client.assert_called_once_with(api_key='test-key')
+    gemini_client.assert_called_once_with(api_key='test-key')
+    generate_content = gemini_client.return_value.models.generate_content
+    assert generate_content.call_args.kwargs['model'] == 'gemini-3.8-flash'
+    assert 'Quetzales (Q)' in generate_content.call_args.kwargs['contents']
+    assert 'no en dólares' in generate_content.call_args.kwargs['contents']
+
+
+@pytest.mark.parametrize(
+    'api_error',
+    [
+        ConnectionError('connection failed'),
+        RuntimeError('API overloaded'),
+    ],
+)
+def test_ai_endpoint_returns_clear_json_when_gemini_is_unavailable(api_error):
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['user'] = 'Prueba'
+        session['role'] = 'Administrador del Sistema'
+
+    with (
+        patch.dict('run.os.environ', {'GEMINI_API_KEY': 'test-key'}),
+        patch('run.get_db_connection', return_value=AnalyticsConnection()),
+        patch('run._analytics_dashboard_data', return_value={'metricas': {}}),
+        patch('run.get_overdue_loan_count', return_value=0),
+        patch('google.genai.Client') as gemini_client,
+    ):
+        gemini_client.return_value.models.generate_content.side_effect = api_error
+        response = client.post('/api/analytics/stock', json={'dias': 30})
+
+    assert response.status_code == 503
+    assert response.is_json
+    assert response.json == {
+        'success': False,
+        'error': 'El servicio de IA no está disponible temporalmente. Intenta de nuevo más tarde.',
+    }

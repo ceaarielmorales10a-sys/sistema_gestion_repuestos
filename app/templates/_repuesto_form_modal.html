@@ -7,6 +7,7 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}<div class="repuesto-form-messages" role="status">{% for category, message in messages %}<p class="form-message {{ category }}"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i>{{ message }}</p>{% endfor %}</div>{% endif %}
     {% endwith %}
+    {% include '_flash_notifications_script.html' %}
 
     <form id="repuesto-form" action="{{ form_action }}" method="POST" enctype="multipart/form-data" class="repuesto-form" data-mode="{{ form_mode }}">
         {% include '_repuesto_form_fields.html' %}

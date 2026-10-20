@@ -20,6 +20,46 @@
     element.hidden = false;
   };
 
+  // Render the small Markdown subset returned by the analysis API using DOM
+  // nodes, so generated content is formatted without interpreting HTML.
+  const renderAnalysis = (element, markdown) => {
+    const fragment = document.createDocumentFragment();
+    let list = null;
+    const inline = (parent, value) => {
+      const parts = value.split(/(\*\*[^*]+\*\*)/g);
+      parts.forEach((part) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          const strong = document.createElement('strong');
+          strong.textContent = part.slice(2, -2);
+          parent.append(strong);
+        } else if (part) parent.append(document.createTextNode(part));
+      });
+    };
+    (markdown || '').split(/\r?\n/).forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line || /^---+$/.test(line)) { list = null; return; }
+      const heading = line.match(/^#{1,3}\s*(.+?)\s*#*$/);
+      const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+      const bullet = line.match(/^[-*]\s+(.+)$/);
+      if (numbered || bullet) {
+        const type = numbered ? 'ol' : 'ul';
+        if (!list || list.tagName.toLowerCase() !== type) {
+          list = document.createElement(type);
+          fragment.append(list);
+        }
+        const item = document.createElement('li');
+        inline(item, (numbered || bullet)[1]);
+        list.append(item);
+        return;
+      }
+      list = null;
+      const block = document.createElement(heading ? 'h3' : 'p');
+      inline(block, heading ? heading[1] : line);
+      fragment.append(block);
+    });
+    element.replaceChildren(fragment);
+  };
+
   const buildPredictionCard = (item) => {
     const card = document.createElement('article');
     card.className = `prediction-card${item.requiere_reabastecimiento ? ' needs-restock' : ''}`;
@@ -47,7 +87,7 @@
     exhaustionFact.append('Agotamiento estimado: ');
     const exhaustionValue = document.createElement('b');
     exhaustionValue.textContent = item.dias_agotamiento == null
-      ? '— días'
+      ? 'No estimable (sin ventas)'
       : `${formatNumber(item.dias_agotamiento, 1)} días`;
     exhaustionFact.append(exhaustionValue);
     facts.append(stockFact, exhaustionFact);
@@ -275,7 +315,7 @@
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo generar el análisis de IA.');
-      output.textContent = result.analisis;
+      renderAnalysis(output, result.analisis);
     } catch (error) {
       output.textContent = 'No se generaron recomendaciones en esta solicitud.';
       showError(aiErrorElement, error.message || 'No se pudo generar el análisis de IA.');

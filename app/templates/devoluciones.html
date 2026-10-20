@@ -40,7 +40,7 @@
                     <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
                 </a>
                 {% if has_permission('analytics', 'read') %}<a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analítica IA
                 </a>{% endif %}
                 {% if has_permission('clientes', 'read') %}<a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
                     <i class="fa-solid fa-users text-base w-5"></i> Clientes
@@ -85,14 +85,15 @@
 <header><div><h1>Devoluciones</h1><p>Gestión de devoluciones por venta</p></div><div class="datetime-display" id="datetime-display" aria-live="polite"></div>{% if has_permission('devoluciones', 'write') %}<button class="new-return" type="button" id="open-return"><i class="fa-solid fa-plus"></i> Nueva Devolución</button>{% endif %}</header>
 <div class="tabs"><button class="active" type="button" data-tab="list" aria-pressed="true"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Lista</button><button type="button" data-tab="report" aria-pressed="false"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Reportes</button></div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}"><i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i>{{ message }}</div>{% endfor %}{% endwith %}
+{% include '_flash_notifications_script.html' %}
 <section id="list-view">
 <div class="summary"><article class="count"><span>Total Devoluciones</span><b>{{ total_devoluciones }}</b><i class="fa-solid fa-rotate-left"></i></article><article class="amount"><span>Monto Total</span><b>Q {{ '{:,.2f}'.format(monto_total or 0) }}</b><i class="fa-solid fa-dollar-sign"></i></article></div>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="return-search" type="search" placeholder="Buscar por producto, cliente, código o # venta..."></div>
 <section class="card"><div class="table-wrap"><table data-pagination-page-size="10"><thead><tr><th>FECHA</th><th># VENTA</th><th>CÓDIGO</th><th>REPUESTO</th><th>CLIENTE</th><th>CANT.</th><th>TOTAL</th><th>MOTIVO</th><th>ACCIONES</th></tr></thead><tbody>
 {% for item in devoluciones %}{% for detail in item.get('items', []) %}
-<tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones"><div class="action-buttons"><button class="view-return" type="button" title="Ver detalle" aria-label="Ver detalle devolución V-{{ '%06d'|format(item.id_venta|int) }}" data-return="{{ {'id_devolucion': item.id_devolucion, 'id_venta': item.id_venta, 'cliente': item.cliente, 'fecha_devolucion': item.fecha_devolucion|string, 'total_devuelto': item.total_devuelto, 'items': item.get('items', [])}|tojson|forceescape }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button></div></td></tr>
+<tr class="return-row" data-search="{{ item.id_venta }} {{ item.cliente }} {{ detail.codigo }} {{ detail.nombre }} {{ detail.motivo }}"><td data-label="Fecha">{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td><td data-label="# Venta">V-{{ '%06d'|format(item.id_venta|int) }}</td><td data-label="Código">{{ detail.codigo }}</td><td class="product" data-label="Repuesto">{{ detail.nombre }}{% if detail.anio %}<small class="item-year">A&#241;o: {{ detail.anio }}</small>{% endif %}</td><td data-label="Cliente">{{ item.cliente }}</td><td data-label="Cant.">{{ detail.cantidad }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(detail.subtotal or 0) }}</td><td data-label="Motivo">{{ detail.motivo }}</td><td class="actions" data-label="Acciones"><div class="action-buttons"><button class="view-return" type="button" title="Ver detalle" aria-label="Ver detalle devolución V-{{ '%06d'|format(item.id_venta|int) }}" data-return="{{ {'id_devolucion': item.id_devolucion, 'id_venta': item.id_venta, 'cliente': item.cliente, 'fecha_devolucion': item.fecha_devolucion|string, 'total_devuelto': item.total_devuelto, 'items': item.get('items', [])}|tojson|forceescape }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button></div></td></tr>
 {% endfor %}{% else %}<tr><td class="empty" colspan="9">No hay devoluciones registradas.</td></tr>{% endfor %}
-</tbody></table></div><footer><span>Mostrando {{ devoluciones|length }} devoluciones</span></footer></section>
+</tbody></table></div><footer><span>Mostrando {{ total_items_devueltos }} items devueltos en {{ devoluciones|length }} devoluciones</span></footer></section>
 </section>
 <section id="report-view" hidden>
   <div class="report-card report-card-panel">
@@ -152,7 +153,7 @@
       <div class="report-actions">
         <button type="button" class="secondary-btn" id="clear-return-report">Limpiar filtros</button>
         <a class="primary-btn" id="return-report-download" href="{{ url_for('exportar_pdf_devoluciones') }}">
-          <i class="fa-solid fa-print" aria-hidden="true"></i><span>Imprimir PDF (<span id="return-report-download-count">{{ devoluciones|length }}</span>)</span>
+          <i class="fa-solid fa-print" aria-hidden="true"></i><span>Imprimir PDF (<span id="return-report-download-count">{{ total_items_devueltos }}</span>)</span>
         </a>
       </div>
     </form>
@@ -171,7 +172,7 @@
 
   <div class="report-preview-header">
     <span>Vista previa del reporte</span>
-    <small><b id="return-report-preview-count">{{ devoluciones|length }}</b> registros</small>
+    <small><b id="return-report-preview-count">{{ total_items_devueltos }}</b> items</small>
   </div>
 
   <div class="report-preview-table-wrap">
@@ -195,7 +196,7 @@
             <tr class="return-report-row" data-date="{{ item.fecha_devolucion }}" data-client="{{ item.cliente|lower }}" data-vendedor="{{ item.vendedor|lower }}" data-repuesto="{{ (detail.nombre ~ ' ' ~ detail.codigo)|lower }}" data-total="{{ detail.subtotal or 0 }}" data-motivo="{{ detail.motivo_id|lower }}">
               <td>V-{{ '%06d'|format(item.id_venta|int) }}</td>
               <td>{{ item.fecha_devolucion.strftime('%d/%m/%Y') if item.fecha_devolucion and item.fecha_devolucion.strftime else item.fecha_devolucion }}</td>
-              <td>{{ detail.nombre }}</td>
+              <td>{{ detail.nombre }}{% if detail.anio %}<small class="item-year">A&#241;o: {{ detail.anio }}</small>{% endif %}</td>
               <td>{{ detail.codigo }}</td>
               <td>{{ item.cliente }}</td>
               <td>{{ item.vendedor }}</td>
@@ -360,9 +361,17 @@ function openReturnDetail(button) {
     info.className = 'detail-item-info';
     const name = document.createElement('strong');
     name.textContent = item.nombre || 'Repuesto';
+    if (item.anio) {
+      const year = document.createElement('small');
+      year.className = 'item-year';
+      year.textContent = `Año: ${item.anio}`;
+      info.append(name, year);
+    } else {
+      info.append(name);
+    }
     const code = document.createElement('small');
     code.textContent = item.codigo || 'Sin código';
-    info.append(name, code);
+    info.append(code);
 
     const quantity = document.createElement('span');
     quantity.className = 'detail-item-value detail-item-quantity';
@@ -409,9 +418,11 @@ document.addEventListener('keydown', event => {
 
 returnListSearch?.addEventListener('input', () => {
   const query = returnListSearch.value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  const terms = query.split(/\s+/).filter(Boolean);
   document.querySelectorAll('#list-view .return-row').forEach(row => {
     const searchableText = (row.dataset.search || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-    row.hidden = !searchableText.includes(query);
+    const matches = terms.length === 0 || terms.every(t => searchableText.includes(t));
+    row.hidden = !matches;
   });
 });
 
@@ -532,6 +543,7 @@ returnItemsList.innerHTML = (sale.items || []).map(item => {
         </label>
         <div class="product-cell">
           <span class="product-name">${item.nombre || itemCode}</span>
+          <small class="item-year">Año: ${item.anio || 'No registrado'}</small>
           <small>${itemCode}${isAvailable ? '' : ' · Ya devuelto'}</small>
         </div>
         <div class="sold-cell">${soldQty}</div>

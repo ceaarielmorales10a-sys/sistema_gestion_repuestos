@@ -101,12 +101,6 @@ BEGIN
     FROM dbo.repuesto r
     INNER JOIN inserted i ON r.id_repuesto = i.id_repuesto;
 
-    UPDATE dv
-    SET dv.cantidad = dv.cantidad - i.cantidad,
-        dv.subtotal = (dv.cantidad - i.cantidad) * dv.precio_unitario
-    FROM dbo.detalle_venta dv
-    INNER JOIN inserted i ON dv.id_repuesto = i.id_repuesto
-    INNER JOIN dbo.devolucion d ON d.id_devolucion = i.id_devolucion AND dv.id_venta = d.id_venta;
 END;
 GO
 

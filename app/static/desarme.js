@@ -8,12 +8,68 @@
   const photoModalImage = document.getElementById('desarme-photo-modal-image');
   const photoModalCaption = document.getElementById('desarme-photo-modal-caption');
   const pieceForm = document.getElementById('piece-form');
+  const pieceTypeSelect = pieceForm?.querySelector('#piece-type');
+  const pieceTypeInput = pieceForm?.querySelector('#piece-type-search');
+  const pieceTypeMenu = pieceForm?.querySelector('#piece-type-options');
   const pieceFormId = document.getElementById('piece-form-id');
   const pieceSubmit = document.getElementById('piece-submit');
   const piecePhoto = document.getElementById('piece-photo');
   const piecePhotoPreview = document.getElementById('piece-photo-preview');
   const piecePhotoName = document.getElementById('piece-photo-name');
   let piecePhotoUrl = null;
+  const closePieceTypeMenu = () => {
+    if (!pieceTypeMenu || !pieceTypeInput) return;
+    pieceTypeMenu.hidden = true;
+    pieceTypeInput.setAttribute('aria-expanded', 'false');
+  };
+  const choosePieceType = (option) => {
+    if (!option || !pieceTypeSelect || !pieceTypeInput) return;
+    pieceTypeInput.value = option.textContent.trim();
+    pieceTypeSelect.value = option.value;
+    pieceTypeInput.setCustomValidity('');
+    closePieceTypeMenu();
+  };
+  const showPieceTypeOptions = () => {
+    if (!pieceTypeMenu || !pieceTypeInput || !pieceTypeSelect) return;
+    const query = pieceTypeInput.value.trim().toLocaleLowerCase();
+    pieceTypeSelect.value = '';
+    pieceTypeInput.setCustomValidity(query ? 'Selecciona un tipo de repuesto de la lista.' : 'Escribe y selecciona un tipo de repuesto del catálogo.');
+    pieceTypeMenu.replaceChildren();
+    const matches = [...pieceTypeSelect.options].filter((option) => option.value && option.textContent.trim().toLocaleLowerCase().includes(query));
+    if (!query) {
+      closePieceTypeMenu();
+      return;
+    }
+    if (!matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'type-autocomplete-empty';
+      empty.textContent = 'No se encontraron tipos de repuesto';
+      pieceTypeMenu.append(empty);
+    } else {
+      matches.forEach((option) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'type-autocomplete-option';
+        item.setAttribute('role', 'option');
+        item.textContent = option.textContent.trim();
+        item.addEventListener('click', () => choosePieceType(option));
+        pieceTypeMenu.append(item);
+      });
+    }
+    pieceTypeMenu.hidden = false;
+    pieceTypeInput.setAttribute('aria-expanded', 'true');
+  };
+  pieceTypeInput?.addEventListener('input', showPieceTypeOptions);
+  pieceTypeInput?.addEventListener('focus', () => { if (pieceTypeInput.value.trim()) showPieceTypeOptions(); });
+  pieceTypeInput?.addEventListener('blur', () => window.setTimeout(closePieceTypeMenu, 120));
+  pieceTypeInput?.addEventListener('keydown', (event) => {
+    const first = pieceTypeMenu?.querySelector('.type-autocomplete-option');
+    if (event.key === 'ArrowDown' && first) { event.preventDefault(); first.focus(); }
+    if (event.key === 'Escape') closePieceTypeMenu();
+  });
+  pieceTypeMenu?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { closePieceTypeMenu(); pieceTypeInput?.focus(); }
+  });
   const openButton = document.getElementById('open-create-vehicle');
   const form = document.getElementById('create-vehicle-form');
   const main = document.querySelector('.disassembly-main');
@@ -204,6 +260,8 @@
       if (piecePhotoUrl) URL.revokeObjectURL(piecePhotoUrl);
       piecePhotoUrl = null;
       pieceForm?.reset();
+      pieceTypeInput?.setCustomValidity('');
+      closePieceTypeMenu();
       if (pieceFormId) pieceFormId.value = '';
       const pieceTitle = document.getElementById('piece-modal-title');
       if (pieceTitle) pieceTitle.textContent = 'Registrar Pieza';
@@ -213,7 +271,7 @@
       }
       if (piecePhotoPreview) piecePhotoPreview.innerHTML = '<i class="fa-regular fa-image" aria-hidden="true"></i>';
       if (piecePhotoName) piecePhotoName.textContent = 'Sin fotografía';
-      showModal(pieceModal, pieceModal.querySelector('#piece-type'));
+      showModal(pieceModal, pieceTypeInput);
     });
   });
   document.querySelectorAll('[data-edit-piece]').forEach((button) => {
@@ -223,7 +281,10 @@
       piecePhotoUrl = null;
       pieceForm.reset();
       if (pieceFormId) pieceFormId.value = button.dataset.id || '';
-      pieceForm.querySelector('[name="id_tipo_repuesto"]').value = button.dataset.type || '';
+      pieceTypeSelect.value = button.dataset.type || '';
+      pieceTypeInput.value = button.dataset.typeName || pieceTypeSelect.selectedOptions[0]?.textContent.trim() || '';
+      pieceTypeInput.setCustomValidity(pieceTypeSelect.value ? '' : 'Selecciona un tipo de repuesto de la lista.');
+      closePieceTypeMenu();
       pieceForm.querySelector('[name="estado_pieza"]').value = button.dataset.state || '';
       pieceForm.querySelector('[name="id_lado"]').value = button.dataset.side || '';
       pieceForm.querySelector('[name="id_posicion"]').value = button.dataset.position || '';
@@ -238,7 +299,7 @@
       }
       if (piecePhotoPreview) piecePhotoPreview.innerHTML = '<i class="fa-regular fa-image" aria-hidden="true"></i>';
       if (piecePhotoName) piecePhotoName.textContent = 'Selecciona una foto solo si deseas reemplazarla';
-      showModal(pieceModal, pieceModal.querySelector('#piece-type'));
+      showModal(pieceModal, pieceTypeInput);
     });
   });
   document.querySelectorAll('[data-close-piece-modal]').forEach((button) => {
@@ -269,6 +330,7 @@
     if (piecePhotoName) piecePhotoName.textContent = file.name;
   });
   pieceForm?.addEventListener('submit', (event) => {
+    if (!pieceTypeSelect?.value) pieceTypeInput?.setCustomValidity('Escribe y selecciona un tipo de repuesto del catálogo.');
     if (!pieceForm.reportValidity()) {
       event.preventDefault();
       return;
@@ -368,7 +430,7 @@
   const initialParams = new URLSearchParams(window.location.search);
   const formSubmitted = sessionStorage.getItem('pieceFormSubmitted');
   if (initialParams.get('open_piece') === '1' && pieceModal && !formSubmitted) {
-    showModal(pieceModal, pieceModal.querySelector('#piece-type'));
+    showModal(pieceModal, pieceTypeInput);
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('open_piece');
     window.history.replaceState({}, '', cleanUrl);

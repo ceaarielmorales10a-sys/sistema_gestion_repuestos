@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='logos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='pagination.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='record-detail-modal.css') }}">
 </head>
 <body class="module-theme bg-gray-100 min-h-screen flex flex-col md:flex-row font-sans antialiased select-none">
     <div class="md:hidden fixed top-4 left-4 z-40">
@@ -39,7 +40,7 @@
                     <i class="fa-solid fa-house text-base w-5"></i> Menú Principal
                 </a>
                 {% if has_permission('analytics', 'read') %}<a href="/analytics" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
-                    <i class="fa-solid fa-brain text-base w-5"></i> Analytics IA
+                    <i class="fa-solid fa-brain text-base w-5"></i> Analítica IA
                 </a>{% endif %}
                 {% if has_permission('clientes', 'read') %}
                 {% if has_permission('clientes', 'read') %}<a href="/clientes" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl hover:bg-slate-800/60 hover:text-white transition-all">
@@ -137,13 +138,15 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm">
+                    <div class="flash {{ category }} mb-6 p-4 rounded-xl text-sm flex items-center gap-3 {% if category == 'success' %} bg-green-50 text-green-700 border border-green-200 {% else %} bg-red-50 text-red-700 border border-red-200 {% endif %} shadow-sm" {% if category == 'success' %}data-success-flash{% endif %}>
                         <i class="fa-solid {% if category == 'success' %} fa-circle-check {% else %} fa-circle-exclamation {% endif %} text-base"></i>
                         <span>{{ message }}</span>
+                        <button type="button" aria-label="Cerrar notificación" class="flash-close ml-auto" data-close-flash><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                     </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
+        {% include '_flash_notifications_script.html' %}
 
         {% set active_view = 'inventory-list-view' %}
         {% if request.args.get('movimientos_page') %}{% set active_view = 'inventory-movimientos-view' %}
@@ -486,6 +489,13 @@
         <figure class="inventory-photo-modal-content"><img id="inventory-photo-modal-image" alt=""><figcaption id="inventory-photo-modal-caption"></figcaption></figure>
     </div>
 
+    <div id="inventory-record-detail-modal" class="record-detail-modal" hidden>
+        <section class="record-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="inventory-record-detail-title">
+            <header class="record-detail-header"><div><span class="record-detail-icon"><i class="fa-solid fa-box-open" aria-hidden="true"></i></span><div><h2 id="inventory-record-detail-title">Detalle del repuesto</h2><small id="inventory-record-detail-code"></small></div></div><button type="button" class="record-detail-close" aria-label="Cerrar detalle"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+            <div class="record-detail-content" id="inventory-record-detail-content"></div>
+            <footer class="record-detail-footer"><button type="button" class="record-detail-close">Cerrar</button></footer>
+        </section>
+    </div>
     <script>
         const sidebar = document.getElementById('sidebar');
         const mobileToggle = document.getElementById('mobile-menu-button');
@@ -699,9 +709,6 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 return `
                 <tr class="hover:bg-gray-50/50 transition-colors">
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <button type="button" class="detail-toggle inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 transition" aria-expanded="false">
-                            <i class="fa-solid fa-chevron-down"></i>
-                        </button>
                         <span class="ml-3 text-gray-700 font-medium whitespace-nowrap">${rowNumber}. ${item.codigo_repuesto || '-'}</span>
                     </td>
                     <td class="px-6 py-4 text-slate-900 font-semibold whitespace-nowrap">${item.tipo_repuesto || '-'}</td>
@@ -713,12 +720,13 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                     <td class="px-6 py-4 text-center ${stockClass}">${item.stock || 0}</td>
                     <td class="px-6 py-4 text-center">
                         <div class="flex justify-center gap-3 items-center">
+                            <button type="button" class="inventory-view-details" title="Ver detalles" aria-label="Ver detalles de ${item.codigo_repuesto || 'repuesto'}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
                             <button type="button" class="inventory-action-photo ${item.fotografia ? 'has-photo inventory-photo-trigger' : 'no-photo'}" ${fotoAttributes}><i class="fa-regular fa-image"></i></button>
                             ${editAction}
                         </div>
                     </td>
                 </tr>
-                <tr class="detail-row bg-slate-50/80 hidden">
+                <tr class="detail-row bg-slate-50/80 hidden" hidden>
                     <td colspan="9" class="px-6 py-4">
                         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm text-slate-600">
                             <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Código</p><p class="font-medium text-slate-800">${item.codigo_repuesto || '-'}</p></div>
@@ -749,7 +757,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 </tr>
             `;
             }).join('');
-            // Re-attach detail toggle listeners
+            // Refresh listeners for details and photographs
             attachDetailToggles();
         }
 
@@ -785,22 +793,113 @@ window.addEventListener('resize', normalizeSidebarOnResize);
         }
 
         function attachDetailToggles() {
-            document.querySelectorAll('.detail-toggle').forEach((button) => {
-                button.addEventListener('click', () => {
+            document.querySelectorAll('.inventory-view-details').forEach((button) => {
+                button.onclick = () => {
                     const row = button.closest('tr');
                     const detailRow = row.nextElementSibling;
-                    const expanded = button.getAttribute('aria-expanded') === 'true';
-                    button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-                    button.querySelector('i').classList.toggle('fa-chevron-down', expanded);
-                    button.querySelector('i').classList.toggle('fa-chevron-up', !expanded);
-                    if (detailRow && detailRow.classList.contains('detail-row')) {
-                        detailRow.classList.toggle('hidden');
+                    const content = detailRow?.querySelector('td > div');
+                    if (!content) return;
+                    document.getElementById('inventory-record-detail-code').textContent = button.getAttribute('aria-label').replace('Ver detalles de ', '');
+                    const modalContent = document.getElementById('inventory-record-detail-content');
+                    modalContent.innerHTML = '';
+
+                    const layout = document.createElement('div');
+                    layout.className = 'inventory-modal-layout';
+
+                    const leftCol = document.createElement('div');
+                    leftCol.className = 'inventory-modal-column';
+
+                    const rightCol = document.createElement('div');
+                    rightCol.className = 'inventory-modal-column';
+
+                    const fieldsGrid = document.createElement('div');
+                    fieldsGrid.className = 'inventory-modal-fields';
+
+                    const allFields = [...content.querySelectorAll('div > div')];
+                    let photoField = null;
+
+                    allFields.forEach(source => {
+                        if (source.classList.contains('inventory-detail-photo-field')) {
+                            photoField = source;
+                            return;
+                        }
+                        const sourceLabel = source.querySelector('p:first-child');
+                        const sourceValue = source.querySelector('p:last-child');
+                        if (!sourceLabel || !sourceValue) return;
+
+                        const labelText = (sourceLabel.textContent || '').trim();
+                        const valueText = (sourceValue.textContent || '').trim();
+
+                        const card = document.createElement('div');
+                        card.className = 'inventory-modal-field';
+                        const iconWrap = document.createElement('div');
+                        iconWrap.className = 'inventory-modal-icon';
+                        iconWrap.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+
+                        const meta = document.createElement('div');
+                        meta.className = 'inventory-modal-meta';
+
+                        const label = document.createElement('p');
+                        label.className = 'inventory-modal-label';
+                        label.textContent = labelText;
+
+                        const value = document.createElement('p');
+                        value.className = 'inventory-modal-value';
+                        value.textContent = valueText || '-';
+
+                        if (labelText.toLowerCase() === 'fecha ingreso') {
+                            const date = new Date(value.textContent);
+                            if (!Number.isNaN(date.getTime())) {
+                                value.textContent = new Intl.DateTimeFormat('es-GT', {
+                                    day: '2-digit',
+                                    month: 'long',
+                                    year: 'numeric',
+                                    timeZone: 'UTC'
+                                }).format(date);
+                            }
+                        }
+
+                        meta.append(label, value);
+                        card.append(iconWrap, meta);
+                        fieldsGrid.append(card);
+                    });
+
+                    if (photoField) {
+                        const photoBox = document.createElement('div');
+                        photoBox.className = 'inventory-modal-photo';
+                        const photoLabel = document.createElement('p');
+                        photoLabel.textContent = 'Fotografía del repuesto';
+                        const photoContent = photoField.querySelector('button, .inventory-detail-photo-empty');
+                        if (photoContent) photoBox.append(photoLabel, photoContent.cloneNode(true));
+                        rightCol.append(photoBox);
                     }
-                });
+
+                    while (content.firstChild) {
+                        const child = content.firstChild;
+                        if (child.classList && child.classList.contains('inventory-detail-photo-field')) {
+                            break;
+                        }
+                        child.remove();
+                    }
+
+                    const leftTitle = document.createElement('p');
+                    leftTitle.className = 'inventory-modal-section-title';
+                    leftTitle.textContent = 'Identificación del repuesto';
+                    const rightTitle = document.createElement('p');
+                    rightTitle.className = 'inventory-modal-section-title';
+                    rightTitle.textContent = 'Detalles físicos y stock';
+
+                    leftCol.append(leftTitle, fieldsGrid);
+                    rightCol.prepend(rightTitle);
+                    layout.append(leftCol, rightCol);
+                    modalContent.append(layout);
+                    document.getElementById('inventory-record-detail-modal').hidden = false;
+                    document.body.classList.add('overflow-hidden');
+                };
             });
             // Re-attach photo modal triggers
             document.querySelectorAll('.inventory-photo-trigger').forEach((trigger) => {
-                trigger.addEventListener('click', () => {
+                trigger.onclick = () => {
                     const photoModal = document.getElementById('inventory-photo-modal');
                     const photoModalImage = document.getElementById('inventory-photo-modal-image');
                     const photoModalCaption = document.getElementById('inventory-photo-modal-caption');
@@ -809,9 +908,23 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                     photoModalCaption.textContent = trigger.dataset.caption || '';
                     photoModal.hidden = false;
                     document.body.classList.add('overflow-hidden');
-                });
+                };
             });
         }
+
+        const inventoryDetailModal = document.getElementById('inventory-record-detail-modal');
+        const closeInventoryDetail = () => { inventoryDetailModal.hidden = true; document.body.classList.remove('overflow-hidden'); };
+        inventoryDetailModal?.querySelectorAll('.record-detail-close').forEach(button => button.addEventListener('click', closeInventoryDetail));
+        inventoryDetailModal?.addEventListener('click', event => { if (event.target === inventoryDetailModal) closeInventoryDetail(); });
+        inventoryDetailModal?.addEventListener('click', event => {
+            const trigger = event.target.closest('.inventory-photo-trigger');
+            if (!trigger) return;
+            photoModalImage.src = trigger.dataset.image;
+            photoModalImage.alt = trigger.dataset.caption || 'FotografÃ­a del repuesto';
+            photoModalCaption.textContent = trigger.dataset.caption || '';
+            photoModal.hidden = false;
+        });
+        document.addEventListener('keydown', event => { if (event.key === 'Escape' && inventoryDetailModal && !inventoryDetailModal.hidden && photoModal.hidden) closeInventoryDetail(); });
 
         // Initial attach
         attachDetailToggles();
@@ -835,7 +948,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
         const photoModal = document.getElementById('inventory-photo-modal');
         const photoModalImage = document.getElementById('inventory-photo-modal-image');
         const photoModalCaption = document.getElementById('inventory-photo-modal-caption');
-        const closePhotoModal = () => { photoModal.hidden = true; document.body.classList.remove('overflow-hidden'); };
+        const closePhotoModal = () => { photoModal.hidden = true; if (!inventoryDetailModal || inventoryDetailModal.hidden) document.body.classList.remove('overflow-hidden'); };
         document.getElementById('inventory-photo-close')?.addEventListener('click', closePhotoModal);
         photoModal?.addEventListener('click', (event) => { if (event.target === photoModal) closePhotoModal(); });
         document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && photoModal && !photoModal.hidden) closePhotoModal(); });

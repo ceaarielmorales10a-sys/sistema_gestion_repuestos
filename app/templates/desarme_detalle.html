@@ -26,7 +26,7 @@
             <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
             <nav aria-label="Navegación principal">
                 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
-                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analítica IA</a>{% endif %}
                 {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
                 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
                 {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
@@ -48,6 +48,7 @@
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% for category, message in messages %}<div class="disassembly-flash {{ category }}" role="status"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i><span>{{ message }}</span><button type="button" aria-label="Cerrar notificación" class="flash-close" data-close-flash><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>{% endfor %}
             {% endwith %}
+            {% include '_flash_notifications_script.html' %}
         {% endif %}
         <header class="detail-page-header">
             <div class="detail-title-group">
@@ -126,7 +127,7 @@
                         {% if can_create %}
                         <button class="detail-piece-edit-button" type="button" data-edit-piece
                             data-id="{{ piece.id_detalle_desarme }}"
-                            data-type="{{ piece.id_tipo_repuesto or '' }}"
+                            data-type="{{ piece.id_tipo_repuesto or '' }}" data-type-name="{{ piece.tipo_repuesto or '' }}"
                             data-state="{{ piece.estado_pieza }}"
                             data-side="{{ piece.id_lado or '' }}"
                             data-position="{{ piece.id_posicion or '' }}"
@@ -240,8 +241,8 @@
                         <div><dt>Usuario Registro</dt><dd>{{ registered_by }}</dd></div>
                     </dl>
                     <div class="detail-piece-fields">
-                        <label class="detail-piece-field" for="piece-type"><span>Tipo de Repuesto <em>*</em></span>
-                            <select id="piece-type" name="id_tipo_repuesto" required><option value="" {% if not piece_form_values.get('id_tipo_repuesto') %}selected{% endif %} disabled>Seleccionar...</option>{% for type in piece_types %}<option value="{{ type.id }}" {% if piece_form_values.get('id_tipo_repuesto', '') == type.id|string %}selected{% endif %}>{{ type.nombre }}</option>{% endfor %}</select>
+                        <label class="detail-piece-field type-autocomplete" for="piece-type-search"><span>Tipo de Repuesto <em>*</em></span>
+                            <input id="piece-type-search" type="text" autocomplete="off" placeholder="Escribe para buscar..." required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="piece-type-options"><div id="piece-type-options" class="type-autocomplete-menu" role="listbox" hidden></div><select id="piece-type" name="id_tipo_repuesto" class="sr-only" hidden tabindex="-1" aria-hidden="true"><option value=""></option>{% for type in piece_types %}<option value="{{ type.id }}" {% if piece_form_values.get('id_tipo_repuesto', '') == type.id|string %}selected{% endif %}>{{ type.nombre }}</option>{% endfor %}</select>
                         </label>
                         <label class="detail-piece-field" for="piece-state"><span>Estado de la Pieza</span>
                             <select id="piece-state" name="estado_pieza" required>{% for state in piece_states %}<option value="{{ state.nombre }}" {% if piece_form_values.get('estado_pieza', 'Bueno') == state.nombre %}selected{% endif %}>{{ state.nombre }}</option>{% endfor %}</select>

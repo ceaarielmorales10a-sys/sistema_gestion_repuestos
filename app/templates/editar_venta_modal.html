@@ -2,6 +2,7 @@
 <form method="post" action="{{ url_for('modificar_venta', id_venta=edit_sale.id_venta) }}" class="sale-form sale-modal-box" id="edit-sale-form">
 <header class="sale-form-header"><h1>Editar V-{{ '%06d'|format(edit_sale.id_venta|int) }}</h1><a href="{{ url_for('ventas') }}" class="close-form" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a></header>
 {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="form-flash {{ category }}"><i class="fa-solid fa-circle-exclamation"></i>{{ message }}</div>{% endfor %}{% endwith %}
+{% include '_flash_notifications_script.html' %}
 <section class="sale-fields">
 <label class="client-field"><span>Cliente <em>*</em></span><div class="autocomplete" id="edit-client-picker"><input id="edit-client-input" type="search" placeholder="Buscar cliente..." autocomplete="off" value="{{ edit_sale.cliente_nombre if edit_sale.cliente_nombre and edit_sale.cliente_nombre != 'Sin cliente frecuente' else '' }}"><input type="hidden" name="id_cliente" id="edit-client-id" value="{{ edit_sale.cliente_id or '' }}"><div class="suggestions" id="edit-client-suggestions"></div></div><div class="client-choice" id="edit-client-choice" {% if not edit_sale.cliente_id %}hidden{% endif %}><i class="fa-regular fa-user"></i><span>{{ edit_sale.cliente_nombre or 'Sin cliente frecuente' }}</span><button type="button" id="edit-restore-client" aria-label="Buscar cliente"><i class="fa-solid fa-xmark"></i></button></div><button type="button" class="frequent-client" id="edit-clear-client">Sin cliente frecuente</button></label>
 <label>Método de Pago<select name="id_metodo_pago" required>{% for metodo in metodos_pago %}<option value="{{ metodo.id }}" {% if edit_sale.metodo_pago_id == metodo.id %}selected{% endif %}>{{ metodo.nombre }}</option>{% endfor %}</select></label>
@@ -31,14 +32,15 @@
 const editSaleClients={{ clientes|tojson }}, editSaleProducts={{ repuestos|tojson }};
 const editClientInput=document.getElementById('edit-client-input'), editClientId=document.getElementById('edit-client-id'), editClientSuggestions=document.getElementById('edit-client-suggestions');
 function saleSearch(input, box, list, text, choose){
-  const query=input.value.trim().toLowerCase(); box.innerHTML=''; if(!query){ box.classList.remove('open'); return; }
-  list.filter(item=>text(item).toLowerCase().includes(query)).slice(0,8).forEach(item=>{ const button=document.createElement('button'); button.type='button'; button.innerHTML=text(item); button.onclick=()=>choose(item); box.appendChild(button); }); box.classList.toggle('open', box.children.length>0);
+  const terms=normalizeSaleSearch(input.value).split(/\s+/).filter(Boolean); box.replaceChildren(); if(!terms.length){ box.classList.remove('open'); return; }
+  list.filter(item=>{ const searchable=normalizeSaleSearch(text(item).replace(/<[^>]*>/g,' ')); return terms.every(term=>searchable.includes(term)); }).slice(0,8).forEach(item=>{ const button=document.createElement('button'); button.type='button'; button.innerHTML=text(item); button.onclick=()=>choose(item); box.appendChild(button); }); box.classList.toggle('open', box.children.length>0);
 }
+function normalizeSaleSearch(value){ return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
 const editClientPicker=document.getElementById('edit-client-picker'), editClientChoice=document.getElementById('edit-client-choice');
 function restoreEditClient(){
   editClientChoice.hidden=true; editClientPicker.hidden=false; editClientInput.value=''; editClientId.value=''; editClientInput.focus();
 }
-editClientInput.oninput=()=>saleSearch(editClientInput, editClientSuggestions, editSaleClients, c=>`${c.nombre}<small>${c.nit||c.correo||'Sin datos adicionales'}</small>`, c=>{ editClientInput.value=c.nombre; editClientId.value=c.id; editClientSuggestions.classList.remove('open'); editClientInput.classList.add('selected'); });
+editClientInput.oninput=()=>{ editClientId.value=''; editClientInput.classList.remove('selected'); saleSearch(editClientInput, editClientSuggestions, editSaleClients, c=>`${c.nombre}<small>${c.nit||c.correo||'Sin datos adicionales'}</small>`, c=>{ editClientInput.value=c.nombre; editClientId.value=c.id; editClientSuggestions.classList.remove('open'); editClientInput.classList.add('selected'); }); };
 document.getElementById('edit-clear-client').onclick=()=>{ editClientInput.value=''; editClientId.value=''; editClientPicker.hidden=true; editClientChoice.hidden=false; editClientSuggestions.classList.remove('open'); };
 document.getElementById('edit-restore-client').onclick=restoreEditClient;
 const editSaleItems=document.getElementById('edit-items-list');
@@ -51,7 +53,7 @@ function updateEditTotal(){
 }
 function bindEditItemRow(row){
   const input=row.querySelector('.product-input'), id=row.querySelector('.product-id'), box=row.querySelector('.suggestions'), qty=row.querySelector('.quantity');
-  input.oninput=()=>saleSearch(input, box, editSaleProducts, p=>`${p.codigo} — ${p.nombre}<small>Stock: ${p.stock}</small>`, p=>{ input.value=`${p.codigo} — ${p.nombre}`; id.value=p.id; input.classList.add('selected'); box.classList.remove('open'); qty.max=p.stock; qty.value=Math.min(qty.value||1,p.stock); qty.disabled=false; qty.readOnly=false; updateEditTotal(); });
+  input.oninput=()=>{ id.value=''; input.classList.remove('selected'); saleSearch(input, box, editSaleProducts, p=>`${p.codigo} — ${p.nombre}<small>Stock: ${p.stock}</small>`, p=>{ input.value=`${p.codigo} — ${p.nombre}`; id.value=p.id; input.classList.add('selected'); box.classList.remove('open'); qty.max=p.stock; qty.value=Math.min(qty.value||1,p.stock); qty.disabled=false; qty.readOnly=false; updateEditTotal(); }); updateEditTotal(); };
   row.querySelector('.quantity').oninput=updateEditTotal;
   row.querySelector('.discount').oninput=updateEditTotal;
   row.querySelector('.remove-item').onclick=()=>{ row.remove(); updateEditTotal(); };
@@ -67,5 +69,5 @@ editSaleItems.querySelectorAll('.item-row').forEach(bindEditItemRow);
 if(editSaleItems.children.length===0){ addEditItem(); }
 updateEditTotal();
 document.addEventListener('click',event=>{ if(!event.target.closest('.autocomplete')) document.querySelectorAll('.suggestions').forEach(box=>box.classList.remove('open')); });
-document.getElementById('edit-sale-form').onsubmit=event=>{ if(!editClientId.value||!editSaleItems.querySelector('.product-id[value]')){ event.preventDefault(); alert('Selecciona un cliente y al menos un repuesto.'); }};
+document.getElementById('edit-sale-form').onsubmit=event=>{ if(!editClientId.value||![...editSaleItems.querySelectorAll('.product-id')].some(input=>input.value)){ event.preventDefault(); alert('Selecciona un cliente y al menos un repuesto.'); }};
 </script>

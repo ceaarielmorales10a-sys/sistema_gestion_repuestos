@@ -1,8 +1,5 @@
 <tr class="hover:bg-gray-50/50 transition-colors">
     <td class="px-6 py-4 whitespace-nowrap sale-index" data-label="N°">
-        <button type="button" class="detail-toggle inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 transition" aria-expanded="false">
-            <i class="fa-solid fa-chevron-down"></i>
-        </button>
         <span class="ml-3 text-gray-700 font-medium whitespace-nowrap">{{ row_number }}. {{ repuesto.codigo_repuesto }}</span>
     </td>
     <td class="px-6 py-4 text-slate-900 font-semibold whitespace-nowrap" data-label="Repuesto">{{ repuesto.tipo_repuesto or '-' }}</td>
@@ -25,6 +22,7 @@
     </td>
     <td class="px-6 py-4 text-center" data-label="Acciones">
         <div class="flex justify-center gap-3 items-center">
+            <button type="button" class="inventory-view-details" title="Ver detalles" aria-label="Ver detalles de {{ repuesto.codigo_repuesto }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
             <button type="button" class="inventory-action-photo {% if repuesto.fotografia %}has-photo inventory-photo-trigger{% else %}no-photo{% endif %}" {% if repuesto.fotografia %}data-image="{{ url_for('static', filename=repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}" title="Ver fotografía" aria-label="Ver fotografía"{% else %}title="Sin fotografía" aria-label="Sin fotografía" disabled{% endif %}><i class="fa-regular fa-image"></i></button>
             {% if has_permission('inventario', 'write') %}
             <a href="/inventario/modificar/{{ repuesto.id_repuesto }}" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>
@@ -32,7 +30,7 @@
         </div>
     </td>
 </tr>
-<tr class="detail-row bg-slate-50/80 hidden">
+<tr class="detail-row bg-slate-50/80 hidden" hidden>
     <td colspan="9" class="px-6 py-4">
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm text-slate-600">
             <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Código</p><p class="font-medium text-slate-800">{{ repuesto.codigo_repuesto or '-' }}</p></div>

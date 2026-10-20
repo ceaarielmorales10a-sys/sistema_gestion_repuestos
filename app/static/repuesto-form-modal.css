@@ -175,3 +175,11 @@ body.repuesto-editor-page .primary-action:hover { background: #1857d3; }
   .photo-preview-frame { flex-basis: 110px; width: 110px; height: 96px; }
   .photo-action-button { min-width: 126px; }
 }
+
+/* Live type-of-part suggestions */
+.type-autocomplete { position: relative; z-index: 20; }
+.type-autocomplete-menu { position: absolute; z-index: 100; top: calc(100% + 3px); right: 0; left: 0; max-height: 220px; overflow-y: auto; padding: 4px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 10px 24px rgb(15 23 42 / 18%); }
+.type-autocomplete-menu[hidden] { display: none !important; }
+.type-autocomplete-option { display: block; width: 100%; padding: 9px 11px; border: 0; border-radius: 5px; background: transparent; color: #1e3554; font: inherit; text-align: left; cursor: pointer; }
+.type-autocomplete-option:hover, .type-autocomplete-option:focus-visible { outline: none; background: #eff6ff; color: #1558d6; }
+.type-autocomplete-empty { padding: 9px 11px; color: #718096; font-size: 12px; }

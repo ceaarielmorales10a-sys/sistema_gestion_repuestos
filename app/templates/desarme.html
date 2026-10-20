@@ -25,7 +25,7 @@
             <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Importadora Morales"></div>
             <nav aria-label="Navegación principal">
                 <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house" aria-hidden="true"></i> Menú Principal</a>
-                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analytics IA</a>{% endif %}
+                {% if has_permission('analytics', 'read') %}<a href="/analytics"><i class="fa-solid fa-brain" aria-hidden="true"></i> Analítica IA</a>{% endif %}
                 {% if has_permission('clientes', 'read') %}<a href="/clientes"><i class="fa-solid fa-users" aria-hidden="true"></i> Clientes</a>{% endif %}
                 {% if has_permission('inventario', 'read') %}<a href="{{ url_for('inventario') }}"><i class="fa-solid fa-box" aria-hidden="true"></i> Inventario</a>{% endif %}
                 {% if has_permission('ventas', 'read') %}<a href="/ventas"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Ventas</a>{% endif %}
@@ -46,6 +46,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}<div class="disassembly-flash {{ category }}" role="status"><i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}" aria-hidden="true"></i><span>{{ message }}</span><button type="button" aria-label="Cerrar notificación" class="flash-close" data-close-flash><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>{% endfor %}
         {% endwith %}
+        {% include '_flash_notifications_script.html' %}
 
         <header class="disassembly-header">
             <div><h1>Desarme de Vehículos</h1><p>Registro y control de vehículos para desarme</p></div>
@@ -53,7 +54,7 @@
             {% if can_create %}<button class="new-vehicle-button" id="open-create-vehicle" type="button" title="Nuevo vehículo"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo vehículo</button>{% endif %}
         </header>
 
-        <section class="disassembly-summary" aria-label="Resumen de desarmes">
+        <section class="disassembly-summary" aria-label="Resumen de desarmes" id="disassembly-summary">
             {% for card in summary_cards %}
             <article class="summary-card {{ card.color }}">
                 <span>{{ card.label }}</span><strong>{{ card.value }}</strong>
@@ -61,21 +62,21 @@
             {% endfor %}
         </section>
 
-        <form class="disassembly-filters" id="disassembly-filter-form" action="{{ url_for('desarme') }}" method="get" role="search">
+<form class="disassembly-filters" id="disassembly-filter-form" role="search">
             <label class="vehicle-search">
                 <span class="sr-only">Buscar vehículo</span><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                <input type="search" name="q" value="{{ filters.q }}" placeholder="Buscar por ID, marca, modelo, placa, VIN..." autocomplete="off" aria-label="Buscar por ID, marca, modelo, placa o VIN">
+                <input type="search" name="q" id="filter-q" value="{{ filters.q }}" placeholder="Buscar por ID, marca, modelo, placa, VIN..." autocomplete="off" aria-label="Buscar por ID, marca, modelo, placa o VIN">
             </label>
             <label>
                 <span class="sr-only">Filtrar por estado</span>
-                <select name="estado" aria-label="Filtrar por estado">
+                <select name="estado" id="filter-estado" aria-label="Filtrar por estado">
                     <option value="">Todos los estados</option>
                     {% for estado in estados %}<option value="{{ estado.id }}" {% if filters.estado == estado.id|string %}selected{% endif %}>{{ estado.nombre }}</option>{% endfor %}
                 </select>
             </label>
             <label>
                 <span class="sr-only">Filtrar por origen</span>
-                <select name="origen" aria-label="Filtrar por origen">
+                <select name="origen" id="filter-origen" aria-label="Filtrar por origen">
                     <option value="">Todos los orígenes</option>
                     {% for origen in origenes %}<option value="{{ origen.nombre }}" {% if filters.origen == origen.nombre %}selected{% endif %}>{{ origen.nombre }}</option>{% endfor %}
                 </select>
@@ -83,13 +84,13 @@
         </form>
 
         <section class="disassembly-results" aria-live="polite" aria-label="Vehículos para desarme">
-            {% if page_error %}
-                <div class="disassembly-message error-state" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>{{ page_error }}</p></div>
-            {% elif vehicles %}
+            <div id="disassembly-error" class="disassembly-message error-state" role="alert" {% if not page_error %}hidden{% endif %}><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p id="disassembly-error-text">{{ page_error }}</p></div>
+            <div id="disassembly-table-container">
+                {% if vehicles %}
                 <div class="disassembly-table-wrap">
                     <table class="disassembly-table" data-pagination-page-size="10">
                         <thead><tr><th>ID vehículo</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Color</th><th>Placa / VIN</th><th>Origen</th><th>Fecha adq.</th><th>Estado</th><th>Desarme</th><th>Piezas</th><th>Acciones</th></tr></thead>
-                        <tbody>
+                        <tbody id="disassembly-table-body">
                             {% for vehicle in vehicles %}
                             <tr>
                                 <td class="vehicle-id" data-label="ID vehículo">VEH-{{ '%06d'|format(vehicle.id|int) }}</td>
@@ -107,8 +108,8 @@
                                     <div class="vehicle-row-actions">
                                         <a class="vehicle-detail-button" href="{{ url_for('desarme_detalle', vehicle_id=vehicle.id) }}" title="Ver todos los detalles del desarme" aria-label="Ver todos los detalles del desarme VEH-{{ '%06d'|format(vehicle.id|int) }}"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></a>
 {% if can_create %}
-                                    <button class="vehicle-edit-button" type="button" title="Modificar vehículo" aria-label="Modificar vehículo VEH-{{ '%06d'|format(vehicle.id|int) }}" data-edit-vehicle data-id="{{ vehicle.id }}" data-brand="{{ vehicle.id_marca }}" data-model="{{ vehicle.id_modelo }}" data-year="{{ vehicle.id_anio }}" data-color="{{ vehicle.id_color or '' }}" data-transmission="{{ vehicle.id_transmision or '' }}" data-plate="{{ vehicle.placa or '' }}" data-vin="{{ vehicle.vin_chasis or '' }}" data-origin="{{ vehicle.origen if vehicle.origen != 'Sin especificar' else '' }}" data-acquired="{{ vehicle.fecha_adquisicion.strftime('%Y-%m-%d') if vehicle.fecha_adquisicion and vehicle.fecha_adquisicion.strftime else vehicle.fecha_adquisicion or '' }}" data-state="{{ vehicle.state_id or '' }}"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
-                                    {% endif %}
+                                        <button class="vehicle-edit-button" type="button" title="Modificar vehículo" aria-label="Modificar vehículo VEH-{{ '%06d'|format(vehicle.id|int) }}" data-edit-vehicle data-id="{{ vehicle.id }}" data-brand="{{ vehicle.id_marca }}" data-model="{{ vehicle.id_modelo }}" data-year="{{ vehicle.id_anio }}" data-color="{{ vehicle.id_color or '' }}" data-transmission="{{ vehicle.id_transmision or '' }}" data-plate="{{ vehicle.placa or '' }}" data-vin="{{ vehicle.vin_chasis or '' }}" data-origin="{{ vehicle.origen if vehicle.origen != 'Sin especificar' else '' }}" data-acquired="{{ vehicle.fecha_adquisicion.strftime('%Y-%m-%d') if vehicle.fecha_adquisicion and vehicle.fecha_adquisicion.strftime else vehicle.fecha_adquisicion or '' }}" data-state="{{ vehicle.state_id or '' }}"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>
@@ -116,12 +117,14 @@
                         </tbody>
                     </table>
                 </div>
-            {% else %}
-                <div class="disassembly-empty-state">
+                {% else %}
+                <div class="disassembly-empty-state" id="disassembly-empty-state">
                     <i class="fa-solid fa-car-side" aria-hidden="true"></i>
                     <p>{{ 'No hay vehículos registrados para desarme' if not has_filters else 'No se encontraron vehículos con esos filtros' }}</p>
                 </div>
-            {% endif %}
+                {% endif %}
+            </div>
+            <div id="disassembly-pagination">{{ pagination_html|safe if pagination_html is defined else '' }}</div>
         </section>
     </main>
 
@@ -244,6 +247,132 @@
 
         startKeepAlive();
         window.addEventListener('beforeunload', stopKeepAlive);
+    })();
+
+    // AJAX filter for desarme list
+    (function() {
+        const filterForm = document.getElementById('disassembly-filter-form');
+        const filterInputs = ['filter-q', 'filter-estado', 'filter-origen'];
+        let filterTimeout = null;
+
+        async function fetchDesarmeList(page = 1) {
+            const params = new URLSearchParams();
+            filterInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) params.set(el.name, el.value);
+            });
+            params.set('page', page);
+
+            try {
+                const response = await fetch(`{{ url_for('desarme_list_data') }}?${params.toString()}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Error al cargar la lista');
+                }
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Error al cargar la lista');
+                }
+
+                // Update table rows
+                const tbody = document.getElementById('disassembly-table-body');
+                if (tbody) {
+                    tbody.innerHTML = data.rows_html || '';
+                } else {
+                    // If tbody doesn't exist, we need to recreate the table wrapper
+                    const container = document.getElementById('disassembly-table-container');
+                    if (container) {
+                        if (data.rows_html && data.rows_html.trim()) {
+                            // Has results - show table
+                            const rowsHtml = data.rows_html.trim();
+                            const tableWrap = document.createElement('div');
+                            tableWrap.className = 'disassembly-table-wrap';
+                            tableWrap.innerHTML = `
+                                <table class="disassembly-table" data-pagination-page-size="10">
+                                    <thead><tr><th>ID vehículo</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Color</th><th>Placa / VIN</th><th>Origen</th><th>Fecha adq.</th><th>Estado</th><th>Desarme</th><th>Piezas</th><th>Acciones</th></tr></thead>
+                                    <tbody id="disassembly-table-body">${rowsHtml}</tbody>
+                                </table>
+                            `;
+                            container.innerHTML = '';
+                            container.appendChild(tableWrap);
+                        } else {
+                            // No results - show empty state
+                            container.innerHTML = `
+                                <div class="disassembly-empty-state" id="disassembly-empty-state">
+                                    <i class="fa-solid fa-car-side" aria-hidden="true"></i>
+                                    <p>No se encontraron vehículos con esos filtros</p>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+
+                // Update pagination
+                const paginationContainer = document.getElementById('disassembly-pagination');
+                if (paginationContainer) {
+                    paginationContainer.innerHTML = data.pagination_html || '';
+                    // Re-bind pagination click handlers
+                    paginationContainer.querySelectorAll('[data-page]').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const page = parseInt(btn.dataset.page, 10);
+                            if (!isNaN(page)) fetchDesarmeList(page);
+                        });
+                    });
+                }
+
+                // Update summary cards
+                const summaryContainer = document.getElementById('disassembly-summary');
+                if (summaryContainer && data.summary_cards) {
+                    summaryContainer.innerHTML = data.summary_cards.map(card =>
+                        `<article class="summary-card ${card.color}"><span>${card.label}</span><strong>${card.value}</strong></article>`
+                    ).join('');
+                }
+
+                // Update URL without reload
+                const newUrl = `${window.location.pathname}?${params.toString()}`;
+                history.pushState(null, '', newUrl);
+
+            } catch (error) {
+                console.error('Error fetching desarme list:', error);
+                const errorDiv = document.getElementById('disassembly-error');
+                const errorText = document.getElementById('disassembly-error-text');
+                if (errorDiv && errorText) {
+                    errorText.textContent = error.message;
+                    errorDiv.hidden = false;
+                }
+            }
+        }
+
+        // Debounced filter handler
+        function handleFilterChange() {
+            clearTimeout(filterTimeout);
+            filterTimeout = setTimeout(() => fetchDesarmeList(1), 300);
+        }
+
+        // Attach event listeners
+        filterInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                if (el.tagName === 'SELECT') {
+                    el.addEventListener('change', handleFilterChange);
+                } else {
+                    el.addEventListener('input', handleFilterChange);
+                }
+            }
+        });
+
+        // Pagination click delegation
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#disassembly-pagination [data-page]');
+            if (btn) {
+                e.preventDefault();
+                const page = parseInt(btn.dataset.page, 10);
+                if (!isNaN(page)) fetchDesarmeList(page);
+            }
+        });
     })();
     </script>
     <script src="{{ url_for('static', filename='desarme.js') }}" defer></script>
