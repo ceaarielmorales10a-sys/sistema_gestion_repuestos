@@ -4736,7 +4736,7 @@ def agregar_repuesto():
         flash('No tienes permisos para agregar repuestos.', 'error')
         return redirect(url_for('inventario'))
 
-    conn = get_db_connection()
+    conn = pyodbc.connect(CONN_STR, autocommit=True)
     cursor = conn.cursor()
 
     if request.method == 'POST':
@@ -4750,12 +4750,10 @@ def agregar_repuesto():
                 'INSERT INTO repuesto (codigo_repuesto, stock, precio_venta) VALUES (?, ?, ?)',
                 (codigo, stock, precio)
             )
-            conn.commit()
             print("¡INSERT REALIZADO CON ÉXITO EN RDS!")
             flash('¡Repuesto guardado con éxito!', 'success')
             return redirect(url_for('inventario'))
         except Exception as e:
-            conn.rollback()
             print("❌ ERROR CRÍTICO EN SQL SERVER:", str(e))
             return f'<h1>Error de Base de Datos:</h1><pre>{escape(str(e))}</pre>', 500
         finally:
