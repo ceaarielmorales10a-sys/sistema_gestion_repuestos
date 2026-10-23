@@ -4836,12 +4836,18 @@ def agregar_repuesto():
                 conn.rollback()
             flash(str(error), 'error')
             return redirect(url_for('agregar_repuesto'))
-        except Exception:
+        except Exception as error:
             if conn:
                 conn.rollback()
             app.logger.exception('No se pudo guardar el repuesto enviado desde el formulario.')
-            flash('No se pudo guardar el repuesto. Revisa los datos y el esquema de la base de datos.', 'error')
-            return redirect(url_for('agregar_repuesto'))
+            error_html = escape(str(error))
+            return (
+                '<h1>⚠️ Error exacto de SQL Server:</h1>'
+                f'<pre style="color:red; font-size:16px;">{error_html}</pre>'
+                '<br><a href="/inventario">Volver al inventario</a>',
+                500,
+                {'Content-Type': 'text/html; charset=utf-8'},
+            )
         finally:
             if cursor:
                 cursor.close()
