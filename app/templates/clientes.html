@@ -21,8 +21,8 @@
 <section id="list" class="panel active"><article class="metric"><span>Total Clientes</span><b>{{ total_clientes }}</b><i class="fa-solid fa-users"></i></article>
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="search" placeholder="Buscar por nombre, NIT, correo o teléfono..."></div>
 <div class="card"><table data-pagination-page-size="10"><thead><tr><th>Cliente</th><th>NIT</th><th>Teléfono</th><th>Correo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-{% for cliente in clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td><td class="actions" data-label="Acciones">{% if has_permission('clientes', 'write') %}<button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
-</tbody></table><footer><span>Mostrando {{ clientes|length }} de {{ total_clientes }} registros. Página {{ current_page }} de {{ total_pages }}.</span><div class="pagination">{% if current_page > 1 %}<a href="{{ url_for('clientes', page=current_page - 1) }}">‹</a>{% endif %}{% for page in range(1, total_pages + 1) %}<a class="{{ 'current' if page == current_page else '' }}" href="{{ url_for('clientes', page=page) }}">{{ page }}</a>{% endfor %}{% if current_page < total_pages %}<a href="{{ url_for('clientes', page=current_page + 1) }}">›</a>{% endif %}</div></footer></div></section>
+{% for cliente in report_clientes %}<tr data-search="{{ cliente.nombre }} {{ cliente.nit }} {{ cliente.telefono }} {{ cliente.correo }} {{ 'activo' if cliente.activo else 'inactivo' }}"><td class="client" data-label="Cliente"><span>{{ cliente.nombre[:2]|upper }}</span><div><b>{{ cliente.nombre }}</b>{% if cliente.fecha %}<small>Registrado el {{ cliente.fecha }}</small>{% endif %}</div></td><td data-label="NIT">{{ cliente.nit }}</td><td data-label="Teléfono">{{ cliente.telefono }}</td><td data-label="Correo">{{ cliente.correo }}</td><td data-label="Dirección">{{ cliente.direccion }}</td><td data-label="Estado"><span class="client-status {{ 'active' if cliente.activo else 'inactive' }}">{{ 'Activo' if cliente.activo else 'Inactivo' }}</span></td><td class="actions" data-label="Acciones">{% if has_permission('clientes', 'write') %}<button class="icon edit" data-client='{{ cliente.data|tojson }}' onclick="editClient(this)" title="Editar"><i class="fa-solid fa-pen"></i></button>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="empty">No hay clientes registrados.</td></tr>{% endfor %}
+</tbody></table><footer><span>{{ total_clientes }} registros.</span></footer></div></section>
 <section id="report" class="panel">
   <div class="client-report-card">
     <h3><i class="fa-solid fa-magnifying-glass"></i> Filtros del Reporte</h3>
@@ -90,7 +90,8 @@
   function openModal(){document.querySelector('.modal-box').reset();action.value='create';id_cliente.value='';document.getElementById('modal-title').textContent='Nuevo Cliente';submit.textContent='Registrar Cliente';modal.hidden=false}
   function closeModal(){modal.hidden=true}
   function editClient(b){const d=JSON.parse(b.dataset.client);openModal();action.value='edit';id_cliente.value=d.id_cliente||'';document.getElementById('modal-title').textContent='Editar Cliente';submit.textContent='Guardar Cambios';Object.entries(d).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v||''})}
-  document.getElementById('search').oninput=e=>{const terms=(e.target.value||'').toLowerCase().trim().split(/\s+/).filter(Boolean);document.querySelectorAll('tbody tr[data-search]').forEach(r=>{const s=(r.dataset.search||'').toLowerCase();r.hidden=terms.length>0 && !terms.every(t=>s.includes(t))});};
+  const normalizeSearch=value=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+  document.getElementById('search').oninput=e=>{const terms=normalizeSearch(e.target.value).trim().split(/\s+/).filter(Boolean);document.querySelectorAll('#list tbody tr[data-search]').forEach(r=>{const s=normalizeSearch(r.dataset.search);r.hidden=terms.length>0 && !terms.every(t=>s.includes(t))});};
   document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.panel').forEach(e=>e.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});
 
   // Report filters
@@ -105,7 +106,8 @@
   const downloadLink = document.getElementById('download-client-report');
 
   function filterReportRows() {
-    const search = reportSearch.value.toLowerCase();
+    const normalizeSearch = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+    const search = normalizeSearch(reportSearch.value);
     const fromDate = reportFromDate.value;
     const toDate = reportToDate.value;
     const estado = reportEstado.value;
@@ -114,7 +116,9 @@
     let activeCount = 0;
     let inactiveCount = 0;
     rows.forEach(row => {
-      const matchesSearch = !search || row.dataset.reportSearch.toLowerCase().includes(search);
+      const terms = search.trim().split(/\s+/).filter(Boolean);
+      const searchable = normalizeSearch(row.dataset.reportSearch);
+      const matchesSearch = terms.length === 0 || terms.every(term => searchable.includes(term));
       const rowDate = row.dataset.date;
       const matchesFrom = !fromDate || (rowDate && rowDate >= fromDate);
       const matchesTo = !toDate || (rowDate && rowDate <= toDate);
@@ -181,7 +185,7 @@ window.editClient = function (button) {
   clientActiveCheckbox.checked = Boolean(status && String(status[1]) === activeClientStatusId);
 };
 </script>{% endif %}
-<script>document.getElementById('report-search').oninput=e=>{const terms=(e.target.value||'').toLowerCase().trim().split(/\s+/).filter(Boolean);document.querySelectorAll('tr[data-report-search]').forEach(r=>{const s=(r.dataset.reportSearch||'').toLowerCase();r.hidden=terms.length>0 && !terms.every(t=>s.includes(t))});};document.getElementById('clear-report').onclick=()=>{document.getElementById('report-search').value='';document.querySelectorAll('tr[data-report-search]').forEach(r=>r.hidden=false)};</script>
+
 <script>
 function updateDateTime(){const n=new Date(),d=n.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),t=n.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:!1}),e=document.getElementById('datetime-display');e&&(e.textContent=d+' \u2022 '+t)}updateDateTime(),setInterval(updateDateTime,1e3);
 // Session auto-refresh on tab visibility change

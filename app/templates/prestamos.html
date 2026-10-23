@@ -526,8 +526,10 @@
       }
     });
 
+    const normalizeSearch = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+
     function filterLoans() {
-      const query = document.getElementById('loan-search').value.trim().toLowerCase();
+      const query = normalizeSearch(document.getElementById('loan-search').value).trim();
       const terms = query.split(/\s+/).filter(t => t);
       const state = document.getElementById('state-filter').value;
       const loanGroups = new Map();
@@ -538,7 +540,7 @@
       });
       loanGroups.forEach((rows) => {
         const firstRow = rows[0];
-        const searchText = firstRow.dataset.search.toLowerCase();
+        const searchText = normalizeSearch(firstRow.dataset.search);
         const matches = terms.every(t => searchText.includes(t)) && (!state || firstRow.dataset.state === state);
         rows.forEach((row) => { row.hidden = !matches; });
       });
@@ -570,11 +572,11 @@
       const returnFrom = values.return_from || '';
       const returnTo = values.return_to || '';
       const state = (values.estado || '').toLowerCase();
-      const client = (values.cliente || '').toLowerCase().trim();
+      const client = normalizeSearch(values.cliente).trim();
       const clientTerms = client.split(/\s+/).filter(t => t);
-      const seller = (values.vendedor || '').toLowerCase().trim();
+      const seller = normalizeSearch(values.vendedor).trim();
       const sellerTerms = seller.split(/\s+/).filter(t => t);
-      const part = (values.repuesto || '').toLowerCase().trim();
+      const part = normalizeSearch(values.repuesto).trim();
       const partTerms = part.split(/\s+/).filter(t => t);
       const metodoPago = (values.metodo_pago || '').toLowerCase().trim();
       const minTotal = parseFloat(values.min_total) || 0;
@@ -586,9 +588,9 @@
         const date = String(row.dataset.date || '').slice(0, 10);
         const returnDate = String(row.dataset.returnDate || '').slice(0, 10);
         const rowTotal = Number(row.dataset.total || 0);
-        const repuestoText = row.dataset.repuesto.toLowerCase();
-        const clientText = row.dataset.client.toLowerCase();
-        const sellerText = row.dataset.vendedor.toLowerCase();
+        const repuestoText = normalizeSearch(row.dataset.repuesto);
+        const clientText = normalizeSearch(row.dataset.client);
+        const sellerText = normalizeSearch(row.dataset.vendedor);
         const matches = (!from || date >= from) && (!to || date <= to) &&
           (!returnFrom || returnDate >= returnFrom) && (!returnTo || returnDate <= returnTo) &&
           (!state || row.dataset.state === state) &&

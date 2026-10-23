@@ -3,6 +3,7 @@ import os
 import io
 import json
 import re
+import unicodedata
 import secrets 
 import csv
 from uuid import uuid4
@@ -384,27 +385,21 @@ def negative_form_number_label(values):
     return None
 
 
+def normalize_search_text(value):
+    """Normalize search text so accents and letter case do not affect matches."""
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    return ''.join(char for char in text if not unicodedata.combining(char)).casefold()
+
+
 def matches_multiword_search(search_query, record, fields):
-    """Check if all words in search_query match any of the fields in record.
-    Returns True if every word in the query is found in at least one field.
-    """
+    """Check whether each query word occurs in at least one selected field."""
     if not search_query:
         return True
-    
-    words = [w.strip().lower() for w in search_query.split() if w.strip()]
-    if not words:
-        return True
-    
-    for word in words:
-        found = False
-        for field in fields:
-            value = str(record.get(field, '')).lower()
-            if word in value:
-                found = True
-                break
-        if not found:
-            return False
-    return True
+    words = normalize_search_text(search_query).split()
+    return all(
+        any(word in normalize_search_text(record.get(field, '')) for field in fields)
+        for word in words
+    )
 
 
 def choose_numeric_column_by_sample(columns, rows):
@@ -1531,13 +1526,13 @@ def filter_ventas_reporte(rows, from_date=None, to_date=None, cliente=None, vend
             continue
         if to_date and sale_date and sale_date > to_date:
             continue
-        if cliente and cliente.casefold() not in str(row.get('cliente') or '').casefold():
+        if cliente and not all(term in normalize_search_text(row.get('cliente')) for term in normalize_search_text(cliente).split()):
             continue
-        if vendedor and vendedor.casefold() not in str(row.get('vendedor') or '').casefold():
+        if vendedor and not all(term in normalize_search_text(row.get('vendedor')) for term in normalize_search_text(vendedor).split()):
             continue
-        if repuesto and repuesto.casefold() not in str(row.get('detalle_repuestos') or '').casefold():
+        if repuesto and not all(term in normalize_search_text(row.get('detalle_repuestos')) for term in normalize_search_text(repuesto).split()):
             continue
-        if metodo_pago and metodo_pago.casefold() != str(row.get('metodo_pago') or '').casefold():
+        if metodo_pago and normalize_search_text(metodo_pago) != normalize_search_text(row.get('metodo_pago')):
             continue
         if estado and estado != str(row.get('id_estado_venta') or 1):
             continue
@@ -1608,23 +1603,11 @@ def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marc
             if ubicacion:
                 if str(repuesto.get('ubicacion_bodega') or '').lower() != str(ubicacion).strip().lower():
                     continue
-            if search:
-                search_lower = search.lower()
-                searchable = ' '.join([
-                    str(repuesto.get('id_repuesto') or ''),
-                    str(repuesto.get('codigo_repuesto') or ''),
-                    str(repuesto.get('tipo_repuesto') or ''),
-                    str(repuesto.get('marca') or ''),
-                    str(repuesto.get('modelo') or ''),
-                    str(repuesto.get('anio') or ''),
-                    str(repuesto.get('color') or ''),
-                    str(repuesto.get('lado') or ''),
-                    str(repuesto.get('posicion') or ''),
-                    str(repuesto.get('estado_repuesto') or ''),
-                    str(repuesto.get('ubicacion_bodega') or ''),
-                ]).lower()
-                if search_lower not in searchable:
-                    continue
+            if search and not matches_multiword_search(search, repuesto, [
+                'id_repuesto', 'codigo_repuesto', 'tipo_repuesto', 'marca', 'modelo',
+                'anio', 'color', 'lado', 'posicion', 'estado_repuesto', 'ubicacion_bodega',
+            ]):
+                continue
             if stock_min:
                 try:
                     if (repuesto.get('stock') or 0) < int(stock_min):
@@ -1809,7 +1792,7 @@ def get_movimientos_reporte(from_date=None, to_date=None, tipo=None, usuario=Non
             continue
         if usuario and usuario_nombre != str(usuario).strip().lower():
             continue
-        if search and search.lower() not in search_text:
+        if search and normalize_search_text(search) not in normalize_search_text(search_text):
             continue
 
         filtered.append(movimiento)
@@ -3519,7 +3502,7 @@ def mantenimiento():
                     search = ' '.join(str(value or '') for value in [item.get(catalogo['display_column'])] + list(extra.values()))
                     rows.append({'id': item.get(catalogo['id_column']),
                                  'nombre': item.get(catalogo['display_column']),
-                                 'extra': extra, 'extra_display': extra_display, 'search': search.lower()})
+                                 'extra': extra, 'extra_display': extra_display, 'search': normalize_search_text(search)})
                 catalogo['rows'] = rows
             catalogo['count'] = len(rows)
             total_registros += len(rows)
@@ -4427,24 +4410,12 @@ def inventario():
             if report_ubicacion:
                 if str(repuesto.get('ubicacion_bodega') or '').lower() != str(report_ubicacion).strip().lower():
                     continue
-            if report_search:
-                search_lower = report_search.lower()
-                searchable = ' '.join([
-                    str(repuesto.get('id_repuesto') or ''),
-                    str(repuesto.get('codigo_repuesto') or ''),
-                    str(repuesto.get('tipo_repuesto') or ''),
-                    str(repuesto.get('marca') or ''),
-                    str(repuesto.get('modelo') or ''),
-                    str(repuesto.get('anio') or ''),
-                    str(repuesto.get('color') or ''),
-                    str(repuesto.get('lado') or ''),
-                    str(repuesto.get('posicion') or ''),
-                    str(repuesto.get('estado_repuesto') or ''),
-                    str(repuesto.get('ubicacion_bodega') or ''),
-                    str(repuesto.get('observaciones') or ''),
-                ]).lower()
-                if search_lower not in searchable:
-                    continue
+            if report_search and not matches_multiword_search(report_search, repuesto, [
+                'id_repuesto', 'codigo_repuesto', 'tipo_repuesto', 'marca', 'modelo',
+                'anio', 'color', 'lado', 'posicion', 'estado_repuesto', 'ubicacion_bodega',
+                'observaciones',
+            ]):
+                continue
             if report_stock_min:
                 try:
                     if (repuesto.get('stock') or 0) < int(report_stock_min):
@@ -5536,9 +5507,7 @@ def ventas():
         if current_page > total_pages:
             current_page = total_pages
 
-        start_index = (current_page - 1) * page_size
-        end_index = start_index + page_size
-        ventas = ventas[start_index:end_index]
+        # Browser pagination runs after filtering the complete result set.
 
         clientes = []
         metodos_pago = []
@@ -8326,11 +8295,11 @@ def exportar_pdf_prestamos():
                 continue
             if estado_filter and loan_state != estado_filter:
                 continue
-            if cliente_filter and cliente_filter not in client_name.lower():
+            if cliente_filter and not all(term in normalize_search_text(client_name) for term in normalize_search_text(cliente_filter).split()):
                 continue
-            if vendedor_filter and vendedor_filter not in vendedor_name.lower():
+            if vendedor_filter and not all(term in normalize_search_text(vendedor_name) for term in normalize_search_text(vendedor_filter).split()):
                 continue
-            if repuesto_filter and repuesto_filter not in repuesto_text:
+            if repuesto_filter and not all(term in normalize_search_text(repuesto_text) for term in normalize_search_text(repuesto_filter).split()):
                 continue
             if metodo_pago_filter and metodo_pago_filter != str(metodo_pago_filter):
                 continue
@@ -8520,13 +8489,13 @@ def exportar_pdf_devoluciones():
             )
             if not client_name:
                 client_name = str(row[17] or row[18] or f'Cliente #{row[10] or "-"}')
-            if cliente and cliente not in client_name.lower():
+            if cliente and not all(term in normalize_search_text(client_name) for term in normalize_search_text(cliente).split()):
                 continue
             vendedor_name = get_user_full_name(cursor, row[11]) or get_display_name_by_id(cursor, ['usuario'], row[11]) or 'Sistema'
-            if vendedor and vendedor not in vendedor_name.lower():
+            if vendedor and not all(term in normalize_search_text(vendedor_name) for term in normalize_search_text(vendedor).split()):
                 continue
             repuesto_text = f'{row[7] or ""} {get_repuesto_display_name(cursor, row[4]) or ""}'.lower()
-            if repuesto and repuesto not in repuesto_text:
+            if repuesto and not all(term in normalize_search_text(repuesto_text) for term in normalize_search_text(repuesto).split()):
                 continue
             if motivo and str(row[8] or '') != str(motivo):
                 continue

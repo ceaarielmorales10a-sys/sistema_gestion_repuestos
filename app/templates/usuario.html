@@ -227,7 +227,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-{% for user in usuarios %}
+{% for user in report_usuarios %}
                                  <tr class="user-row bg-slate-50 rounded-3xl shadow-sm hover:bg-slate-100 transition-colors" data-created-at="{{ user.created_at or '' }}" data-role="{{ user.rol or '' }}" data-role-id="{{ user.id_rol or '' }}" data-status="{{ user.estado or '' }}" data-search="{{ user.username }} {{ user.full_name }} {{ user.email }} {{ user.telefono }} {{ user.rol }} {{ user.estado }}" data-user-id="{{ user.id_usuario }}">
                                      <td class="px-4 py-4 text-sm font-semibold text-slate-900">{{ user.username }}</td>
                                      <td class="px-4 py-4 text-sm text-slate-600">{{ user.full_name }}</td>
@@ -252,8 +252,7 @@
                         </table>
                     </div>
                     <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-600">
-                        <span>Mostrando {{ usuarios|length }} de {{ total_usuarios }} usuarios. Página {{ current_page }} de {{ total_pages }}.</span>
-                        <div class="flex items-center gap-2">{% if current_page > 1 %}<a class="px-3 py-2 rounded-lg border" href="{{ url_for('usuarios', page=current_page - 1) }}">‹</a>{% endif %}{% for page in range(1, total_pages + 1) %}<a class="px-3 py-2 rounded-lg border {% if page == current_page %}bg-blue-600 text-white{% endif %}" href="{{ url_for('usuarios', page=page) }}">{{ page }}</a>{% endfor %}{% if current_page < total_pages %}<a class="px-3 py-2 rounded-lg border" href="{{ url_for('usuarios', page=current_page + 1) }}">›</a>{% endif %}</div>
+                        <span>{{ total_usuarios }} usuarios.</span>
                     </div>
                 </div>
             </div>
@@ -548,17 +547,18 @@
             const searchInput = document.getElementById('user-search-input');
             const roleFilter = document.getElementById('role-filter');
             const rows = document.querySelectorAll('.user-row');
-            const query = (searchInput?.value || '').toLowerCase().trim();
-            const roleValue = (roleFilter?.value || '').toString().trim();
+            const normalizeSearch = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+            const query = normalizeSearch(searchInput?.value).trim();
+            const roleValue = normalizeSearch((roleFilter?.value || '').toString().trim());
             const terms = query ? query.split(/\s+/).filter(Boolean) : [];
 
             rows.forEach((row) => {
-                const searchable = (row.dataset.search || '').toLowerCase();
-                const rowRole = (row.dataset.role || '').toLowerCase();
+                const searchable = normalizeSearch(row.dataset.search);
+                const rowRole = normalizeSearch(row.dataset.role);
                 const rowRoleId = (row.dataset.roleId || '').toString();
                 const matchesSearch = terms.length === 0 || terms.every(term => searchable.includes(term));
-                const matchesRole = !roleValue || rowRole === roleValue.toLowerCase() || rowRoleId === roleValue;
-                row.style.display = matchesSearch && matchesRole ? '' : 'none';
+                const matchesRole = !roleValue || rowRole === roleValue || rowRoleId === roleValue;
+                row.hidden = !(matchesSearch && matchesRole);
             });
         }
 

@@ -39,10 +39,10 @@
 <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="sale-search" type="search" placeholder="Buscar por # venta, cliente, usuario o repuesto..."></div>
 <section class="card"><div class="table-wrap"><table data-pagination-page-size="10" data-pagination-group-next=".detail"><thead><tr><th>N°</th><th>N° / Fecha</th><th>Cliente</th><th>Registrado por</th><th>Pago</th><th>Repuestos</th><th>Total</th><th>Estado</th></tr></thead><tbody>
 {% for venta in ventas %}
-<tr class="sale" data-search="{{ venta.id_venta }} {{ venta.cliente }} {{ venta.usuario }} {% for item in venta['items'] %}{{ item.repuesto }} {{ item.codigo }} {% endfor %}"><td class="sale-index" data-label="N°">{{ loop.index + (current_page - 1) * 10 }}</td><td class="sale-reference" data-label="Venta"><div class="sale-reference-content"><button class="view-sale-details" type="button" aria-label="Ver detalles de venta V-{{ '%06d'|format(venta.id_venta|int) }}" aria-controls="detail-{{ venta.id_venta }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button><div><b>V-{{ '%06d'|format(venta.id_venta|int) }}</b><small>{{ venta.fecha_venta.strftime('%d/%m/%Y %I:%M %p') if venta.fecha_venta.strftime else venta.fecha_venta }}</small></div></div></td><td data-label="Cliente">{{ venta.cliente }}</td><td data-label="Registrado por">{{ venta.usuario }}</td><td data-label="Pago"><span class="pill">{{ venta.metodo_pago }}</span></td><td data-label="Repuestos"><i class="fa-solid fa-cube"></i> {{ venta['items']|length }} {{ 'repuesto' if venta['items']|length == 1 else 'repuestos' }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td><td data-label="Estado"><span class="sale-status {{ 'returned' if venta.id_estado_venta == 2 else 'completed' }}">{{ venta.estado }}</span></td></tr>
+<tr class="sale" data-search="{{ venta.id_venta }} {{ venta.cliente }} {{ venta.usuario }} {% for item in venta['items'] %}{{ item.repuesto }} {{ item.codigo }} {% endfor %}"><td class="sale-index" data-label="N°">{{ loop.index }}</td><td class="sale-reference" data-label="Venta"><div class="sale-reference-content"><button class="view-sale-details" type="button" aria-label="Ver detalles de venta V-{{ '%06d'|format(venta.id_venta|int) }}" aria-controls="detail-{{ venta.id_venta }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button><div><b>V-{{ '%06d'|format(venta.id_venta|int) }}</b><small>{{ venta.fecha_venta.strftime('%d/%m/%Y %I:%M %p') if venta.fecha_venta.strftime else venta.fecha_venta }}</small></div></div></td><td data-label="Cliente">{{ venta.cliente }}</td><td data-label="Registrado por">{{ venta.usuario }}</td><td data-label="Pago"><span class="pill">{{ venta.metodo_pago }}</span></td><td data-label="Repuestos"><i class="fa-solid fa-cube"></i> {{ venta['items']|length }} {{ 'repuesto' if venta['items']|length == 1 else 'repuestos' }}</td><td class="total" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td><td data-label="Estado"><span class="sale-status {{ 'returned' if venta.id_estado_venta == 2 else 'completed' }}">{{ venta.estado }}</span></td></tr>
 <tr id="detail-{{ venta.id_venta }}" class="detail" hidden><td colspan="8">{% if venta.id_estado_venta == 2 %}<div class="returned-notice">Venta Devuelta / Anulada</div>{% endif %}<div class="info"><span><b><i class="fa-regular fa-calendar"></i> Fecha</b><strong>{{ venta.fecha_venta.strftime('%d/%m/%Y') if venta.fecha_venta.strftime else venta.fecha_venta }}</strong><small>{{ venta.fecha_venta.strftime('%I:%M %p') if venta.fecha_venta.strftime else '' }}</small></span><span><b><i class="fa-regular fa-user"></i> Cliente</b><strong>{{ venta.cliente }}</strong></span><span><b><i class="fa-regular fa-user"></i> Registrado por</b><strong>{{ venta.usuario }}</strong></span><span><b>Método de pago</b><strong>{{ venta.metodo_pago }}</strong></span></div><table class="items"><thead><tr><th>Código</th><th>Repuesto</th><th>Cantidad</th><th>Precio unit.</th><th>Descuento (Q)</th><th>Subtotal</th></tr></thead><tbody>{% for item in venta['items'] %}{% set precio = item.precio_unitario|float %}{% set cantidad = item.cantidad|float %}{% set subtotal = item.subtotal|float %}{% set descuento = precio * cantidad - subtotal %}<tr><td data-label="Código">{{ item.codigo }}</td><td class="item-name" data-label="Repuesto">{{ item.repuesto }}{% if item.anio %}<small class="item-year">A&#241;o: {{ item.anio }}</small>{% endif %}{% if item.cantidad_devuelta %}<small class="item-returned">Devuelto: {{ item.cantidad_devuelta }} {{ "unidad" if item.cantidad_devuelta == 1 else "unidades" }}</small>{% endif %}</td><td data-label="Cantidad">{{ item.cantidad }}</td><td data-label="Precio unitario">Q {{ '{:,.2f}'.format(item.precio_unitario or 0) }}</td><td class="discount-cell" data-label="Descuento (Q)">{{ '—' if descuento <= 0 else '-Q ' ~ '{:,.2f}'.format(descuento) }}</td><td class="subtotal-cell" data-label="Subtotal">Q {{ '{:,.2f}'.format(item.subtotal or 0) }}</td></tr>{% endfor %}<tr class="grand"><td colspan="5">Total General</td><td class="subtotal-cell" data-label="Total">Q {{ '{:,.2f}'.format(venta.total or 0) }}</td></tr></tbody></table></td></tr>
 {% else %}<tr><td class="empty" colspan="8">No hay ventas registradas.</td></tr>{% endfor %}
-</tbody></table></div><footer><span>Mostrando {{ ventas|length }} de {{ total_items }} registros</span><div>{% if current_page > 1 %}<a href="{{ url_for('ventas', page=current_page-1) }}#sales-list-view">‹</a>{% endif %}{% for p in range(1,total_pages+1) %}<a class="{{ 'current' if p == current_page }}" href="{{ url_for('ventas', page=p) }}#sales-list-view">{{ p }}</a>{% endfor %}{% if current_page < total_pages %}<a href="{{ url_for('ventas', page=current_page+1) }}#sales-list-view">›</a>{% endif %}</div></footer></section>
+</tbody></table></div><footer><span>{{ total_items }} registros.</span></footer></section>
 </section>
 <section id="sales-report-view" class="sales-report-view" hidden>
 <div class="report-card">
@@ -81,7 +81,8 @@ const closeSaleDetail=()=>{saleDetailModal.hidden=true;document.body.classList.r
 saleDetailModal.querySelectorAll('.record-detail-close').forEach(button=>button.addEventListener('click',closeSaleDetail));
 saleDetailModal.addEventListener('click',event=>{if(event.target===saleDetailModal)closeSaleDetail()});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!saleDetailModal.hidden)closeSaleDetail()});
-document.getElementById('sale-search').oninput=e=>{const terms=(e.target.value||'').toLowerCase().trim().split(/\s+/).filter(Boolean);document.querySelectorAll('.sale').forEach(r=>{const s=(r.dataset.search||'').toLowerCase();const matches=terms.length===0 || terms.every(t=>s.includes(t));r.hidden=!matches;if(!matches)document.getElementById(r.querySelector('.view-sale-details').getAttribute('aria-controls')).hidden=true})};
+const normalizeSearch=value=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+document.getElementById('sale-search').oninput=e=>{const terms=normalizeSearch(e.target.value).trim().split(/\s+/).filter(Boolean);document.querySelectorAll('.sale').forEach(r=>{const s=normalizeSearch(r.dataset.search);const matches=terms.length===0 || terms.every(t=>s.includes(t));r.hidden=!matches;if(!matches)document.getElementById(r.querySelector('.view-sale-details').getAttribute('aria-controls')).hidden=true})};
 const reportData={{ report_ventas|tojson }};
 const listView=document.getElementById('sales-list-view'), reportView=document.getElementById('sales-report-view');
 const reportMoney=value=>`Q ${Number(value||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -92,10 +93,10 @@ const reportPayment=document.getElementById('report-payment');
 function filteredReportRows(){
   const from=document.getElementById('report-from').value;
   const to=document.getElementById('report-to').value;
-  const client=document.getElementById('report-client').value.trim().toLowerCase();
-  const seller=document.getElementById('report-seller').value.trim().toLowerCase();
-  const repuesto=document.getElementById('report-repuesto').value.trim().toLowerCase();
-  const payment=reportPayment.value.toLowerCase();
+  const client=normalizeSearch(document.getElementById('report-client').value).trim().split(/\s+/).filter(Boolean);
+  const seller=normalizeSearch(document.getElementById('report-seller').value).trim().split(/\s+/).filter(Boolean);
+  const repuesto=normalizeSearch(document.getElementById('report-repuesto').value).trim().split(/\s+/).filter(Boolean);
+  const payment=normalizeSearch(reportPayment.value);
   const status=document.getElementById('report-status').value;
   const minTotal=parseFloat(document.getElementById('report-min-amount').value)||0;
   const maxTotal=parseFloat(document.getElementById('report-max-amount').value)||Infinity;
@@ -103,10 +104,10 @@ function filteredReportRows(){
     const date=(row.fecha||'').slice(0,10);
     const total=Number(row.total||0);
     return (!from||date>=from)&&(!to||date<=to)&&
-      (!client||String(row.cliente).toLowerCase().includes(client))&&
-      (!seller||String(row.vendedor).toLowerCase().includes(seller))&&
-      (!repuesto||String(row.detalle_repuestos).toLowerCase().includes(repuesto))&&
-      (!payment||String(row.metodo_pago).toLowerCase()===payment)&&
+      (!client.length||client.every(term=>normalizeSearch(row.cliente).includes(term)))&&
+      (!seller.length||seller.every(term=>normalizeSearch(row.vendedor).includes(term)))&&
+      (!repuesto.length||repuesto.every(term=>normalizeSearch(row.detalle_repuestos).includes(term)))&&
+      (!payment||normalizeSearch(row.metodo_pago)===payment)&&
       (!status||String(row.id_estado_venta)===status)&&
       (total>=minTotal)&&(total<=maxTotal);
   });
