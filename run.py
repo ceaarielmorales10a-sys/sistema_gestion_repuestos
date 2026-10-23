@@ -4128,7 +4128,10 @@ def inventario():
         tipo_repuestos = fetch_catalog_for_candidates(cursor, ['tipo_repuesto']) or []
         selected_tipo_id = request.args.get('tipo_repuesto', '').strip()
         search_query = request.args.get('q', '').strip()
-        stock_bajo_filter = request.args.get('stock_bajo', '').strip()
+        stock_bajo_filter = (
+            '1' if request.args.get('stock_bajo', '').strip().casefold()
+            in {'1', 'true', 'yes', 'on'} else ''
+        )
 
         # Report filters
         report_from_date = request.args.get('from_date', '').strip()
@@ -4164,12 +4167,17 @@ def inventario():
             f"{photo_select}{estado_general_select}{transmision_select} FROM repuesto"
         )
         params = []
+        where_clauses = []
         if selected_tipo_id:
             try:
                 params.append(int(selected_tipo_id))
             except ValueError:
                 params.append(selected_tipo_id)
-            base_sql += " WHERE id_tipo_repuesto = ?"
+            where_clauses.append('id_tipo_repuesto = ?')
+        if stock_bajo_filter:
+            where_clauses.append('COALESCE(stock, 0) <= COALESCE(stock_minimo, 5)')
+        if where_clauses:
+            base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         # El ID se genera al registrar cada repuesto; ordenarlo de forma descendente
         # mantiene los registros más recientes al inicio de la paginación.
         base_sql += " ORDER BY id_repuesto DESC"
@@ -4311,8 +4319,6 @@ def inventario():
             ]
             lista_repuestos = [r for r in lista_repuestos if matches_multiword_search(search_query, r, search_fields)]
 
-        if stock_bajo_filter:
-            lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
     except Exception as e:
         print(f"\n⚠️ ERROR EN CONSULTA DE INVENTARIO: {e}\n")
         flash(f"Error al conectar con la base de datos: {e}", "error")
@@ -4380,7 +4386,12 @@ def inventario():
     activos_page = min(current_page, activos_total_pages)
     inactivos_page = min(current_page, inactivos_total_pages)
 
-    stock_bajo = sum(1 for repuesto in lista_repuestos if repuesto.get('stock', 0) <= 5)
+    stock_bajo = sum(
+        1 for repuesto in lista_repuestos
+        if repuesto.get('stock', 0) <= (
+            repuesto.get('stock_minimo') if repuesto.get('stock_minimo') is not None else 5
+        )
+    )
 
     # Filtrar repuestos para el reporte usando los filtros del reporte
     report_repuestos = lista_repuestos
@@ -4542,7 +4553,10 @@ def inventario_list_data():
     search_query = request.args.get('q', '').strip()
     selected_tipo_id = request.args.get('tipo_repuesto', '').strip()
     estado_filter = request.args.get('estado', 'todos').strip().casefold()
-    stock_bajo_filter = request.args.get('stock_bajo', '').strip()
+    stock_bajo_filter = (
+        '1' if request.args.get('stock_bajo', '').strip().casefold()
+        in {'1', 'true', 'yes', 'on'} else ''
+    )
     page = request.args.get('page', 1, type=int)
 
     conn = get_db_connection()
@@ -4571,12 +4585,17 @@ def inventario_list_data():
             f"{photo_select}{estado_general_select}{transmision_select} FROM repuesto"
         )
         params = []
+        where_clauses = []
         if selected_tipo_id:
             try:
                 params.append(int(selected_tipo_id))
             except ValueError:
                 params.append(selected_tipo_id)
-            base_sql += " WHERE id_tipo_repuesto = ?"
+            where_clauses.append('id_tipo_repuesto = ?')
+        if stock_bajo_filter:
+            where_clauses.append('COALESCE(stock, 0) <= COALESCE(stock_minimo, 5)')
+        if where_clauses:
+            base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         base_sql += " ORDER BY id_repuesto DESC"
         cursor.execute(base_sql, tuple(params))
         rows = cursor.fetchall()
@@ -4691,9 +4710,6 @@ def inventario_list_data():
                 'stock_maximo'
             ]
             lista_repuestos = [r for r in lista_repuestos if matches_multiword_search(search_query, r, search_fields)]
-
-        if stock_bajo_filter:
-            lista_repuestos = [r for r in lista_repuestos if r.get('stock', 0) <= (r.get('stock_minimo') or 5)]
 
         if estado_filter == 'activo':
             lista_repuestos = [
