@@ -174,18 +174,58 @@ def restringir_modulos_bodeguero():
     return None
 
 # CADENA DE CONEXIÓN A SQL SERVER
-CONN_STR = (
-    "Driver={ODBC Driver 17 for SQL Server};"
-    f"Server={os.getenv('DB_SERVER')};"
-    f"Database={os.getenv('DB_NAME')};"
-    f"UID={os.getenv('DB_USER')};"
-    f"PWD={os.getenv('DB_PASSWORD')};"
-)
+def _odbc_value(value):
+    """Quote ODBC values so delimiters in credentials remain valid."""
+    return '{' + str(value).replace('}', '}}') + '}'
+
+
+def build_sql_server_connection_string():
+    """Build the SQL Server connection from the host's environment."""
+    server = os.getenv('DB_SERVER')
+    database = os.getenv('DB_NAME')
+    username = os.getenv('DB_USER')
+    password = os.getenv('DB_PASSWORD')
+    missing = [name for name, value in (
+        ('DB_SERVER', server), ('DB_NAME', database),
+        ('DB_USER', username), ('DB_PASSWORD', password),
+    ) if not value]
+    if missing:
+        raise RuntimeError(
+            'Falta configurar la conexión a SQL Server: ' + ', '.join(missing) +
+            '. Configure estas variables en el entorno del servicio AWS.'
+        )
+
+    port = os.getenv('DB_PORT')
+    if port and ',' not in server:
+        server = f'{server},{port}'
+    driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
+    encrypt = os.getenv('DB_ENCRYPT', 'yes')
+    trust_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'no')
+    return (
+        f'Driver={_odbc_value(driver)};'
+        f'Server={_odbc_value(server)};'
+        f'Database={_odbc_value(database)};'
+        f'UID={_odbc_value(username)};'
+        f'PWD={_odbc_value(password)};'
+        f'Encrypt={encrypt};'
+        f'TrustServerCertificate={trust_certificate};'
+        'Connection Timeout=15;'
+    )
+
+
+CONN_STR = build_sql_server_connection_string()
 
 
 def get_db_connection():
     """Devuelve una conexión pyodbc usando la cadena CONN_STR."""
-    return pyodbc.connect(CONN_STR)
+    try:
+        return pyodbc.connect(CONN_STR)
+    except pyodbc.Error as exc:
+        app.logger.exception('No se pudo conectar con SQL Server.')
+        raise RuntimeError(
+            'No se pudo conectar con la base de datos SQL Server. Verifique el '
+            'endpoint, puerto 1433, credenciales y reglas de red del servicio AWS.'
+        ) from exc
 
 
 def get_overdue_loan_count():
