@@ -4811,6 +4811,16 @@ def agregar_repuesto():
             if not columns:
                 raise RuntimeError('No se pudo consultar el esquema de la tabla repuesto.')
             column_lookup = {column.casefold(): column for column in columns}
+
+            photo_file = get_uploaded_repuesto_photo()
+            if photo_file:
+                ensure_repuesto_photo_column(cursor)
+                columns = get_table_columns(cursor, 'dbo.repuesto')
+                column_lookup = {column.casefold(): column for column in columns}
+                if 'fotografia' not in column_lookup:
+                    raise RuntimeError('No se encontró la columna fotografía en la tabla repuesto.')
+                data['fotografia'] = save_repuesto_photo(photo_file)
+
             insert_values = [
                 (column_lookup[name.casefold()], value)
                 for name, value in data.items()
