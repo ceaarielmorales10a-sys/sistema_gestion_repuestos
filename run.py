@@ -4741,13 +4741,13 @@ def agregar_repuesto():
 
     if request.method == 'POST':
         try:
-            codigo_repuesto = request.form.get('codigo_repuesto')
-            id_vehiculo_origen = request.form.get('id_vehiculo_origen')
-            id_tipo_repuesto = request.form.get('id_tipo_repuesto')
-            id_marca = request.form.get('id_marca')
-            id_modelo = request.form.get('id_modelo')
-            id_color = request.form.get('id_color') or None
-            id_lado = request.form.get('id_lado') or None
+            codigo_repuesto = request.form.get('codigo_repuesto', '').strip() or None
+            id_vehiculo_origen = request.form.get('id_vehiculo_origen', '').strip() or None
+            id_tipo_repuesto = request.form.get('id_tipo_repuesto', '').strip() or None
+            id_marca = request.form.get('id_marca', '').strip() or None
+            id_modelo = request.form.get('id_modelo', '').strip() or None
+            id_color = request.form.get('id_color', '').strip() or None
+            id_lado = request.form.get('id_lado', '').strip() or None
 
             if id_modelo and not id_marca:
                 flash('Seleccione primero la marca antes de elegir un modelo.', 'error')
@@ -4762,16 +4762,14 @@ def agregar_repuesto():
                 if not row or row[0] == 0:
                     flash('El modelo seleccionado no corresponde a la marca elegida.', 'error')
                     return redirect(url_for('agregar_repuesto'))
-            id_posicion = request.form.get('id_posicion') or None
+            id_posicion = request.form.get('id_posicion', '').strip() or None
             stock_minimo = request.form.get('stock_minimo') or None
-            stock_maximo = request.form.get('stock_maximo')
-            if stock_maximo == '':
-                stock_maximo = None
+            stock_maximo = request.form.get('stock_maximo', '').strip() or None
             if stock_maximo is None:
                 flash('El campo Stock máximo es obligatorio.', 'error')
                 return redirect(url_for('agregar_repuesto'))
-            id_anio = request.form.get('id_anio')
-            id_estado_repuesto = request.form.get('id_estado_repuesto')
+            id_anio = request.form.get('id_anio', '').strip() or None
+            id_estado_repuesto = request.form.get('id_estado_repuesto', '').strip() or None
             id_estado_general = get_estado_general_id(cursor, activo=True)
             # La ubicación se define por el tipo para evitar asignaciones
             # manuales inconsistentes desde el formulario.
@@ -4809,7 +4807,7 @@ def agregar_repuesto():
                 'id_color': id_color,
                 'id_lado': id_lado,
                 'id_posicion': id_posicion,
-                'id_transmision': request.form.get('id_transmision') or None,
+                'id_transmision': request.form.get('id_transmision', '').strip() or None,
                 'stock_minimo': stock_minimo,
                 'stock_maximo': stock_maximo,
                 'id_anio': id_anio,
@@ -4885,10 +4883,9 @@ def agregar_repuesto():
             return redirect(url_for('inventario'))
 
         except Exception as e:
-            # Diagnóstico temporal: dejar el error de SQL Server en los logs.
-            print(f'❌ ERROR REAL DE RDS AL INSERTAR REPUESTO: {e}')
+            print('ERROR:', e)
             conn.rollback()
-            flash(f'⚠️ ERROR DE BASE DE DATOS EN AWS: {str(e)}', 'danger')
+            flash(f'Error al registrar: {str(e)}', 'danger')
             return redirect(url_for('inventario'))
         
         finally:
