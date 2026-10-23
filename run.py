@@ -1,5 +1,6 @@
 from flask import Flask, g, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 import os
+import time
 import io
 import json
 import re
@@ -2620,6 +2621,24 @@ def _get_gemini_api_key():
     return str(env_values.get('GEMINI_API_KEY') or '').strip()
 
 
+def _is_gemini_capacity_error(error):
+    status = getattr(error, 'status_code', None) or getattr(error, 'code', None)
+    try:
+        if int(status) in (429, 503):
+            return True
+    except (TypeError, ValueError):
+        pass
+
+    message = str(error).casefold()
+    return any(
+        marker in message
+        for marker in (
+            '429', '503', 'resource_exhausted', 'unavailable',
+            'high demand', 'overloaded', 'too many requests',
+        )
+    )
+
+
 def _analytics_dashboard_data(cursor, days):
     inventory_columns = {
         column.lower(): column for column in get_table_columns(cursor, 'dbo.repuesto')
@@ -2952,7 +2971,39 @@ def analizar_inventario_analytics():
             "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
             f"no en dolares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        response = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
+        primary_model = 'gemini-3.8-flash'
+        fallback_model = 'gemini-3.6-flash'
+        try:
+            response = client.models.generate_content(
+                model=primary_model,
+                contents=prompt,
+            )
+        except Exception as first_error:
+            if not _is_gemini_capacity_error(first_error):
+                raise
+
+            app.logger.warning(
+                'Gemini devolvió alta demanda para %s; se reintentará una vez.',
+                primary_model,
+            )
+            time.sleep(1)
+            try:
+                response = client.models.generate_content(
+                    model=primary_model,
+                    contents=prompt,
+                )
+            except Exception as retry_error:
+                if not _is_gemini_capacity_error(retry_error):
+                    raise
+                app.logger.warning(
+                    'Gemini sigue con alta demanda para %s; se usará %s.',
+                    primary_model,
+                    fallback_model,
+                )
+                response = client.models.generate_content(
+                    model=fallback_model,
+                    contents=prompt,
+                )
         if not response.text:
             raise RuntimeError('Gemini devolvio una respuesta vacia.')
 
