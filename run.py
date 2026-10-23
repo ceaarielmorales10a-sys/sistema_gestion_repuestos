@@ -4807,6 +4807,11 @@ def agregar_repuesto():
 
             conn = get_db_connection()
             cursor = conn.cursor()
+            # Resolve the location from the selected type on the server too;
+            # the hidden form value is only needed to submit the disabled UI.
+            configured_location = get_tipo_ubicacion(cursor, data.get('id_tipo_repuesto'))
+            if configured_location is not None:
+                data['id_ubicacion'] = configured_location
             columns = get_table_columns(cursor, 'dbo.repuesto')
             if not columns:
                 raise RuntimeError('No se pudo consultar el esquema de la tabla repuesto.')

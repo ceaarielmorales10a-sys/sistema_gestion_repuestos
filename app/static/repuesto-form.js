@@ -28,6 +28,12 @@
   const typeInput = form.querySelector('#tipo-repuesto-search');
   const typeMenu = form.querySelector('#tipo-repuesto-options');
   const locationSelect = form.querySelector('#id_ubicacion');
+  const locationInput = form.querySelector('#id_ubicacion_submit');
+  const setLocation = (locationId) => {
+    const value = locationId || '';
+    if (locationSelect) locationSelect.value = value;
+    if (locationInput) locationInput.value = value;
+  };
 
   const resetModels = (message) => {
     if (!modelSelect) return;
@@ -64,7 +70,7 @@
     typeInput.value = option.textContent.trim();
     typeSelect.value = option.value;
     typeInput.setCustomValidity('');
-    if (locationSelect && option.dataset.ubicacionId) locationSelect.value = option.dataset.ubicacionId;
+    setLocation(option.dataset.ubicacionId);
     closeTypeMenu();
   };
   const showTypeOptions = () => {
@@ -72,7 +78,7 @@
     const query = typeInput.value.trim().toLocaleLowerCase();
     typeSelect.value = '';
     typeInput.setCustomValidity(query ? 'Selecciona un tipo de repuesto de la lista.' : 'Escribe y selecciona un tipo de repuesto del catálogo.');
-    if (locationSelect) locationSelect.value = '';
+    setLocation('');
     typeMenu.replaceChildren();
     const matches = [...typeSelect.options].filter((option) => option.value && option.textContent.trim().toLocaleLowerCase().includes(query));
     if (!query) {
@@ -99,6 +105,11 @@
     typeInput.setAttribute('aria-expanded', 'true');
   };
   if (typeInput && typeSelect) {
+    if (typeSelect.value) {
+      const selectedType = typeSelect.selectedOptions[0];
+      const configuredLocation = selectedType?.dataset.ubicacionId || locationInput?.value || '';
+      setLocation(configuredLocation);
+    }
     if (typeSelect.value) {
       typeInput.value = typeSelect.selectedOptions[0]?.textContent.trim() || '';
       typeInput.setCustomValidity('');
