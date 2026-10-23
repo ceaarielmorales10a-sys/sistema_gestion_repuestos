@@ -1554,7 +1554,7 @@ def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marc
     repuestos = []
     try:
         cursor.execute(
-            "SELECT id_repuesto, codigo_repuesto, id_vehiculo_origen, id_tipo_repuesto, id_marca, id_modelo, id_anio, id_color, id_lado, id_posicion, id_estado_repuesto, id_ubicacion, precio_compra, precio_venta, fecha_ingreso, stock FROM repuesto ORDER BY id_repuesto"
+            "SELECT id_repuesto, codigo_repuesto, id_vehiculo_origen, id_tipo_repuesto, id_marca, id_modelo, id_anio, id_color, id_lado, id_posicion, id_estado_repuesto, id_ubicacion, precio_compra, precio_venta, fecha_ingreso, stock, stock_minimo FROM repuesto ORDER BY id_repuesto"
         )
         rows = cursor.fetchall()
         cols = [c[0] for c in cursor.description]
@@ -1570,6 +1570,7 @@ def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marc
                 'modelo': get_display_name_by_id(cursor, ['modelo_vehiculo', 'modelo'], data.get('id_modelo')) or '-',
                 'anio': get_display_name_by_id(cursor, ['anio_vehiculo'], data.get('id_anio')) or (data.get('id_anio') or '-'),
                 'stock': data.get('stock') if data.get('stock') is not None else 0,
+                'stock_minimo': data.get('stock_minimo'),
                 'precio_compra': data.get('precio_compra') or 0,
                 'precio_venta': data.get('precio_venta') or 0,
                 'ubicacion_bodega': get_display_name_by_id(cursor, ['bodega', 'ubicacion', 'ubicacion_bodega'], data.get('id_ubicacion')) or '-',
@@ -1633,7 +1634,9 @@ def get_repuestos_reporte(from_date=None, to_date=None, tipo_repuesto=None, marc
                 except Exception:
                     pass
             if stock_bajo_only:
-                if int(repuesto.get('stock') or 0) > 5:
+                stock_minimo = repuesto.get('stock_minimo')
+                limite_bajo = 5 if stock_minimo in (None, '') else parse_int_like(stock_minimo)
+                if parse_int_like(repuesto.get('stock')) >= limite_bajo:
                     continue
 
             repuestos.append(repuesto)
@@ -2770,11 +2773,11 @@ def _analytics_dashboard_data(cursor, days):
     else:
         cursor.execute(
             'SELECT CASE WHEN COALESCE(stock, 0) <= 0 THEN N\'Agotado\' '
-            'WHEN COALESCE(stock, 0) <= COALESCE(stock_minimo, 0) THEN N\'Bajo mínimo\' '
+            'WHEN COALESCE(stock, 0) < COALESCE(stock_minimo, 0) THEN N\'Bajo mínimo\' '
             'ELSE N\'Disponible\' END, COUNT_BIG(1), '
             'COALESCE(SUM(CONVERT(BIGINT, COALESCE(stock, 0))), 0) '
             'FROM dbo.repuesto GROUP BY CASE WHEN COALESCE(stock, 0) <= 0 '
-            'THEN N\'Agotado\' WHEN COALESCE(stock, 0) <= COALESCE(stock_minimo, 0) '
+            'THEN N\'Agotado\' WHEN COALESCE(stock, 0) < COALESCE(stock_minimo, 0) '
             'THEN N\'Bajo mínimo\' ELSE N\'Disponible\' END'
         )
         status_rows = cursor.fetchall()
@@ -2821,12 +2824,12 @@ def _analytics_dashboard_data(cursor, days):
             historical_sales = float(row[6] or 0) if len(row) > 6 else 0
             average_daily_sales = historical_sales / 90
         days_remaining = stock / average_daily_sales if average_daily_sales > 0 else None
-        needs_restock = stock <= minimum or (days_remaining is not None and days_remaining <= 14)
+        needs_restock = stock < minimum or (days_remaining is not None and days_remaining <= 14)
         if needs_restock:
             low_stock_count += 1
         if stock <= 0:
             urgency = 'Agotado'
-        elif stock <= minimum or (days_remaining is not None and days_remaining <= 7):
+        elif stock < minimum or (days_remaining is not None and days_remaining <= 7):
             urgency = 'Reabastecer urgente'
         elif days_remaining is not None and days_remaining <= 14:
             urgency = 'Vigilar inventario'
@@ -2960,7 +2963,7 @@ def analizar_inventario_analytics():
         client = genai.Client(api_key=api_key)
         prompt = (
             "Analiza el siguiente inventario de repuestos de mi taller en Guatemala,"
-            " identifica cuáles tienen stock bajo (menor o igual al mínimo) y dame"
+            " identifica cuáles tienen stock bajo (menor al mínimo) y dame"
             " recomendaciones breves de reabastecimiento. IMPORTANTE: Todos los montos"
             " y valores monetarios deben expresarse estrictamente en **Quetzales (Q)**"
             f" y no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
@@ -4158,8 +4161,8 @@ def inventario():
                 params.append(selected_tipo_id)
             where_clauses.append('id_tipo_repuesto = ?')
         if stock_bajo_filter:
-            # Match the inventory table's red stock indicator (stock <= 5).
-            where_clauses.append('COALESCE(stock, 0) <= 5')
+            # Stock is low only when current stock is strictly below its minimum.
+            where_clauses.append('COALESCE(stock, 0) < COALESCE(stock_minimo, 5)')
         if where_clauses:
             base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         # El ID se genera al registrar cada repuesto; ordenarlo de forma descendente
@@ -4223,7 +4226,9 @@ def inventario():
                 cursor, ['estado_general'], data.get('id_estado_general')
             ) or '-'
             transmision = get_display_name_by_id(cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'], data.get('id_transmision')) or data.get('transmision') or data.get('transmision_repuesto') or '-'
-            stock_minimo = data.get('stock_minimo') or data.get('min_stock') or data.get('stock_min') or data.get('stock_minimo') or ''
+            stock_minimo = data.get('stock_minimo')
+            if stock_minimo is None:
+                stock_minimo = data.get('min_stock', data.get('stock_min', ''))
             stock_maximo = data.get('stock_maximo') or data.get('max_stock') or data.get('stock_max') or data.get('stock_maximo') or ''
             
             # ensure numeric stock using robust parser
@@ -4372,7 +4377,10 @@ def inventario():
 
     stock_bajo = sum(
         1 for repuesto in lista_repuestos
-        if (parse_int_like(repuesto.get('stock')) or 0) <= 5
+        if (parse_int_like(repuesto.get('stock')) or 0) < (
+            5 if repuesto.get('stock_minimo') in (None, '')
+            else (parse_int_like(repuesto.get('stock_minimo')) or 0)
+        )
     )
 
     # Filtrar repuestos para el reporte usando los filtros del reporte
@@ -4564,7 +4572,7 @@ def inventario_list_data():
             where_clauses.append('id_tipo_repuesto = ?')
         if stock_bajo_filter:
             # Keep the AJAX list consistent with the red stock cell in the UI.
-            where_clauses.append('COALESCE(stock, 0) <= 5')
+            where_clauses.append('COALESCE(stock, 0) < COALESCE(stock_minimo, 5)')
         if where_clauses:
             base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         base_sql += " ORDER BY id_repuesto DESC"
@@ -4609,7 +4617,9 @@ def inventario_list_data():
                 cursor, ['estado_general'], data.get('id_estado_general')
             ) or '-'
             transmision = get_display_name_by_id(cursor, ['transmision', 'transmision_vehiculo', 'tipo_transmision'], data.get('id_transmision')) or data.get('transmision') or data.get('transmision_repuesto') or '-'
-            stock_minimo = data.get('stock_minimo') or data.get('min_stock') or data.get('stock_min') or data.get('stock_minimo') or ''
+            stock_minimo = data.get('stock_minimo')
+            if stock_minimo is None:
+                stock_minimo = data.get('min_stock', data.get('stock_min', ''))
             stock_maximo = data.get('stock_maximo') or data.get('max_stock') or data.get('stock_max') or data.get('stock_maximo') or ''
 
             try:

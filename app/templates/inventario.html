@@ -467,7 +467,7 @@
                                 <td class="px-6 py-4">{{ item.tipo_repuesto or '-' }}</td>
                                 <td class="px-6 py-4">{{ item.marca or '-' }}</td>
                                 <td class="px-6 py-4">{{ item.modelo or '-' }}</td>
-                                <td class="px-6 py-4 text-center {% if item.stock is not none and item.stock <= 5 %}inventory-stock-low{% endif %}">{{ item.stock or 0 }}</td>
+                                <td class="px-6 py-4 text-center {% if item.stock is not none and item.stock < (item.stock_minimo if item.stock_minimo is not none else 5) %}inventory-stock-low{% endif %}">{{ item.stock or 0 }}</td>
                                 <td class="px-6 py-4">{{ 'Q ' ~ ('{:.2f}'.format(item.precio_compra)) if item.precio_compra is not none else '-' }}</td>
                                 <td class="px-6 py-4">{{ 'Q ' ~ ('{:.2f}'.format(item.precio_venta)) if item.precio_venta is not none else '-' }}</td>
                                 <td class="px-6 py-4">{{ item.ubicacion_bodega or '-' }}</td>
@@ -682,7 +682,8 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 const precioCompra = item.precio_compra != null ? 'Q ' + parseFloat(item.precio_compra).toFixed(2) : 'Q 0.00';
                 const precioVenta = item.precio_venta != null ? 'Q ' + parseFloat(item.precio_venta).toFixed(2) : 'Q 0.00';
                 const stockValue = Number(item.stock);
-                const stockClass = Number.isFinite(stockValue) && stockValue <= 5 ? 'inventory-stock-low' : '';
+                const minimumValue = item.stock_minimo == null || item.stock_minimo === '' ? 5 : Number(item.stock_minimo);
+                const stockClass = Number.isFinite(stockValue) && Number.isFinite(minimumValue) && stockValue < minimumValue ? 'inventory-stock-low' : '';
                 const editAction = canWrite
                     ? '<a href="' + editUrl + '" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>'
                     : '';
@@ -982,18 +983,23 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 reportTableBody.innerHTML = '<tr><td colspan="8" class="px-6 py-4 text-center text-gray-500">No hay repuestos para el reporte.</td></tr>';
                 return;
             }
-            reportTableBody.innerHTML = repuestos.map(item => `
+            reportTableBody.innerHTML = repuestos.map(item => {
+                const stockValue = Number(item.stock ?? 0);
+                const minimumValue = item.stock_minimo == null || item.stock_minimo === '' ? 5 : Number(item.stock_minimo);
+                const stockBajo = Number.isFinite(stockValue) && Number.isFinite(minimumValue) && stockValue < minimumValue;
+                return `
                 <tr class="hover:bg-gray-50/50 transition-colors">
                     <td class="px-6 py-4 font-semibold text-slate-900">${item.codigo_repuesto || '-'}</td>
                     <td class="px-6 py-4">${item.tipo_repuesto || '-'}</td>
                     <td class="px-6 py-4">${item.marca || '-'}</td>
                     <td class="px-6 py-4">${item.modelo || '-'}</td>
-                    <td class="px-6 py-4 text-center ${item.stock && item.stock <= 5 ? 'text-red-600 font-bold' : ''}">${item.stock || 0}</td>
+                    <td class="px-6 py-4 text-center ${stockBajo ? 'text-red-600 font-bold' : ''}">${item.stock || 0}</td>
                     <td class="px-6 py-4">${item.precio_compra != null ? 'Q ' + parseFloat(item.precio_compra).toFixed(2) : '-'}</td>
                     <td class="px-6 py-4">${item.precio_venta != null ? 'Q ' + parseFloat(item.precio_venta).toFixed(2) : '-'}</td>
                     <td class="px-6 py-4">${item.ubicacion_bodega || '-'}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
         }
 
         function updateExportLink() {
