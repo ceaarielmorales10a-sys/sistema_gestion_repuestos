@@ -4748,13 +4748,105 @@ def agregar_repuesto():
         return redirect(url_for('inventario'))
 
     if request.method == 'POST':
-        conn = pyodbc.connect(CONN_STR, autocommit=True)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO repuesto (codigo_repuesto, stock, precio_venta) VALUES ('TEST-WEB-FINAL', 5, 50.00)")
-        cursor.close()
-        conn.close()
-        flash('¡Prueba directa ejecutada con éxito!', 'success')
-        return redirect(url_for('inventario'))
+        conn = cursor = None
+        try:
+            codigo = (request.form.get('codigo_repuesto') or request.form.get('codigo') or '').strip()
+            if not codigo:
+                raise ValueError('El código del repuesto es obligatorio.')
+
+            def parse_form_id(field_name):
+                value = (request.form.get(field_name) or '').strip()
+                if not value:
+                    return None
+                try:
+                    return int(value)
+                except ValueError as error:
+                    raise ValueError(f'El valor de {field_name} no es válido.') from error
+
+            def parse_form_number(field_name, label, integer=False):
+                value = (request.form.get(field_name) or '').strip()
+                if not value:
+                    return 0 if field_name == 'stock' else None
+                try:
+                    number = int(value) if integer else Decimal(value)
+                except Exception as error:
+                    raise ValueError(f'{label} debe ser un número válido.') from error
+                if number < 0:
+                    raise ValueError(f'{label} no puede ser negativo.')
+                return number
+
+            stock = parse_form_number('stock', 'El stock', integer=True)
+            precio_venta = parse_form_number('precio_venta', 'El precio de venta')
+            precio_compra = parse_form_number('precio_compra', 'El precio de compra')
+            stock_minimo = parse_form_number('stock_minimo', 'El stock mínimo', integer=True)
+            stock_maximo = parse_form_number('stock_maximo', 'El stock máximo', integer=True)
+
+            data = {
+                'codigo_repuesto': codigo,
+                'stock': stock,
+                'precio_venta': precio_venta,
+                'precio_compra': precio_compra,
+                'stock_minimo': stock_minimo,
+                'stock_maximo': stock_maximo,
+                'id_vehiculo_origen': parse_form_id('id_vehiculo_origen'),
+                'id_tipo_repuesto': parse_form_id('id_tipo_repuesto'),
+                'id_marca': parse_form_id('id_marca'),
+                'id_modelo': parse_form_id('id_modelo'),
+                'id_anio': parse_form_id('id_anio'),
+                'id_color': parse_form_id('id_color'),
+                'id_lado': parse_form_id('id_lado'),
+                'id_posicion': parse_form_id('id_posicion'),
+                'id_transmision': parse_form_id('id_transmision'),
+                'id_estado_repuesto': parse_form_id('id_estado_repuesto'),
+                'id_ubicacion': parse_form_id('id_ubicacion'),
+                'observaciones': request.form.get('observaciones', '').strip() or None,
+                'fecha_ingreso': datetime.now(),
+                'id_usuario_registro': session.get('user_id'),
+            }
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            columns = get_table_columns(cursor, 'dbo.repuesto')
+            if not columns:
+                raise RuntimeError('No se pudo consultar el esquema de la tabla repuesto.')
+            column_lookup = {column.casefold(): column for column in columns}
+            insert_values = [
+                (column_lookup[name.casefold()], value)
+                for name, value in data.items()
+                if name.casefold() in column_lookup and value is not None
+            ]
+
+            # Preserve the existing behavior for installations with a separate
+            # active/inactive inventory status column.
+            if 'id_estado_general' in column_lookup:
+                data['id_estado_general'] = get_estado_general_id(cursor, activo=True)
+                insert_values.append((column_lookup['id_estado_general'], data['id_estado_general']))
+
+            names_sql = ', '.join(f'[{name.replace("]", "]]" )}]' for name, _ in insert_values)
+            placeholders = ', '.join('?' for _ in insert_values)
+            cursor.execute(
+                f'INSERT INTO dbo.repuesto ({names_sql}) VALUES ({placeholders})',
+                tuple(value for _, value in insert_values),
+            )
+            conn.commit()
+            flash('¡Repuesto guardado con éxito en el inventario!', 'success')
+            return redirect(url_for('inventario'))
+        except ValueError as error:
+            if conn:
+                conn.rollback()
+            flash(str(error), 'error')
+            return redirect(url_for('agregar_repuesto'))
+        except Exception:
+            if conn:
+                conn.rollback()
+            app.logger.exception('No se pudo guardar el repuesto enviado desde el formulario.')
+            flash('No se pudo guardar el repuesto. Revisa los datos y el esquema de la base de datos.', 'error')
+            return redirect(url_for('agregar_repuesto'))
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     else:
         conn = get_db_connection()
