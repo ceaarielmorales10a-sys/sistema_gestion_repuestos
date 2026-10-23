@@ -4165,6 +4165,7 @@ def inventario():
         base_sql += " ORDER BY id_repuesto DESC"
         cursor.execute(base_sql, tuple(params))
         rows = cursor.fetchall()
+        print(f"[DEBUG] /inventario: SELECT FROM repuesto devolvió {len(rows)} registros.")
         cols = [c[0] for c in cursor.description]
 
         # force stock column if exists in repuesto schema
