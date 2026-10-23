@@ -2620,39 +2620,6 @@ def _get_gemini_api_key():
     return str(env_values.get('GEMINI_API_KEY') or '').strip()
 
 
-def _analytics_gemini_error_message(error, api_key=None):
-    """Return a useful, safe-to-display explanation for Gemini API errors."""
-    status = getattr(error, 'status_code', None) or getattr(error, 'code', None)
-    detail = str(error).strip() or error.__class__.__name__
-    if api_key:
-        detail = detail.replace(api_key, '[clave oculta]')
-    detail = detail[:500]
-
-    try:
-        status_number = int(status)
-    except (TypeError, ValueError):
-        status_number = None
-
-    if status_number in (401, 403):
-        explanation = 'Gemini rechazó la clave API. Verifica que GEMINI_API_KEY sea válida y tenga acceso a Gemini.'
-    elif status_number == 404:
-        explanation = 'Gemini no encontró el modelo solicitado. Verifica GEMINI_MODEL y que el modelo esté disponible para tu clave.'
-    elif status_number == 429:
-        explanation = 'Gemini alcanzó el límite de solicitudes o cuota de la API. Revisa la cuota y vuelve a intentarlo.'
-    elif status_number and status_number >= 500:
-        explanation = 'El servicio de Gemini está temporalmente fuera de servicio.'
-    elif isinstance(error, (ConnectionError, TimeoutError)) or any(
-        token in detail.casefold() for token in ('connection', 'connect', 'timeout', 'timed out', 'dns')
-    ):
-        explanation = 'No se pudo establecer conexión con Gemini. Verifica la conexión a Internet y vuelve a intentarlo.'
-    elif isinstance(error, ImportError):
-        explanation = 'No está instalada la biblioteca google-genai. Instala las dependencias de requirements.txt.'
-    else:
-        explanation = 'Gemini no pudo generar el análisis.'
-
-    return f'{explanation} Detalle: {detail}'
-
-
 def _analytics_dashboard_data(cursor, days):
     inventory_columns = {
         column.lower(): column for column in get_table_columns(cursor, 'dbo.repuesto')
@@ -2963,55 +2930,55 @@ def analizar_inventario_analytics():
     except ValueError as error:
         return jsonify({'success': False, 'error': str(error)}), 400
 
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        return jsonify({
-            'success': False,
-            'error': 'Configura GEMINI_API_KEY en el archivo .env para habilitar las recomendaciones de IA.',
-        }), 503
-
+    conn = cursor = None
+    api_key = None
     try:
+        api_key = _get_gemini_api_key()
+        if not api_key:
+            raise RuntimeError(
+                'Falta GEMINI_API_KEY. Configurala como variable de entorno o en el archivo .env.'
+            )
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        try:
-            analytics_data = _analytics_dashboard_data(cursor, days)
-        finally:
-            cursor.close()
-            conn.close()
-    except Exception:
-        app.logger.exception('No se pudieron preparar los datos para las recomendaciones de IA.')
-        return jsonify({
-            'success': False,
-            'error': 'No fue posible consultar el inventario y las ventas en SQL Server.',
-        }), 503
+        analytics_data = _analytics_dashboard_data(cursor, days)
 
-    try:
-        from google import genai
+        from google import genai, types
 
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=30000),
+        )
         prompt = (
-            "Analiza el siguiente inventario de repuestos de mi taller en Guatemala,"
-            " identifica cuáles tienen stock bajo (menor al mínimo) y dame"
-            " recomendaciones breves de reabastecimiento. IMPORTANTE: Todos los montos"
-            " y valores monetarios deben expresarse estrictamente en **Quetzales (Q)**"
-            f" y no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
+            "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
+            "cuales tienen stock bajo (menor al minimo) y da recomendaciones breves "
+            "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
+            f"no en dolares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-
-        model = (os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip()
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-        )
-
+        model = (os.getenv('GEMINI_MODEL') or 'gemini-2.5-flash').strip()
+        response = client.models.generate_content(model=model, contents=prompt)
         if not response.text:
-            raise RuntimeError('Gemini devolvió una respuesta vacía.')
+            raise RuntimeError('Gemini devolvio una respuesta vacia.')
+
         return jsonify({'success': True, 'analisis': response.text})
     except Exception as error:
-        app.logger.exception('No se pudo generar el análisis de inventario con Gemini.')
-        return jsonify({
-            'success': False,
-            'error': _analytics_gemini_error_message(error, api_key),
-        }), 503
+        app.logger.exception('Fallo la consulta de inventario o el analisis con Gemini.')
+        print(error, flush=True)
+        error_message = str(error) or error.__class__.__name__
+        if api_key:
+            error_message = error_message.replace(api_key, '[clave oculta]')
+        return jsonify({'success': False, 'error': error_message}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                app.logger.exception('No se pudo cerrar el cursor de Analitica IA.')
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                app.logger.exception('No se pudo cerrar la conexion de Analitica IA.')
 
 
 # Catálogos que se administran desde el módulo de mantenimiento.  Se prueban
