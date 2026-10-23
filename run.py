@@ -195,8 +195,18 @@ def build_sql_server_connection_string():
             '. Configure estas variables en el entorno del servicio AWS.'
         )
 
-    port = os.getenv('DB_PORT')
-    if port and ',' not in server:
+    port = (os.getenv('DB_PORT') or '').strip()
+    # SQL Server ODBC accepts the TCP port as part of Server (host,port).
+    # Normalize legacy DB_SERVER values and keep the server/port composition
+    # in one place so callers all use the same target database.
+    if ',' in server:
+        server, configured_port = server.rsplit(',', 1)
+        if not port:
+            port = configured_port.strip()
+    server = server.strip()
+    if port:
+        if not port.isdigit():
+            raise RuntimeError('DB_PORT debe contener únicamente el número de puerto.')
         server = f'{server},{port}'
     driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
     encrypt = os.getenv('DB_ENCRYPT', 'yes')
