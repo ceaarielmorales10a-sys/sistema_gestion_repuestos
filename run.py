@@ -4740,20 +4740,27 @@ def agregar_repuesto():
     cursor = conn.cursor()
 
     if request.method == 'POST':
+        print("DATOS RECIBIDOS DEL FORMULARIO:", request.form)
         try:
+            codigo = request.form.get('codigo_repuesto') or request.form.get('codigo') or 'TEST-DIRECTO'
+            stock = request.form.get('stock') or 1
+            precio = request.form.get('precio_venta') or 10
+
             cursor.execute(
                 'INSERT INTO repuesto (codigo_repuesto, stock, precio_venta) VALUES (?, ?, ?)',
-                (
-                    request.form.get('codigo_repuesto') or 'TEST-WEB',
-                    float(request.form.get('stock') or 1),
-                    float(request.form.get('precio_venta') or 10),
-                ),
+                (codigo, stock, precio)
             )
             conn.commit()
+            print("¡INSERT REALIZADO CON ÉXITO EN RDS!")
+            flash('¡Repuesto guardado con éxito!', 'success')
+            return redirect(url_for('inventario'))
+        except Exception as e:
+            conn.rollback()
+            print("❌ ERROR CRÍTICO EN SQL SERVER:", str(e))
+            return f'<h1>Error de Base de Datos:</h1><pre>{escape(str(e))}</pre>', 500
         finally:
             cursor.close()
             conn.close()
-        return redirect(url_for('inventario'))
 
     else:
         # MÉTODO GET: Mapeado exactamente con las columnas reales de tus tablas
