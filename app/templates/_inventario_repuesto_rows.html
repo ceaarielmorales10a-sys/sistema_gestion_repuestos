@@ -23,7 +23,7 @@
     <td class="px-6 py-4 text-center" data-label="Acciones">
         <div class="flex justify-center gap-3 items-center">
             <button type="button" class="inventory-view-details" title="Ver detalles" aria-label="Ver detalles de {{ repuesto.codigo_repuesto }}"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
-            <button type="button" class="inventory-action-photo {% if repuesto.fotografia %}has-photo inventory-photo-trigger{% else %}no-photo{% endif %}" {% if repuesto.fotografia %}data-image="{{ url_for('static', filename=repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}" title="Ver fotografía" aria-label="Ver fotografía"{% else %}title="Sin fotografía" aria-label="Sin fotografía" disabled{% endif %}><i class="fa-regular fa-image"></i></button>
+            <button type="button" class="inventory-action-photo {% if repuesto.fotografia %}has-photo inventory-photo-trigger{% else %}no-photo{% endif %}" {% if repuesto.fotografia %}data-image="{{ repuesto_photo_url(repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}" title="Ver fotografía" aria-label="Ver fotografía"{% else %}title="Sin fotografía" aria-label="Sin fotografía" disabled{% endif %}><i class="fa-regular fa-image"></i></button>
             {% if has_permission('inventario', 'write') %}
             <a href="/inventario/modificar/{{ repuesto.id_repuesto }}" class="text-blue-500 hover:text-blue-700 transition-colors"><i class="fa-solid fa-pencil"></i></a>
             {% endif %}
@@ -54,7 +54,7 @@
             <div><p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Precio venta</p><p class="font-medium text-slate-800">{{ 'Q ' ~ ('{:.2f}'.format(repuesto.precio_venta)) if repuesto.precio_venta is not none else '-' }}</p></div>
             <div class="inventory-detail-photo-field">
                 <p class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Fotografía</p>
-                {% if repuesto.fotografia %}<button type="button" class="inventory-detail-photo inventory-photo-trigger" data-image="{{ url_for('static', filename=repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}"><img src="{{ url_for('static', filename=repuesto.fotografia) }}" alt="Fotografía de {{ repuesto.codigo_repuesto }}"></button>{% else %}<div class="inventory-detail-photo-empty"><i class="fa-regular fa-image"></i><span>Sin fotografía</span></div>{% endif %}
+                {% if repuesto.fotografia %}<button type="button" class="inventory-detail-photo inventory-photo-trigger" data-image="{{ repuesto_photo_url(repuesto.fotografia) }}" data-caption="{{ repuesto.tipo_repuesto or 'Repuesto' }} - {{ repuesto.codigo_repuesto }}"><img src="{{ repuesto_photo_url(repuesto.fotografia) }}" alt="Fotografía de {{ repuesto.codigo_repuesto }}"></button>{% else %}<div class="inventory-detail-photo-empty"><i class="fa-regular fa-image"></i><span>Sin fotografía</span></div>{% endif %}
             </div>
         </div>
     </td>

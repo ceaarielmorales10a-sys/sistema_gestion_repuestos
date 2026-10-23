@@ -690,7 +690,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             const startIndex = (page - 1) * 10;
             inventoryListBody.innerHTML = repuestos.map((item, index) => {
                 const rowNumber = startIndex + index + 1;
-                const fotoUrl = item.fotografia ? staticUrl + item.fotografia : '';
+                const fotoUrl = item.fotografia ? (/^https?:\/\//i.test(item.fotografia) ? item.fotografia : staticUrl + item.fotografia) : '';
                 const fotoCaption = (item.tipo_repuesto || 'Repuesto') + ' - ' + (item.codigo_repuesto || '');
                 const fotoAttributes = item.fotografia
                     ? 'data-image="' + fotoUrl + '" data-caption="' + fotoCaption + '" title="Ver fotografía" aria-label="Ver fotografía"'

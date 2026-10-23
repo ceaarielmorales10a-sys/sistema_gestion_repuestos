@@ -10,6 +10,10 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from xml.sax.saxutils import escape
 import pyodbc
+try:
+    import boto3
+except ImportError:
+    boto3 = None
 from dotenv import dotenv_values, load_dotenv
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash
@@ -33,6 +37,18 @@ app = Flask('app', template_folder=templates_dir, static_folder=static_dir)
 # Una clave conocida permitiría fabricar cookies de sesión.
 app.secret_key = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') or secrets.token_urlsafe(48)
 
+# S3 se configura con variables de entorno o el proveedor de credenciales de AWS.
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-2')
+BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'sistema-repuestos-imagenes-2026')
+s3_client = None
+if boto3:
+    s3_client = boto3.client(
+        's3',
+        region_name=AWS_REGION,
+        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID') or None,
+        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY') or None,
+    )
+
 # Configuración de sesión: 10 minutos de inactividad antes de expirar
 app.config['PERMANENT_SESSION_LIFETIME'] = 600  # 10 minutos en segundos
 
@@ -43,6 +59,17 @@ def has_permission_in_session(module_key, required_level='read'):
 
 
 app.jinja_env.globals['has_permission'] = has_permission_in_session
+
+
+def repuesto_photo_url(photo_path):
+    if not photo_path:
+        return ''
+    if str(photo_path).startswith(('https://', 'http://')):
+        return photo_path
+    return url_for('static', filename=photo_path)
+
+
+app.jinja_env.globals['repuesto_photo_url'] = repuesto_photo_url
 UPLOAD_REPUESTOS_DIR = os.path.join(static_dir, 'uploads', 'repuestos')
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 MAX_IMAGE_SIZE = 3 * 1024 * 1024
@@ -599,7 +626,7 @@ def ensure_repuesto_photo_column(cursor):
 
 
 def save_repuesto_photo(file_storage):
-    """Valida y guarda una imagen de repuesto, devolviendo su ruta relativa."""
+    """Valida y guarda una foto en S3 o, si no está disponible, localmente."""
     if not file_storage or not file_storage.filename:
         return None
 
@@ -614,8 +641,23 @@ def save_repuesto_photo(file_storage):
     if file_size > MAX_IMAGE_SIZE:
         raise ValueError('La fotografía no puede superar 3 MB.')
 
-    os.makedirs(UPLOAD_REPUESTOS_DIR, exist_ok=True)
     photo_name = f"{uuid4().hex}{extension}"
+    if s3_client:
+        object_key = f'repuestos/{photo_name}'
+        try:
+            file_storage.stream.seek(0)
+            s3_client.upload_fileobj(
+                file_storage.stream,
+                BUCKET_NAME,
+                object_key,
+                ExtraArgs={'ContentType': file_storage.mimetype or 'application/octet-stream'},
+            )
+            return f'https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{object_key}'
+        except Exception:
+            app.logger.exception('No se pudo subir la fotografía a S3; se guardará localmente.')
+
+    os.makedirs(UPLOAD_REPUESTOS_DIR, exist_ok=True)
+    file_storage.stream.seek(0)
     file_storage.save(os.path.join(UPLOAD_REPUESTOS_DIR, photo_name))
     return f"uploads/repuestos/{photo_name}"
 
@@ -5347,8 +5389,6 @@ def ventas():
     cursor = conn.cursor()
     ventas = []
     total_items = 0
-    current_page = 1
-    total_pages = 1
 
     try:
         repuesto_display_col = 'codigo_repuesto'
@@ -8505,3 +8545,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
