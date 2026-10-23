@@ -312,11 +312,11 @@
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
     const hasAllowedExtension = allowedExtensions.some((extension) => file.name.toLowerCase().endsWith(extension));
-    if (file.size > 3 * 1024 * 1024 || (!allowedTypes.includes(file.type) && !hasAllowedExtension)) {
+    if (!allowedTypes.includes(file.type) && !hasAllowedExtension) {
       piecePhoto.value = '';
       if (piecePhotoName) piecePhotoName.textContent = 'Sin fotografía';
       if (piecePhotoPreview) piecePhotoPreview.innerHTML = '<i class="fa-regular fa-image" aria-hidden="true"></i>';
-      window.alert(file.size > 3 * 1024 * 1024 ? 'La fotografía no puede superar 3 MB.' : 'Selecciona una fotografía JPG, PNG o WEBP.');
+      window.alert('Selecciona una fotografía JPG, PNG o WEBP.');
       return;
     }
     if (piecePhotoUrl) URL.revokeObjectURL(piecePhotoUrl);

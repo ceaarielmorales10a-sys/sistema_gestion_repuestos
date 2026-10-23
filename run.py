@@ -34,6 +34,8 @@ static_dir = os.path.join(base_dir, 'app', 'static')
 
 # Inicializamos Flask vinculando correctamente la subcarpeta 'app'
 app = Flask('app', template_folder=templates_dir, static_folder=static_dir)
+# No aplicar un límite de tamaño de solicitud a las fotografías subidas.
+app.config['MAX_CONTENT_LENGTH'] = None
 # En producción defina FLASK_SECRET_KEY con un valor largo y aleatorio.
 # Una clave conocida permitiría fabricar cookies de sesión.
 app.secret_key = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') or secrets.token_urlsafe(48)
@@ -73,7 +75,6 @@ def repuesto_photo_url(photo_path):
 app.jinja_env.globals['repuesto_photo_url'] = repuesto_photo_url
 UPLOAD_REPUESTOS_DIR = os.path.join(static_dir, 'uploads', 'repuestos')
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
-MAX_IMAGE_SIZE = 3 * 1024 * 1024
 
 
 @app.before_request
@@ -679,12 +680,6 @@ def save_repuesto_photo(file_storage):
     extension = os.path.splitext(filename)[1].lower()
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         raise ValueError('La fotografía debe ser JPG, PNG o WEBP.')
-
-    file_storage.stream.seek(0, os.SEEK_END)
-    file_size = file_storage.stream.tell()
-    file_storage.stream.seek(0)
-    if file_size > MAX_IMAGE_SIZE:
-        raise ValueError('La fotografía no puede superar 3 MB.')
 
     photo_name = f"{uuid4().hex}{extension}"
     if s3_client:
@@ -6108,6 +6103,15 @@ def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
         except ValueError:
             raise ValueError('La fecha de adquisición no es válida.')
 
+    origin_name = str(form.get('origen_adquisicion') or '').strip()
+    origin_id = next(
+        (
+            catalog_id for catalog_id, catalog_name in catalogs.get('origenes', [])
+            if normalize_search_text(catalog_name) == normalize_search_text(origin_name)
+        ),
+        None,
+    )
+
     values = {
         'id_marca': brand_id,
         'id_modelo': model_id,
@@ -6178,10 +6182,10 @@ def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
     )
     process = cursor.fetchone()
     process_id = process[0] if process else None
+    process_columns = {
+        column.lower(): column for column in get_table_columns(cursor, 'desarme')
+    }
     if process_id is None:
-        process_columns = {
-            column.lower(): column for column in get_table_columns(cursor, 'desarme')
-        }
         user_column = next(
             (
                 column
@@ -6198,7 +6202,7 @@ def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
             'fecha_inicio': datetime.now() if str(
                 next((name for value, name in catalogs['estados'] if str(value) == str(state_id)), '')
             ).strip().casefold().startswith('en proceso') else None,
-            'id_vehiculo_origen': None,
+            'id_vehiculo_origen': origin_id,
             'id_estado': 1,
         }
         if user_column:
@@ -6217,10 +6221,17 @@ def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
             tuple(value for _, value in process_insert_values),
         )
     else:
-        cursor.execute(
-            'UPDATE dbo.desarme SET id_estado_desarme = ? WHERE id_desarme = ?',
-            (state_id, process_id),
-        )
+        if 'id_vehiculo_origen' in process_columns:
+            cursor.execute(
+                'UPDATE dbo.desarme SET id_estado_desarme = ?, id_vehiculo_origen = ? '
+                'WHERE id_desarme = ?',
+                (state_id, origin_id, process_id),
+            )
+        else:
+            cursor.execute(
+                'UPDATE dbo.desarme SET id_estado_desarme = ? WHERE id_desarme = ?',
+                (state_id, process_id),
+            )
 
     return vehicle_id
 
@@ -6320,6 +6331,7 @@ def desarme():
                     'anios': [(item['id'], item['nombre']) for item in anios],
                     'colores': [(item['id'], item['nombre']) for item in colores],
                     'transmisiones': [(item['id'], item['nombre']) for item in transmisiones],
+                    'origenes': [(item['id'], item['nombre']) for item in origenes],
                     'estados': [(item['id'], item['nombre']) for item in estados],
                 },
                 process_link_ready,
@@ -7417,6 +7429,7 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
     if repuesto_id is None:
         match_columns = []
         match_params = []
+        origin_match_clause = ''
         if 'id_tipo_repuesto' in repuesto_columns:
             match_columns.append(f'[{repuesto_columns["id_tipo_repuesto"]}] = ?')
             match_params.append(id_tipo_repuesto)
@@ -7441,12 +7454,16 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
         if 'id_posicion' in repuesto_columns and id_posicion is not None:
             match_columns.append(f'[{repuesto_columns["id_posicion"]}] = ?')
             match_params.append(id_posicion)
+        if 'id_vehiculo_origen' in repuesto_columns and id_vehiculo_origen is not None:
+            origin_column = repuesto_columns['id_vehiculo_origen']
+            origin_match_clause = f' AND ([{origin_column}] = ? OR [{origin_column}] IS NULL)'
+            match_params.append(id_vehiculo_origen)
 
-        if match_columns:
-            where_clause = ' AND '.join(match_columns)
+        if match_columns or origin_match_clause:
+            where_clause = ' AND '.join(match_columns) or '1 = 1'
             cursor.execute(
                 f'SELECT TOP 1 [{repuesto_columns["id_repuesto"]}], [{repuesto_columns["stock"]}] '
-                f'FROM dbo.repuesto WHERE {where_clause}',
+                f'FROM dbo.repuesto WHERE {where_clause}{origin_match_clause}',
                 tuple(match_params),
             )
             existing = cursor.fetchone()
@@ -7469,6 +7486,12 @@ def _register_desarme_piece_in_inventory(cursor, process_id, vehicle_data, piece
         if 'id_transmision' in repuesto_columns and id_transmision is not None:
             set_clause += f', [{repuesto_columns["id_transmision"]}] = ?'
             params.append(id_transmision)
+        if 'id_vehiculo_origen' in repuesto_columns and id_vehiculo_origen is not None:
+            set_clause += f', [{repuesto_columns["id_vehiculo_origen"]}] = ?'
+            params.append(id_vehiculo_origen)
+        if 'precio_venta' in repuesto_columns and piece.get('precio_venta') is not None:
+            set_clause += f', [{repuesto_columns["precio_venta"]}] = ?'
+            params.append(piece['precio_venta'])
         if 'id_estado_repuesto' in repuesto_columns:
             available_state = _desarme_available_inventory_state_id(cursor)
             if available_state is None:
@@ -7652,7 +7675,8 @@ def finalizar_desarme(vehicle_id):
             raise ValueError('No se encontró un estado válido en el catálogo de resultado_desarme.')
 
         cursor.execute(
-            'SELECT vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, vd.id_transmision '
+            'SELECT vd.id_marca, vd.id_modelo, vd.id_anio, vd.id_color, vd.id_transmision, '
+            'vd.origen_adquisicion '
             'FROM dbo.desarme d '
             'LEFT JOIN dbo.vehiculo_desarme vd ON vd.id_vehiculo_desarme = ? '
             'WHERE d.id_desarme = ?',
@@ -7672,6 +7696,16 @@ def finalizar_desarme(vehicle_id):
             )
             origin_row = cursor.fetchone()
             origin_id = origin_row[0] if origin_row else None
+        if origin_id is None and vehicle_data_row[5]:
+            origin_name = normalize_search_text(vehicle_data_row[5])
+            origin_id = next(
+                (
+                    row[0]
+                    for row in (fetch_catalog_for_candidates(cursor, ['vehiculo_origen']) or [])
+                    if normalize_search_text(row[1]) == origin_name
+                ),
+                None,
+            )
         vehicle_data = {
             'id_marca': vehicle_data_row[0],
             'id_modelo': vehicle_data_row[1],

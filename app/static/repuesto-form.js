@@ -134,11 +134,6 @@
   const previewFrame = form.querySelector('#photo-placeholder');
   const showPreview = (file) => {
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      if (photoInput) photoInput.value = '';
-      window.alert('La fotografía no puede superar 3 MB.');
-      return;
-    }
     previewImage.src = URL.createObjectURL(file);
     previewName.textContent = file.name;
     preview.hidden = false;
