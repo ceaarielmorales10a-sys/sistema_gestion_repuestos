@@ -189,7 +189,7 @@
                         </select>
                     </div>
                     <div class="w-full md:w-auto">
-                        <button type="submit" name="stock_bajo" value="1" class="w-full px-4 py-3 {% if stock_bajo_filter %}bg-red-700 ring-2 ring-red-300{% else %}bg-red-600 hover:bg-red-700{% endif %} text-white font-semibold text-sm rounded-2xl shadow-sm transition-colors flex items-center justify-center gap-2" {% if stock_bajo_filter %}aria-pressed="true" data-active="true"{% endif %}>
+                        <button type="button" name="stock_bajo" value="1" class="w-full px-4 py-3 {% if stock_bajo_filter %}bg-red-700 ring-2 ring-red-300{% else %}bg-red-600 hover:bg-red-700{% endif %} text-white font-semibold text-sm rounded-2xl shadow-sm transition-colors flex items-center justify-center gap-2" {% if stock_bajo_filter %}aria-pressed="true" data-active="true"{% else %}aria-pressed="false"{% endif %}>
                             <i class="fa-solid fa-triangle-exclamation"></i> Stock Bajo
                         </button>
                     </div>
@@ -587,29 +587,29 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             if (searchForm) {
                 searchForm.addEventListener('submit', (event) => {
                     event.preventDefault();
-                    const submitter = event.submitter;
-                    const stockBajoInput = searchForm.querySelector('[name="stock_bajo"]');
-                    if (submitter && submitter.name === 'stock_bajo') {
-                        // Toggle stock_bajo filter
-                        const isActive = stockBajoInput.hasAttribute('data-active');
-                        if (isActive) {
-                            stockBajoInput.removeAttribute('data-active');
-                            stockBajoInput.classList.remove('bg-red-700', 'ring-2', 'ring-red-300');
-                            stockBajoInput.classList.add('bg-red-600', 'hover:bg-red-700');
-                            stockBajoInput.setAttribute('aria-pressed', 'false');
-                        } else {
-                            stockBajoInput.setAttribute('data-active', 'true');
-                            stockBajoInput.classList.add('bg-red-700', 'ring-2', 'ring-red-300');
-                            stockBajoInput.classList.remove('bg-red-600', 'hover:bg-red-700');
-                            stockBajoInput.setAttribute('aria-pressed', 'true');
-                        }
-                    }
                     fetchInventoryList(1);
                 });
             }
 
             // AJAX inventory list filters
             const tipoSelect = searchForm ? searchForm.querySelector('select[name="tipo_repuesto"]') : null;
+            const stockBajoInput = searchForm ? searchForm.querySelector('[name="stock_bajo"]') : null;
+            let stockBajoActive = Boolean(stockBajoInput && stockBajoInput.hasAttribute('data-active'));
+            function setStockBajoActive(active) {
+                stockBajoActive = Boolean(active);
+                if (!stockBajoInput) return;
+                stockBajoInput.toggleAttribute('data-active', stockBajoActive);
+                stockBajoInput.classList.toggle('bg-red-700', stockBajoActive);
+                stockBajoInput.classList.toggle('ring-2', stockBajoActive);
+                stockBajoInput.classList.toggle('ring-red-300', stockBajoActive);
+                stockBajoInput.classList.toggle('bg-red-600', !stockBajoActive);
+                stockBajoInput.classList.toggle('hover:bg-red-700', !stockBajoActive);
+                stockBajoInput.setAttribute('aria-pressed', String(stockBajoActive));
+            }
+            stockBajoInput?.addEventListener('click', () => {
+                setStockBajoActive(!stockBajoActive);
+                fetchInventoryList(1);
+            });
             const inventoryLists = {
                 activo: { body: document.getElementById('inventory-active-body'), pagination: document.getElementById('inventory-active-pagination'), page: {{ activos_page }} },
                 inactivo: { body: document.getElementById('inventory-inactive-body'), pagination: document.getElementById('inventory-inactive-pagination'), page: {{ inactivos_page }} },
@@ -627,8 +627,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             const params = new URLSearchParams();
             if (searchInput && searchInput.value.trim()) params.set('q', searchInput.value.trim());
             if (tipoSelect && tipoSelect.value) params.set('tipo_repuesto', tipoSelect.value);
-            const stockBajoInput = searchForm ? searchForm.querySelector('[name="stock_bajo"]') : null;
-            if (stockBajoInput && stockBajoInput.hasAttribute('data-active')) params.set('stock_bajo', '1');
+            if (stockBajoActive) params.set('stock_bajo', '1');
             params.set('estado', selectedInventoryStatus);
             params.set('page', list.page);
             try {
@@ -643,18 +642,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                 currentTipoId = data.selected_tipo_id;
                 currentPage = data.current_page;
                 // Update stock_bajo button state from server response
-                const stockBajoInput = searchForm ? searchForm.querySelector('[name="stock_bajo"]') : null;
-                if (stockBajoInput && data.stock_bajo_filter) {
-                    stockBajoInput.setAttribute('data-active', 'true');
-                    stockBajoInput.classList.add('bg-red-700', 'ring-2', 'ring-red-300');
-                    stockBajoInput.classList.remove('bg-red-600', 'hover:bg-red-700');
-                    stockBajoInput.setAttribute('aria-pressed', 'true');
-                } else if (stockBajoInput && !data.stock_bajo_filter) {
-                    stockBajoInput.removeAttribute('data-active');
-                    stockBajoInput.classList.remove('bg-red-700', 'ring-2', 'ring-red-300');
-                    stockBajoInput.classList.add('bg-red-600', 'hover:bg-red-700');
-                    stockBajoInput.setAttribute('aria-pressed', 'false');
-                }
+                setStockBajoActive(data.stock_bajo_filter);
             } catch (error) {
                 console.error(`Error fetching ${selectedInventoryStatus} inventory:`, error);
             }
