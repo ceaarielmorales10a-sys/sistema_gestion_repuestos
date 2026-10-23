@@ -2620,6 +2620,39 @@ def _get_gemini_api_key():
     return str(env_values.get('GEMINI_API_KEY') or '').strip()
 
 
+def _analytics_gemini_error_message(error, api_key=None):
+    """Return a useful, safe-to-display explanation for Gemini API errors."""
+    status = getattr(error, 'status_code', None) or getattr(error, 'code', None)
+    detail = str(error).strip() or error.__class__.__name__
+    if api_key:
+        detail = detail.replace(api_key, '[clave oculta]')
+    detail = detail[:500]
+
+    try:
+        status_number = int(status)
+    except (TypeError, ValueError):
+        status_number = None
+
+    if status_number in (401, 403):
+        explanation = 'Gemini rechazó la clave API. Verifica que GEMINI_API_KEY sea válida y tenga acceso a Gemini.'
+    elif status_number == 404:
+        explanation = 'Gemini no encontró el modelo solicitado. Verifica GEMINI_MODEL y que el modelo esté disponible para tu clave.'
+    elif status_number == 429:
+        explanation = 'Gemini alcanzó el límite de solicitudes o cuota de la API. Revisa la cuota y vuelve a intentarlo.'
+    elif status_number and status_number >= 500:
+        explanation = 'El servicio de Gemini está temporalmente fuera de servicio.'
+    elif isinstance(error, (ConnectionError, TimeoutError)) or any(
+        token in detail.casefold() for token in ('connection', 'connect', 'timeout', 'timed out', 'dns')
+    ):
+        explanation = 'No se pudo establecer conexión con Gemini. Verifica la conexión a Internet y vuelve a intentarlo.'
+    elif isinstance(error, ImportError):
+        explanation = 'No está instalada la biblioteca google-genai. Instala las dependencias de requirements.txt.'
+    else:
+        explanation = 'Gemini no pudo generar el análisis.'
+
+    return f'{explanation} Detalle: {detail}'
+
+
 def _analytics_dashboard_data(cursor, days):
     inventory_columns = {
         column.lower(): column for column in get_table_columns(cursor, 'dbo.repuesto')
@@ -2964,17 +2997,20 @@ def analizar_inventario_analytics():
             f" y no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
 
+        model = (os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip()
         response = client.models.generate_content(
-            model='gemini-3.8-flash',
+            model=model,
             contents=prompt,
         )
 
+        if not response.text:
+            raise RuntimeError('Gemini devolvió una respuesta vacía.')
         return jsonify({'success': True, 'analisis': response.text})
-    except Exception:
+    except Exception as error:
         app.logger.exception('No se pudo generar el análisis de inventario con Gemini.')
         return jsonify({
             'success': False,
-            'error': 'El servicio de IA no está disponible temporalmente. Intenta de nuevo más tarde.',
+            'error': _analytics_gemini_error_message(error, api_key),
         }), 503
 
 

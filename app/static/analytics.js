@@ -308,12 +308,22 @@
     button.disabled = true;
     output.textContent = 'Generando análisis inteligente...';
     try {
-      const response = await fetch('/api/analytics/stock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ dias: currentDays }),
-      });
-      const result = await response.json();
+      let response;
+      try {
+        response = await fetch('/api/analytics/stock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ dias: currentDays }),
+        });
+      } catch (error) {
+        throw new Error('No se pudo conectar con el servidor de Analítica IA. Verifica tu conexión e inténtalo de nuevo.');
+      }
+      let result;
+      try {
+        result = await response.json();
+      } catch (error) {
+        throw new Error(`El servidor respondió con un formato inesperado (HTTP ${response.status}).`);
+      }
       if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo generar el análisis de IA.');
       renderAnalysis(output, result.analisis);
     } catch (error) {
