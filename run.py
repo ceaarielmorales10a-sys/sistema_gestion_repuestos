@@ -200,7 +200,7 @@ def build_sql_server_connection_string():
         server = f'{server},{port}'
     driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
     encrypt = os.getenv('DB_ENCRYPT', 'yes')
-    trust_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'no')
+    trust_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'yes')
     return (
         f'Driver={_odbc_value(driver)};'
         f'Server={_odbc_value(server)};'
