@@ -4158,7 +4158,8 @@ def inventario():
                 params.append(selected_tipo_id)
             where_clauses.append('id_tipo_repuesto = ?')
         if stock_bajo_filter:
-            where_clauses.append('COALESCE(stock, 0) <= COALESCE(stock_minimo, 5)')
+            # Match the inventory table's red stock indicator (stock <= 5).
+            where_clauses.append('COALESCE(stock, 0) <= 5')
         if where_clauses:
             base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         # El ID se genera al registrar cada repuesto; ordenarlo de forma descendente
@@ -4371,9 +4372,7 @@ def inventario():
 
     stock_bajo = sum(
         1 for repuesto in lista_repuestos
-        if repuesto.get('stock', 0) <= (
-            repuesto.get('stock_minimo') if repuesto.get('stock_minimo') is not None else 5
-        )
+        if (parse_int_like(repuesto.get('stock')) or 0) <= 5
     )
 
     # Filtrar repuestos para el reporte usando los filtros del reporte
@@ -4564,7 +4563,8 @@ def inventario_list_data():
                 params.append(selected_tipo_id)
             where_clauses.append('id_tipo_repuesto = ?')
         if stock_bajo_filter:
-            where_clauses.append('COALESCE(stock, 0) <= COALESCE(stock_minimo, 5)')
+            # Keep the AJAX list consistent with the red stock cell in the UI.
+            where_clauses.append('COALESCE(stock, 0) <= 5')
         if where_clauses:
             base_sql += ' WHERE ' + ' AND '.join(where_clauses)
         base_sql += " ORDER BY id_repuesto DESC"
