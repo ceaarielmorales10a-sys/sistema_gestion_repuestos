@@ -4766,7 +4766,8 @@ def agregar_repuesto():
             def parse_form_number(field_name, label, integer=False):
                 value = (request.form.get(field_name) or '').strip()
                 if not value:
-                    return 0 if field_name == 'stock' else None
+                    defaults = {'stock': 0, 'stock_minimo': 1, 'stock_maximo': 100}
+                    return defaults.get(field_name, 0)
                 try:
                     number = int(value) if integer else Decimal(value)
                 except Exception as error:
@@ -4797,7 +4798,7 @@ def agregar_repuesto():
                 'id_lado': parse_form_id('id_lado'),
                 'id_posicion': parse_form_id('id_posicion'),
                 'id_transmision': parse_form_id('id_transmision'),
-                'id_estado_repuesto': parse_form_id('id_estado_repuesto'),
+                'id_estado_repuesto': parse_form_id('id_estado_repuesto') or 1,
                 'id_ubicacion': parse_form_id('id_ubicacion'),
                 'observaciones': request.form.get('observaciones', '').strip() or None,
                 'fecha_ingreso': datetime.now(),
@@ -4840,14 +4841,8 @@ def agregar_repuesto():
             if conn:
                 conn.rollback()
             app.logger.exception('No se pudo guardar el repuesto enviado desde el formulario.')
-            error_html = escape(str(error))
-            return (
-                '<h1>⚠️ Error exacto de SQL Server:</h1>'
-                f'<pre style="color:red; font-size:16px;">{error_html}</pre>'
-                '<br><a href="/inventario">Volver al inventario</a>',
-                500,
-                {'Content-Type': 'text/html; charset=utf-8'},
-            )
+            flash(f'⚠️ Error al guardar en la base de datos: {error}', 'danger')
+            return redirect(url_for('inventario'))
         finally:
             if cursor:
                 cursor.close()
