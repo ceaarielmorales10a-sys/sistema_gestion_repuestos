@@ -603,11 +603,6 @@ window.addEventListener('resize', normalizeSidebarOnResize);
                             stockBajoInput.classList.remove('bg-red-600', 'hover:bg-red-700');
                             stockBajoInput.setAttribute('aria-pressed', 'true');
                         }
-                    } else {
-                        stockBajoInput.removeAttribute('data-active');
-                        stockBajoInput.classList.remove('bg-red-700', 'ring-2', 'ring-red-300');
-                        stockBajoInput.classList.add('bg-red-600', 'hover:bg-red-700');
-                        stockBajoInput.setAttribute('aria-pressed', 'false');
                     }
                     fetchInventoryList(1);
                 });
@@ -937,7 +932,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             let searchTimeout;
             searchInput.addEventListener('input', () => {
                 clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => fetchInventoryList(), 300);
+                searchTimeout = setTimeout(() => fetchInventoryList(1), 200);
             });
         }
         if (tipoSelect) {
