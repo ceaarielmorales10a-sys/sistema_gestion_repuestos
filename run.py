@@ -4828,7 +4828,11 @@ def agregar_repuesto():
                 'id_estado_general': id_estado_general,
             }
 
-            insert_row_filtered(cursor, 'repuesto', insert_data)
+            rowcount = insert_row_filtered(cursor, 'repuesto', insert_data)
+            if rowcount is None or rowcount <= 0:
+                raise RuntimeError(
+                    'La base de datos no confirmó la inserción del repuesto.'
+                )
             
             repuesto_id = None
             try:
