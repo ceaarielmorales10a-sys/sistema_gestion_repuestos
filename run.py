@@ -4881,9 +4881,11 @@ def agregar_repuesto():
             return redirect(url_for('inventario'))
 
         except Exception as e:
+            # Diagnóstico temporal: dejar el error de SQL Server en los logs.
+            print(f'❌ ERROR REAL DE RDS AL INSERTAR REPUESTO: {e}')
             conn.rollback()
-            flash(f'Error al guardar el repuesto: {str(e)}', 'error')
-            return redirect(url_for('agregar_repuesto'))
+            flash(f'⚠️ ERROR DE BASE DE DATOS EN AWS: {str(e)}', 'danger')
+            return redirect(url_for('inventario'))
         
         finally:
             cursor.close()
