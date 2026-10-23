@@ -4778,6 +4778,8 @@ def agregar_repuesto():
             precio_compra = parse_form_number('precio_compra', 'El precio de compra')
             stock_minimo = parse_form_number('stock_minimo', 'El stock mínimo', integer=True)
             stock_maximo = parse_form_number('stock_maximo', 'El stock máximo', integer=True)
+            if stock_maximo is not None and stock > stock_maximo:
+                raise ValueError('El stock actual no puede ser mayor que el stock máximo.')
 
             data = {
                 'codigo_repuesto': codigo,

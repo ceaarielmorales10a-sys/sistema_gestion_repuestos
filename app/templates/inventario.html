@@ -608,7 +608,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             }
             stockBajoInput?.addEventListener('click', () => {
                 setStockBajoActive(!stockBajoActive);
-                fetchInventoryList(1);
+                Object.keys(inventoryLists).forEach(status => fetchInventoryList(1, status));
             });
             const inventoryLists = {
                 activo: { body: document.getElementById('inventory-active-body'), pagination: document.getElementById('inventory-active-pagination'), page: {{ activos_page }} },
@@ -621,30 +621,30 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             let currentSearchQuery = '{{ search_query }}';
             let currentTipoId = '{{ selected_tipo_id }}';
 
-        async function fetchInventoryList(page = 1) {
-            const list = inventoryLists[selectedInventoryStatus];
+        async function fetchInventoryList(page = 1, status = selectedInventoryStatus) {
+            const list = inventoryLists[status];
             list.page = page;
             const params = new URLSearchParams();
             if (searchInput && searchInput.value.trim()) params.set('q', searchInput.value.trim());
             if (tipoSelect && tipoSelect.value) params.set('tipo_repuesto', tipoSelect.value);
             if (stockBajoActive) params.set('stock_bajo', '1');
-            params.set('estado', selectedInventoryStatus);
+            params.set('estado', status);
             params.set('page', list.page);
             try {
                 const response = await fetch(`{{ url_for('inventario_list_data') }}?${params.toString()}`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 list.page = data.current_page;
-                renderInventoryList(data.repuestos, list.body, selectedInventoryStatus, data.current_page);
-                renderPagination(selectedInventoryStatus, data.current_page, data.total_pages, data.total_items);
-                document.getElementById(`inventory-${selectedInventoryStatus}-count`).textContent = data.total_items;
+                renderInventoryList(data.repuestos, list.body, status, data.current_page);
+                renderPagination(status, data.current_page, data.total_pages, data.total_items);
+                document.getElementById(`inventory-${status}-count`).textContent = data.total_items;
                 currentSearchQuery = data.search_query;
                 currentTipoId = data.selected_tipo_id;
                 currentPage = data.current_page;
                 // Update stock_bajo button state from server response
                 setStockBajoActive(data.stock_bajo_filter);
             } catch (error) {
-                console.error(`Error fetching ${selectedInventoryStatus} inventory:`, error);
+                console.error(`Error fetching ${status} inventory:`, error);
             }
         }
 
@@ -772,7 +772,7 @@ window.addEventListener('resize', normalizeSidebarOnResize);
             }
             paginationContainer.innerHTML = `<div class="px-4 py-4 bg-white border border-gray-200/80 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4"><p class="text-sm text-gray-600">Mostrando ${totalItems} repuestos ${status === 'inactivo' ? 'inactivos' : 'activos'}. Página ${page} de ${totalPages}.</p><div class="flex flex-wrap items-center gap-2">${html}</div></div>`;
             paginationContainer.querySelectorAll('.pagination-btn').forEach(btn => {
-                btn.addEventListener('click', () => fetchInventoryList(parseInt(btn.dataset.page)));
+                btn.addEventListener('click', () => fetchInventoryList(parseInt(btn.dataset.page), selectedInventoryStatus));
             });
         }
 
