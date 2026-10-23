@@ -4885,8 +4885,7 @@ def agregar_repuesto():
         except Exception as e:
             print('ERROR:', e)
             conn.rollback()
-            flash(f'Error al registrar: {str(e)}', 'danger')
-            return redirect(url_for('inventario'))
+            return str(e), 500
         
         finally:
             cursor.close()
