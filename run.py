@@ -4736,31 +4736,18 @@ def agregar_repuesto():
         flash('No tienes permisos para agregar repuestos.', 'error')
         return redirect(url_for('inventario'))
 
-    conn = pyodbc.connect(CONN_STR, autocommit=True)
-    cursor = conn.cursor()
-
     if request.method == 'POST':
-        print("DATOS RECIBIDOS DEL FORMULARIO:", request.form)
-        try:
-            codigo = request.form.get('codigo_repuesto') or request.form.get('codigo') or 'TEST-DIRECTO'
-            stock = request.form.get('stock') or 1
-            precio = request.form.get('precio_venta') or 10
-
-            cursor.execute(
-                'INSERT INTO repuesto (codigo_repuesto, stock, precio_venta) VALUES (?, ?, ?)',
-                (codigo, stock, precio)
-            )
-            print("¡INSERT REALIZADO CON ÉXITO EN RDS!")
-            flash('¡Repuesto guardado con éxito!', 'success')
-            return redirect(url_for('inventario'))
-        except Exception as e:
-            print("❌ ERROR CRÍTICO EN SQL SERVER:", str(e))
-            return f'<h1>Error de Base de Datos:</h1><pre>{escape(str(e))}</pre>', 500
-        finally:
-            cursor.close()
-            conn.close()
+        conn = pyodbc.connect(CONN_STR, autocommit=True)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO repuesto (codigo_repuesto, stock, precio_venta) VALUES ('TEST-WEB-FINAL', 5, 50.00)")
+        cursor.close()
+        conn.close()
+        flash('¡Prueba directa ejecutada con éxito!', 'success')
+        return redirect(url_for('inventario'))
 
     else:
+        conn = get_db_connection()
+        cursor = conn.cursor()
         # MÉTODO GET: Mapeado exactamente con las columnas reales de tus tablas
         try:
                 # Use dynamic catalog fetcher with candidate table names to avoid column-name mismatches
