@@ -2952,7 +2952,7 @@ def analizar_inventario_analytics():
             "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
             f"no en dolares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
         if not response.text:
             raise RuntimeError('Gemini devolvio una respuesta vacia.')
 
