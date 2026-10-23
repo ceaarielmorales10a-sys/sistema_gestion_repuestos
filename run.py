@@ -2943,20 +2943,16 @@ def analizar_inventario_analytics():
         cursor = conn.cursor()
         analytics_data = _analytics_dashboard_data(cursor, days)
 
-        from google import genai, types
+        from google import genai
 
-        client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(timeout=30000),
-        )
+        client = genai.Client()
         prompt = (
             "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
             "cuales tienen stock bajo (menor al minimo) y da recomendaciones breves "
             "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
             f"no en dolares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        model = (os.getenv('GEMINI_MODEL') or 'gemini-2.5-flash').strip()
-        response = client.models.generate_content(model=model, contents=prompt)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         if not response.text:
             raise RuntimeError('Gemini devolvio una respuesta vacia.')
 
