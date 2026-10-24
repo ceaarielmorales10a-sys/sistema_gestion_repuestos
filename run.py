@@ -57,6 +57,31 @@ if boto3:
 app.config['PERMANENT_SESSION_LIFETIME'] = 600  # 10 minutos en segundos
 
 
+@app.after_request
+def prevent_private_pages_from_browser_cache(response):
+    # Evita que las páginas de sesión activa se restauren desde la caché móvil.
+    if request.endpoint != 'static':
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+        if response.mimetype == 'text/html' and session.get('user_id'):
+            page_restore_guard = (
+                '<script>'
+                'window.addEventListener("pageshow",function(event){'
+                'if(event.persisted){'
+                'document.documentElement.style.visibility="hidden";'
+                'window.location.reload();'
+                '}});'
+                '</script>'
+            )
+            html = response.get_data(as_text=True)
+            if '</body>' in html:
+                response.set_data(html.replace('</body>', page_restore_guard + '</body>', 1))
+
+    return response
+
+
 def has_permission_in_session(module_key, required_level='read'):
     role_permissions = session.get('role_permissions') or build_default_permissions_for_role(session.get('role'))
     return has_module_permission(role_permissions, module_key, required_level)
@@ -2943,19 +2968,14 @@ def analytics_dashboard_api():
 
 @app.route('/api/analytics/stock', methods=['POST'])
 def analizar_inventario_analytics():
+    conn = cursor = client = None
     try:
         request_data = request.get_json(silent=True) or {}
         days = _analytics_days(request_data.get('dias', 30))
-    except ValueError as error:
-        return jsonify({'success': False, 'error': str(error)}), 400
-
-    conn = cursor = None
-    api_key = None
-    try:
         api_key = _get_gemini_api_key()
         if not api_key:
             raise RuntimeError(
-                'Falta GEMINI_API_KEY. Configurala como variable de entorno o en el archivo .env.'
+                'Falta GEMINI_API_KEY. Configurála como variable de entorno o en el archivo .env.'
             )
 
         conn = get_db_connection()
@@ -2967,11 +2987,11 @@ def analizar_inventario_analytics():
         client = genai.Client()
         prompt = (
             "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
-            "cuales tienen stock bajo (menor al minimo) y da recomendaciones breves "
+            "cuáles tienen stock bajo (menor al mínimo) y da recomendaciones breves "
             "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
-            f"no en dolares: {json.dumps(analytics_data, ensure_ascii=False)}"
+            f"no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        primary_model = 'gemini-3.8-flash'
+        primary_model = 'gemini-2.5-flash'
         fallback_model = 'gemini-3.6-flash'
         try:
             response = client.models.generate_content(
@@ -2983,7 +3003,7 @@ def analizar_inventario_analytics():
                 raise
 
             app.logger.warning(
-                'Gemini devolvió alta demanda para %s; se reintentará una vez.',
+                'Gemini tuvo alta demanda para %s; se reintentará una vez.',
                 primary_model,
             )
             time.sleep(1)
@@ -3004,28 +3024,30 @@ def analizar_inventario_analytics():
                     model=fallback_model,
                     contents=prompt,
                 )
-        if not response.text:
-            raise RuntimeError('Gemini devolvio una respuesta vacia.')
 
+        if not response.text:
+            raise RuntimeError('Gemini devolvió una respuesta vacía.')
         return jsonify({'success': True, 'analisis': response.text})
-    except Exception as error:
-        app.logger.exception('Fallo la consulta de inventario o el analisis con Gemini.')
-        print(error, flush=True)
-        error_message = str(error) or error.__class__.__name__
-        if api_key:
-            error_message = error_message.replace(api_key, '[clave oculta]')
-        return jsonify({'success': False, 'error': error_message}), 500
+    except Exception as e:
+        app.logger.exception('Error en Analítica IA (base de datos o Gemini).')
+        print(f"Error IA: {e}", flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if cursor:
             try:
                 cursor.close()
-            except Exception:
-                app.logger.exception('No se pudo cerrar el cursor de Analitica IA.')
+            except Exception as close_error:
+                app.logger.warning('No se pudo cerrar el cursor de Analítica IA: %s', close_error)
         if conn:
             try:
                 conn.close()
-            except Exception:
-                app.logger.exception('No se pudo cerrar la conexion de Analitica IA.')
+            except Exception as close_error:
+                app.logger.warning('No se pudo cerrar la conexión de Analítica IA: %s', close_error)
+        if client:
+            try:
+                client.close()
+            except Exception as close_error:
+                app.logger.warning('No se pudo cerrar el cliente Gemini: %s', close_error)
 
 
 # Catálogos que se administran desde el módulo de mantenimiento.  Se prueban
