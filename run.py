@@ -53,8 +53,8 @@ if boto3:
         aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY') or None,
     )
 
-# Configuración de sesión: 10 minutos de inactividad antes de expirar
-app.config['PERMANENT_SESSION_LIFETIME'] = 600  # 10 minutos en segundos
+# Configuración de sesión: 5 minutos desde la ultima solicitud antes de expirar
+app.config['PERMANENT_SESSION_LIFETIME'] = 300  # 5 minutos en segundos
 
 
 @app.after_request
