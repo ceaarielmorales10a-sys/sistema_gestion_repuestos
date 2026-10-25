@@ -6293,7 +6293,16 @@ def _desarme_save_vehicle(cursor, form, user_id, catalogs, process_link_ready):
             tuple(value for _, value in process_insert_values),
         )
     else:
-        if 'id_vehiculo_origen' in process_columns:
+        # Editar los datos del vehículo no debe reabrir ni cambiar un proceso
+        # que ya fue iniciado/finalizado. El estado sólo se elige al crear el
+        # proceso; en una edición se conserva y se actualiza únicamente el origen.
+        if action == 'edit':
+            if 'id_vehiculo_origen' in process_columns:
+                cursor.execute(
+                    'UPDATE dbo.desarme SET id_vehiculo_origen = ? WHERE id_desarme = ?',
+                    (origin_id, process_id),
+                )
+        elif 'id_vehiculo_origen' in process_columns:
             cursor.execute(
                 'UPDATE dbo.desarme SET id_estado_desarme = ?, id_vehiculo_origen = ? '
                 'WHERE id_desarme = ?',
