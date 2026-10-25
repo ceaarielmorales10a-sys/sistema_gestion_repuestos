@@ -68,7 +68,7 @@
                     {% elif vehicle.state_class == 'in-progress' and not result %}
                     <button class="detail-finalize-button" type="button" data-open-finalize-modal><i class="fa-regular fa-circle-check" aria-hidden="true"></i> Finalizar Desarme</button>
                     {% endif %}
-                    <a class="detail-edit-button" href="{{ url_for('desarme', open_modal=1, edit_vehicle=vehicle.id) }}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Editar</a>
+                    {% if vehicle.state_class != 'completed' %}<a class="detail-edit-button" href="{{ url_for('desarme', open_modal=1, edit_vehicle=vehicle.id) }}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Editar</a>{% endif %}
                 {% endif %}
             </div>
         </header>
@@ -124,7 +124,7 @@
                     <td>{% if piece.ruta_fotografia %}<button type="button" class="detail-piece-photo desarme-photo-trigger" data-image="{{ repuesto_photo_url(piece.ruta_fotografia) }}" data-caption="DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }} — {{ piece.tipo_repuesto or 'Pieza' }}" aria-label="Ver fotografía de DTD-{{ '%06d'|format(piece.id_detalle_desarme|int) }}"><img src="{{ repuesto_photo_url(piece.ruta_fotografia) }}" alt="Fotografía de {{ piece.tipo_repuesto or 'la pieza' }}" loading="lazy"></button>{% else %}<span class="detail-piece-dash">—</span>{% endif %}</td>
                     <td>{% if piece.codigo_repuesto %}<span class="detail-inventory-code">{{ piece.codigo_repuesto }}</span>{% elif piece.id_repuesto %}<span class="detail-inventory-code">REP-{{ '%06d'|format(piece.id_repuesto|int) }}</span>{% else %}<span class="detail-piece-dash">—</span>{% endif %}</td>
                     <td class="detail-piece-actions">
-                        {% if can_create %}
+                        {% if can_create and vehicle.state_class != 'completed' %}
                         <button class="detail-piece-edit-button" type="button" data-edit-piece
                             data-id="{{ piece.id_detalle_desarme }}"
                             data-type="{{ piece.id_tipo_repuesto or '' }}" data-type-name="{{ piece.tipo_repuesto or '' }}"

@@ -6748,7 +6748,7 @@ def desarme_list_data():
         <div class="vehicle-row-actions">
             <a class="vehicle-detail-button" href="{{{{ url_for('desarme_detalle', vehicle_id={vehicle['id']}) }}}}" title="Ver todos los detalles del desarme" aria-label="Ver todos los detalles del desarme VEH-{{"%06d"|format({vehicle['id']}|int)}}"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></a>
 '''
-                if can_create:
+                if can_create and vehicle['state_class'] != 'completed':
                     rows_html += f'''
             <button class="vehicle-edit-button" type="button" title="Modificar vehículo" aria-label="Modificar vehículo VEH-{{"%06d"|format({vehicle['id']}|int)}}" data-edit-vehicle data-id="{vehicle['id']}" data-brand="{vehicle['id_marca'] or ''}" data-model="{vehicle['id_modelo'] or ''}" data-year="{vehicle['id_anio'] or ''}" data-color="{vehicle['id_color'] or ''}" data-transmission="{vehicle['id_transmision'] or ''}" data-plate="{vehicle['placa'] or ''}" data-vin="{vehicle['vin_chasis'] or ''}" data-origin="{vehicle['origen'] if vehicle['origen'] != 'Sin especificar' else ''}" data-acquired="{vehicle['fecha_adquisicion'].strftime('%Y-%m-%d') if vehicle['fecha_adquisicion'] and hasattr(vehicle['fecha_adquisicion'], 'strftime') else vehicle['fecha_adquisicion'] or ''}" data-state="{vehicle['state_id'] or ''}"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
 '''
