@@ -91,7 +91,7 @@
                 </aside>
                 <div class="catalog-content">
                     {% for catalogo in catalogos %}
-                    <section class="catalog-table {% if catalogo.key != active_catalog %}hidden{% endif %}" id="catalog-{{ catalogo.key }}" data-label="{{ catalogo.label }}" data-name-label="{{ catalogo.name_label }}" data-url="{{ url_for('guardar_catalogo_mantenimiento', key=catalogo.key) }}" data-fields='{{ catalogo.fields|tojson }}'>
+                    <section class="catalog-table {% if catalogo.key != active_catalog %}hidden{% endif %}" id="catalog-{{ catalogo.key }}" data-label="{{ catalogo.label }}" data-name-label="{{ catalogo.name_label }}" data-url="{{ url_for('buscar_catalogo_mantenimiento', key=catalogo.key) }}" data-save-url="{{ url_for('guardar_catalogo_mantenimiento', key=catalogo.key) }}" data-fields='{{ catalogo.fields|tojson }}' data-can-write="{{ 'true' if maintenance_can_write else 'false' }}">
                         <div class="table-tools"><div class="table-heading"><h3>{{ catalogo.label }}</h3>{% if catalogo.key == 'modelos' %}<select class="brand-filter" aria-label="Filtrar modelos por marca"><option value="">— Todas las marcas —</option>{% for marca in catalogo.marcas %}<option value="{{ marca.id }}">{{ marca.nombre }}</option>{% endfor %}</select>{% endif %}</div><div><label class="search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Buscar..."></label>{% if maintenance_can_write %}<button class="primary add-catalog" type="button"><i class="fa-solid fa-plus"></i> Agregar</button>{% endif %}</div></div>
                         <div class="table-scroll"><table data-pagination-page-size="10"><thead>{% if catalogo.key == 'modelos' %}<tr><th>#</th><th>MARCA</th><th>NOMBRE</th><th>DESCRIPCIÓN</th><th>ACCIONES</th></tr>{% else %}<tr><th>{{ 'ID_MOTIVO' if catalogo.key == 'motivo_devolucion' else '#' }}</th><th>{{ 'AÑO' if catalogo.key == 'anios' else catalogo.name_label|upper }}</th>{% for field in catalogo.fields %}<th>{{ field.label|upper }}</th>{% endfor %}<th>ACCIONES</th></tr>{% endif %}</thead><tbody>
                             {% for row in catalogo.rows %}<tr data-search="{{ (row.nombre ~ ' ' ~ row.marca ~ ' ' ~ row.descripcion)|lower if catalogo.key == 'modelos' else row.search }}" {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}"{% endif %}><td data-label="{{ '#' if catalogo.key != 'motivo_devolucion' else 'ID_MOTIVO' }}">{{ row.id if catalogo.key == 'motivo_devolucion' else loop.index }}</td>{% if catalogo.key == 'modelos' %}<td data-label="MARCA"><span class="brand-badge"><i class="fa-solid fa-car"></i>{{ row.marca }}</span></td>{% endif %}<td data-label="{{ 'NOMBRE' if catalogo.key == 'modelos' else (catalogo.name_label|upper) }}">{{ row.nombre }}</td>{% if catalogo.key == 'modelos' %}<td data-label="DESCRIPCIÓN">{{ row.descripcion or '—' }}</td>{% else %}{% for field in catalogo.fields %}<td data-label="{{ field.label|upper }}">{{ row.extra_display[field.name] or '—' }}</td>{% endfor %}{% endif %}<td class="actions" data-label="ACCIONES">{% if maintenance_can_write %}<button type="button" class="edit-row" data-id="{{ row.id }}" data-name="{{ row.nombre }}" data-extra='{{ row.extra|tojson }}' {% if catalogo.key == 'modelos' %}data-brand="{{ row.marca_id }}" data-description="{{ row.descripcion or '' }}"{% endif %} title="Editar"><i class="fa-solid fa-pen"></i></button>{% endif %}</td></tr>{% else %}<tr class="empty"><td colspan="{{ 5 if catalogo.key == 'modelos' else 3 + catalogo.fields|length }}">No hay registros en este catálogo.</td></tr>{% endfor %}
@@ -298,11 +298,83 @@
         const modal=document.getElementById('catalog-modal'), form=modal.querySelector('form'), action=document.getElementById('modal-action'), id=document.getElementById('modal-id'), nameInput=document.getElementById('modal-name'), modelFields=document.getElementById('model-fields'), descriptionField=document.getElementById('description-field'), modalBrand=document.getElementById('modal-brand'), modalDescription=document.getElementById('modal-description'), extraFields=document.getElementById('extra-fields'), estadoField=document.getElementById('estado-field'), modalEstado=document.getElementById('modal-estado');
         const closeModal=()=>modal.classList.add('hidden'); document.querySelectorAll('.close-modal,.cancel-modal').forEach(x=>x.addEventListener('click',closeModal));
         document.querySelectorAll('.catalog-tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.catalog-tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.catalog-table').forEach(x=>x.classList.add('hidden'));tab.classList.add('active');document.getElementById('catalog-'+tab.dataset.catalog).classList.remove('hidden')}));
-        function openCatalogModal(panel, mode, rowButton){const label=panel.dataset.label,isModel=panel.id==='catalog-modelos',fields=JSON.parse(panel.dataset.fields||'[]'),extra=rowButton?.dataset.extra?JSON.parse(rowButton.dataset.extra):{};form.action=panel.dataset.url;form.classList.toggle('model-modal',isModel);action.value=mode;id.value=rowButton?.dataset.id||'';nameInput.value=rowButton?.dataset.name||'';nameInput.placeholder=isModel?'Ej. Corolla':'';modelFields.classList.toggle('hidden',!isModel);descriptionField.classList.toggle('hidden',!isModel);modalBrand.required=isModel;modalDescription.disabled=!isModel;extraFields.replaceChildren();estadoField.classList.add('hidden');modalEstado.checked=mode==='add';if(!isModel){fields.forEach(field=>{if(field.name==='id_estado'){return;}const labelNode=document.createElement('label'),options=field.options||[],input=options.length?document.createElement('select'):document.createElement('input');labelNode.htmlFor='extra-'+field.name;labelNode.textContent=field.label;input.id='extra-'+field.name;input.name=field.name;input.autocomplete='off';if(options.length){const placeholder=new Option('Seleccione...', '');input.add(placeholder);options.forEach(option=>input.add(new Option(option.nombre, option.id)));}input.value=extra[field.name]??'';extraFields.append(labelNode,input);});}if(isModel){const filter=panel.querySelector('.brand-filter');modalBrand.innerHTML=filter.innerHTML;modalBrand.value=rowButton?.dataset.brand||'';modalDescription.value=rowButton?.dataset.description||'';modalDescription.placeholder='Descripción opcional...';}if(fields.some(field=>field.name==='id_estado') && (mode==='add' || extra.id_estado!==undefined)){estadoField.classList.remove('hidden');modalEstado.checked=mode==='add' || extra.id_estado==1 || extra.id_estado==='1';}document.getElementById('modal-title').textContent=(mode==='add'?'Agregar':'Editar')+' — '+label;document.getElementById('modal-label').innerHTML=(label==='Años'?'Año':panel.dataset.nameLabel||'Nombre')+' <em>*</em>';document.getElementById('modal-submit').textContent=mode==='add'?'Agregar':'Guardar cambios';modal.classList.remove('hidden');nameInput.focus()}
+        function openCatalogModal(panel, mode, rowButton){const label=panel.dataset.label,isModel=panel.id==='catalog-modelos',fields=JSON.parse(panel.dataset.fields||'[]'),extra=rowButton?.dataset.extra?JSON.parse(rowButton.dataset.extra):{};form.action=panel.dataset.saveUrl;form.classList.toggle('model-modal',isModel);action.value=mode;id.value=rowButton?.dataset.id||'';nameInput.value=rowButton?.dataset.name||'';nameInput.placeholder=isModel?'Ej. Corolla':'';modelFields.classList.toggle('hidden',!isModel);descriptionField.classList.toggle('hidden',!isModel);modalBrand.required=isModel;modalDescription.disabled=!isModel;extraFields.replaceChildren();estadoField.classList.add('hidden');modalEstado.checked=mode==='add';if(!isModel){fields.forEach(field=>{if(field.name==='id_estado'){return;}const labelNode=document.createElement('label'),options=field.options||[],input=options.length?document.createElement('select'):document.createElement('input');labelNode.htmlFor='extra-'+field.name;labelNode.textContent=field.label;input.id='extra-'+field.name;input.name=field.name;input.autocomplete='off';if(options.length){const placeholder=new Option('Seleccione...', '');input.add(placeholder);options.forEach(option=>input.add(new Option(option.nombre, option.id)));}input.value=extra[field.name]??'';extraFields.append(labelNode,input);});}if(isModel){const filter=panel.querySelector('.brand-filter');modalBrand.innerHTML=filter.innerHTML;modalBrand.value=rowButton?.dataset.brand||'';modalDescription.value=rowButton?.dataset.description||'';modalDescription.placeholder='Descripción opcional...';}if(fields.some(field=>field.name==='id_estado') && (mode==='add' || extra.id_estado!==undefined)){estadoField.classList.remove('hidden');modalEstado.checked=mode==='add' || extra.id_estado==1 || extra.id_estado==='1';}document.getElementById('modal-title').textContent=(mode==='add'?'Agregar':'Editar')+' — '+label;document.getElementById('modal-label').innerHTML=(label==='Años'?'Año':panel.dataset.labeltaset.nameLabel||'Nombre')+' <em>*</em>';document.getElementById('modal-submit').textContent=mode==='add'?'Agregar':'Guardar cambios';modal.classList.remove('hidden');nameInput.focus()}
         document.querySelectorAll('.add-catalog').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'add')));
         document.querySelectorAll('.edit-row').forEach(button=>button.addEventListener('click',()=>openCatalogModal(button.closest('.catalog-table'),'edit',button)));
-        function applyCatalogFilters(table){const input=table.querySelector('.search input'),brand=table.querySelector('.brand-filter');const normalize=value=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();const terms=normalize(input?.value).trim().split(/\s+/).filter(Boolean);table.querySelectorAll('tbody tr[data-search]').forEach(row=>{const searchable=normalize(row.dataset.search);const textMatch=terms.length===0||terms.every(term=>searchable.includes(term));const brandMatch=!brand?.value||row.dataset.brand===brand.value;row.classList.toggle('hidden',!(textMatch&&brandMatch));});}
-        document.querySelectorAll('.catalog-table').forEach(table=>{table.querySelector('.search input')?.addEventListener('input',()=>applyCatalogFilters(table));table.querySelector('.brand-filter')?.addEventListener('change',()=>applyCatalogFilters(table));});
+        // Búsqueda de catálogos en el servidor (busca en todos los registros, no solo en la página actual)
+        const catalogSearchTimers = {};
+        async function buscarCatalogo(table){
+            const input=table.querySelector('.search input');
+            const brand=table.querySelector('.brand-filter');
+            const key=table.id.replace('catalog-','');
+            const url=new URL(table.dataset.url);
+            url.searchParams.set('q', input?.value||'');
+            if(brand?.value) url.searchParams.set('marca', brand.value);
+            const requestId=Date.now();
+            catalogSearchTimers[key]=requestId;
+            try{
+                const response=await fetch(url.toString(),{headers:{Accept:'application/json'}});
+                const data=await response.json();
+                if(requestId!==catalogSearchTimers[key]) return;
+                if(!response.ok||!data.success) throw new Error(data.error||'No se pudo buscar en el catálogo.');
+                renderCatalogoRows(table, data.rows, key);
+            }catch(error){
+                console.error('Error buscando catálogo:', error);
+            }
+        }
+
+        function renderCatalogoRows(table, rows, key){
+            const tbody=table.querySelector('tbody');
+            const emptyMsg='No hay registros en este catálogo.';
+            tbody.replaceChildren();
+            if(!rows || rows.length===0){
+                const tr=document.createElement('tr');
+                tr.className='empty';
+                const colSpan = table.querySelector('thead tr').children.length;
+                tr.innerHTML=`<td colspan="${colSpan}">${emptyMsg}</td>`;
+                tbody.append(tr);
+                return;
+            }
+            const isModel = key === 'modelos';
+            const fields = JSON.parse(table.dataset.fields||'[]');
+            const nameLabel = table.dataset.nameLabel || 'Nombre';
+            rows.forEach(row=>{
+                const tr=document.createElement('tr');
+                tr.dataset.search = row.search || '';
+                if(isModel && row.marca_id) tr.dataset.brand = row.marca_id;
+                let html = `<td data-label="${key==='motivo_devolucion'?'ID_MOTIVO':'#'}">${row.id}</td>`;
+                if(isModel){
+                    html += `<td data-label="MARCA"><span class="brand-badge"><i class="fa-solid fa-car"></i>${row.marca}</span></td>`;
+                }
+                html += `<td data-label="${isModel?'NOMBRE':nameLabel.toUpperCase()}">${row.nombre}</td>`;
+                if(isModel){
+                    html += `<td data-label="DESCRIPCIÓN">${row.descripcion||'—'}</td>`;
+                } else {
+                    fields.forEach(field=>{
+                        const val = row.extra_display && row.extra_display[field.name] !== undefined ? row.extra_display[field.name] : '—';
+                        html += `<td data-label="${field.label.toUpperCase()}">${val}</td>`;
+                    });
+                }
+                const canWrite = table.dataset.canWrite === 'true';
+                html += `<td class="actions" data-label="ACCIONES">${canWrite?`<button type="button" class="edit-row" data-id="${row.id}" data-name="${row.nombre}" data-extra='${JSON.stringify(row.extra||{})}' ${isModel?`data-brand="${row.marca_id||''}" data-description="${row.descripcion||''}"`:''} title="Editar"><i class="fa-solid fa-pen"></i></button>`:''}</td>`;
+                tr.innerHTML = html;
+                tbody.append(tr);
+            });
+            // Vincular event listeners a los botones Editar generados dinámicamente
+            tbody.querySelectorAll('.edit-row').forEach(button=>{
+                button.addEventListener('click',()=>openCatalogModal(table,'edit',button));
+            });
+        }
+
+        document.querySelectorAll('.catalog-table').forEach(table=>{
+            const input=table.querySelector('.search input');
+            const brand=table.querySelector('.brand-filter');
+            if(input) input.addEventListener('input',()=>{
+                window.clearTimeout(catalogSearchTimers[table.id.replace('catalog-','')]);
+                catalogSearchTimers[table.id.replace('catalog-','')]=window.setTimeout(()=>buscarCatalogo(table),300);
+            });
+            if(brand) brand.addEventListener('change',()=>buscarCatalogo(table));
+        });
         
         document.querySelectorAll('.clear-button').forEach(button=>button.addEventListener('click',async()=>{
             const name=button.dataset.name;

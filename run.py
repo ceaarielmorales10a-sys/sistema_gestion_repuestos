@@ -3924,6 +3924,117 @@ def guardar_catalogo_mantenimiento(key):
     return redirect(url_for('mantenimiento', catalogo=key))
 
 
+def obtener_filas_catalogo_mantenimiento(key, cursor, search_query=None):
+    """Obtiene las filas de un catálogo de mantenimiento, opcionalmente filtradas por búsqueda."""
+    catalogo = get_mantenimiento_catalogo(key, cursor)
+    if not catalogo:
+        return None
+
+    table = catalogo['table']
+    id_column = catalogo['id_column']
+    display_column = catalogo['display_column']
+    fields = catalogo['fields']
+    columns = get_table_columns(cursor, table)
+
+    if key == 'modelos':
+        # Modelos requieren una vista propia con marca y descripción.
+        marca_column = next((c for c in columns if c.lower() == 'id_marca'), None)
+        descripcion_column = next(
+            (c for c in columns if 'descripcion' in c.lower() or 'observacion' in c.lower()),
+            None,
+        )
+        cursor.execute(f"SELECT * FROM {table} ORDER BY {display_column} ASC")
+        column_names = [column[0] for column in cursor.description]
+        rows = []
+        for raw_row in cursor.fetchall():
+            item = dict(zip(column_names, raw_row))
+            marca_id = item.get(marca_column) if marca_column else None
+            estado_id = item.get('id_estado')
+            nombre = item.get(display_column)
+            marca = get_display_name_by_id(cursor, ['marca_vehiculo', 'marca'], marca_id) or 'Sin marca'
+            descripcion = item.get(descripcion_column) if descripcion_column else ''
+
+            if search_query:
+                searchable = f'{nombre or ""} {marca or ""} {descripcion or ""}'
+                if not matches_multiword_search(search_query, {'text': searchable}, ['text']):
+                    continue
+
+            rows.append({
+                'id': item.get(id_column),
+                'nombre': nombre,
+                'marca_id': marca_id,
+                'marca': marca,
+                'descripcion': descripcion,
+                'extra': {'id_estado': estado_id},
+                'extra_display': {
+                    'id_estado': 'Activo' if estado_id == 1 else ('Inactivo' if estado_id == 2 else '—')
+                },
+            })
+        return rows
+
+    # Otros catálogos
+    if key == 'motivo_devolucion':
+        order_column = id_column
+        order_direction = 'ASC'
+    else:
+        order_column = display_column
+        order_direction = 'ASC'
+    cursor.execute(f"SELECT * FROM {table} ORDER BY {order_column} {order_direction}")
+    column_names = [column[0] for column in cursor.description]
+    rows = []
+    for raw_row in cursor.fetchall():
+        item = dict(zip(column_names, raw_row))
+        extra = {field['name']: item.get(field['name']) for field in fields}
+        extra_display = {}
+        for field in fields:
+            related_tables = CATALOGO_CAMPOS_RELACIONADOS.get(key, {}).get(field['name'])
+            value = extra[field['name']]
+            extra_display[field['name']] = (
+                get_display_name_by_id(cursor, related_tables, value)
+                if related_tables and value is not None else value
+            )
+        estado_id = item.get('id_estado')
+        extra['id_estado'] = estado_id
+        extra_display['id_estado'] = 'Activo' if estado_id == 1 else ('Inactivo' if estado_id == 2 else '—')
+        nombre = item.get(display_column)
+
+        if search_query:
+            search = ' '.join(str(value or '') for value in [nombre] + list(extra.values()))
+            if not matches_multiword_search(search_query, {'text': normalize_search_text(search)}, ['text']):
+                continue
+
+        rows.append({
+            'id': item.get(id_column),
+            'nombre': nombre,
+            'extra': extra,
+            'extra_display': extra_display,
+            'search': normalize_search_text(
+                ' '.join(str(value or '') for value in [nombre] + list(extra.values()))
+            ),
+        })
+    return rows
+
+
+@app.route('/mantenimiento/catalogo/<key>/buscar')
+def buscar_catalogo_mantenimiento(key):
+    if 'user' not in session or not has_permission_in_session('mantenimiento', 'read'):
+        return jsonify({'error': 'No tienes permisos para consultar catálogos.'}), 403
+
+    search_query = request.args.get('q', '').strip()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = obtener_filas_catalogo_mantenimiento(key, cursor, search_query if search_query else None)
+        cursor.close()
+        conn.close()
+        if rows is None:
+            return jsonify({'error': 'El catálogo seleccionado no está disponible.'}), 404
+        return jsonify({'success': True, 'key': key, 'rows': rows, 'total': len(rows)})
+    except Exception as error:
+        app.logger.exception('No fue posible buscar en el catálogo %s.', key)
+        return jsonify({'error': 'No fue posible buscar en el catálogo.'}), 500
+
+
 @app.route('/mantenimiento/backup/descargar')
 def mantenimiento_backup_descargar():
     if 'user' not in session or not has_permission_in_session('mantenimiento', 'read'):
