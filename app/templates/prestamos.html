@@ -529,24 +529,23 @@
     const normalizeSearch = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
 
     function filterLoans() {
-      const query = normalizeSearch(document.getElementById('loan-search').value).trim();
+      const searchInput = document.getElementById('loan-search');
+      const stateSelect = document.getElementById('state-filter');
+      if (!searchInput) return;
+      const query = normalizeSearch(searchInput.value).trim();
       const terms = query.split(/\s+/).filter(t => t);
-      const state = document.getElementById('state-filter').value;
-      const loanGroups = new Map();
+      const state = stateSelect ? stateSelect.value : '';
       document.querySelectorAll('.loan-row').forEach((row) => {
-        const loanId = row.dataset.loanId;
-        if (!loanGroups.has(loanId)) loanGroups.set(loanId, []);
-        loanGroups.get(loanId).push(row);
-      });
-      loanGroups.forEach((rows) => {
-        const firstRow = rows[0];
-        const searchText = normalizeSearch(firstRow.dataset.search);
-        const matches = terms.every(t => searchText.includes(t)) && (!state || firstRow.dataset.state === state);
-        rows.forEach((row) => { row.hidden = !matches; });
+        const searchText = normalizeSearch(row.dataset.search || '');
+        const matches = terms.every(t => searchText.includes(t))
+          && (!state || (row.dataset.state || '') === state);
+        row.hidden = !matches;
       });
     }
-    document.getElementById('loan-search').addEventListener('input', filterLoans);
-    document.getElementById('state-filter').addEventListener('change', filterLoans);
+    const loanSearchInput = document.getElementById('loan-search');
+    const loanStateFilter = document.getElementById('state-filter');
+    loanSearchInput?.addEventListener('input', filterLoans);
+    loanStateFilter?.addEventListener('change', filterLoans);
 
     document.querySelectorAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => {
       const report = tab.dataset.tab === 'report';
