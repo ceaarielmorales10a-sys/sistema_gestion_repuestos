@@ -2984,14 +2984,14 @@ def analizar_inventario_analytics():
 
         from google import genai
 
-        client = genai.Client()
+        client = genai.Client(api_key=api_key)
         prompt = (
             "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
             "cuáles tienen stock bajo (menor al mínimo) y da recomendaciones breves "
             "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
             f"no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
         )
-        primary_model = 'gemini-2.5-flash'
+        primary_model = 'gemini-3.8-flash'
         fallback_model = 'gemini-3.6-flash'
         try:
             response = client.models.generate_content(
