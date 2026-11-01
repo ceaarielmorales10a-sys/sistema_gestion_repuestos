@@ -318,9 +318,10 @@
       } catch (error) {
         throw new Error('No se pudo conectar con el servidor de Analítica IA. Verifica tu conexión e inténtalo de nuevo.');
       }
+      const responseBody = await response.text();
       let result;
       try {
-        result = await response.json();
+        result = JSON.parse(responseBody);
       } catch (error) {
         throw new Error(`El servidor respondió con un formato inesperado (HTTP ${response.status}).`);
       }

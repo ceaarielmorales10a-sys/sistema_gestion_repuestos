@@ -18,6 +18,7 @@ except ImportError:
     boto3 = None
 from dotenv import dotenv_values, load_dotenv
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import InternalServerError
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
 from reportlab.lib.pagesizes import landscape, letter
@@ -80,6 +81,23 @@ def prevent_private_pages_from_browser_cache(response):
                 response.set_data(html.replace('</body>', page_restore_guard + '</body>', 1))
 
     return response
+
+
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    # Las llamadas AJAX deben recibir JSON incluso si falla un hook de Flask
+    # (por ejemplo, la comprobaciÃ³n de sesiÃ³n/permisos antes de la ruta).
+    if request.path.startswith('/api/analytics/'):
+        app.logger.error(
+            'Error interno al atender %s: %s', request.path, error,
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        return jsonify({
+            'success': False,
+            'error': 'OcurriÃ³ un error interno antes de completar la solicitud. '
+                     'Revisa el registro del servidor para ver la causa.',
+        }), 500
+    return error.get_response() if isinstance(error, InternalServerError) else InternalServerError().get_response()
 
 
 def has_permission_in_session(module_key, required_level='read'):
