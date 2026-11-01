@@ -66,7 +66,7 @@
                 <div id="audit-empty" class="audit-empty" hidden><i class="fa-solid fa-users" aria-hidden="true"></i><strong>Sin registros en bitácora</strong><span>Las acciones registradas aparecerán aquí</span></div>
                 <div id="audit-table-wrap" class="audit-table-wrap" hidden>
                     <table class="audit-table" id="audit-table">
-                        <thead id="audit-table-head"><tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th><th>TABLA</th></tr></thead>
+                        <thead id="audit-table-head"><tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th></tr></thead>
                         <tbody id="audit-table-body"></tbody>
                     </table>
                 </div>
@@ -224,10 +224,10 @@
                         auditBody.append(row);
                     });
                 } else {
-                    auditHead.innerHTML = '<tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th><th>TABLA</th></tr>';
+                    auditHead.innerHTML = '<tr><th>FECHA</th><th>ACCIÓN</th><th>REGISTRO</th><th>DETALLE</th><th>USUARIO</th></tr>';
                     data.registros.forEach(record => {
                         const row = document.createElement('tr');
-                        [record.fecha, record.accion, record.registro, record.detalle, record.usuario, record.tabla]
+                        [record.fecha, record.accion, record.registro, record.detalle, record.usuario]
                             .forEach(value => {
                                 const cell = document.createElement('td');
                                 cell.textContent = value || '—';
