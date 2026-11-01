@@ -3846,6 +3846,25 @@ def guardar_catalogo_mantenimiento(key):
             raise ValueError('El catálogo seleccionado no está disponible.')
         table, id_column, display_column = catalogo['table'], catalogo['id_column'], catalogo['display_column']
         columns = get_table_columns(cursor, table)
+        # Evita nombres repetidos en el mismo catÃ¡logo. En modelos, el nombre
+        # puede repetirse para otra marca, pero no dentro de la misma marca.
+        if action != 'delete':
+            duplicate_conditions = [
+                f'UPPER(LTRIM(RTRIM({display_column}))) = UPPER(LTRIM(RTRIM(?)))',
+            ]
+            duplicate_params = [value]
+            if action == 'edit' and row_id:
+                duplicate_conditions.append(f'{id_column} <> ?')
+                duplicate_params.append(row_id)
+            if key == 'modelos':
+                duplicate_conditions.append('id_marca = ?')
+                duplicate_params.append(request.form.get('id_marca', '').strip())
+            cursor.execute(
+                f"SELECT TOP 1 1 FROM {table} WHERE {' AND '.join(duplicate_conditions)}",
+                tuple(duplicate_params),
+            )
+            if cursor.fetchone():
+                raise ValueError('Ya existe un registro con ese nombre en este catÃ¡logo.')
         # Some catalogs (notably estado_general) use id_estado as their
         # identity primary key. It must never be treated as the optional
         # active/inactive flag, otherwise edits generate UPDATE id_estado =
@@ -4993,6 +5012,13 @@ def agregar_repuesto():
             if not columns:
                 raise RuntimeError('No se pudo consultar el esquema de la tabla repuesto.')
             column_lookup = {column.casefold(): column for column in columns}
+            cursor.execute(
+                'SELECT TOP 1 1 FROM dbo.repuesto '
+                'WHERE UPPER(LTRIM(RTRIM(codigo_repuesto))) = UPPER(LTRIM(RTRIM(?)))',
+                (codigo,),
+            )
+            if cursor.fetchone():
+                raise ValueError(f'Ya existe un repuesto con el cÃ³digo "{codigo}".')
 
             photo_file = get_uploaded_repuesto_photo()
             if photo_file:
@@ -5181,6 +5207,20 @@ def modificar_repuesto(id_repuesto):
                     cursor, activo=request.form.get('activo') == 'on'
                 ),
             }
+            codigo_actualizado = str(update_data.get('codigo_repuesto') or '').strip()
+            if not codigo_actualizado:
+                flash('El cÃ³digo del repuesto es obligatorio.', 'error')
+                return redirect(url_for('modificar_repuesto', id_repuesto=id_repuesto))
+            cursor.execute(
+                'SELECT TOP 1 1 FROM dbo.repuesto '
+                'WHERE UPPER(LTRIM(RTRIM(codigo_repuesto))) = UPPER(LTRIM(RTRIM(?))) '
+                'AND id_repuesto <> ?',
+                (codigo_actualizado, id_repuesto),
+            )
+            if cursor.fetchone():
+                flash(f'Ya existe otro repuesto con el cÃ³digo "{codigo_actualizado}".', 'error')
+                return redirect(url_for('modificar_repuesto', id_repuesto=id_repuesto))
+            update_data['codigo_repuesto'] = codigo_actualizado
             photo_file = get_uploaded_repuesto_photo()
             if photo_file and photo_file.filename:
                 ensure_repuesto_photo_column(cursor)
