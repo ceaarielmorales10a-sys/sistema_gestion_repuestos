@@ -323,7 +323,16 @@
       try {
         result = JSON.parse(responseBody);
       } catch (error) {
-        throw new Error(`El servidor respondió con un formato inesperado (HTTP ${response.status}).`);
+        const responseMessage = responseBody
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 240);
+        throw new Error(responseMessage
+          ? `Server error (HTTP ${response.status}): ${responseMessage}`
+          : `Unexpected server response (HTTP ${response.status}).`);
       }
       if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo generar el análisis de IA.');
       renderAnalysis(output, result.analisis);
