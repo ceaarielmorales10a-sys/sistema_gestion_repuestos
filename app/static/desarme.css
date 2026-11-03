@@ -52,7 +52,7 @@ body.module-theme.dismantling-page .disassembly-header p { margin: 0; color: var
 .disassembly-filters input, .disassembly-filters select { width: 100%; min-width: 0; height: var(--disassembly-control-height); padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 9px; background-color: #fff; color: #19365d; font-family: inherit; font-size: 12px; }
 .disassembly-filters input { padding-left: 37px; }
 .disassembly-filters input::placeholder { color: #8795a8; }
-.disassembly-results { min-height: 190px; overflow: hidden; border: 1px solid var(--module-line); border-radius: var(--disassembly-radius); background: #fff; box-shadow: 0 2px 3px #152b450c; }
+.disassembly-results { overflow: hidden; border: 1px solid var(--module-line); border-radius: var(--disassembly-radius); background: #fff; box-shadow: 0 2px 3px #152b450c; }
 .disassembly-empty-state { min-height: 188px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 28px; color: var(--module-muted); text-align: center; }
 .disassembly-empty-state > i { color: #dfe3e8; font-size: 31px; }
 .disassembly-empty-state p { margin: 0; font-size: 14px; }
@@ -145,7 +145,7 @@ body.modal-open { overflow: hidden; }
   .summary-card strong { font-size: 20px; }
   .disassembly-filters { grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 15px; padding: 12px; }
   .disassembly-filters input, .disassembly-filters select { height: 40px; font-size: 13px; }
-  .disassembly-results, .disassembly-empty-state { min-height: 190px; }
+  .disassembly-empty-state { min-height: 190px; }
   .disassembly-empty-state { gap: 12px; }
   .disassembly-empty-state p { font-size: 13px; }
   .disassembly-flash { top: 12px; right: 12px; }
