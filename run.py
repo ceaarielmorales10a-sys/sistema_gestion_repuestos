@@ -2683,6 +2683,58 @@ def _is_gemini_capacity_error(error):
     )
 
 
+def _is_transient_analytics_db_error(error):
+    """Identify SQL Server errors that can succeed after reconnecting once."""
+    error_details = []
+    current_error = error
+    visited_errors = set()
+    while current_error is not None and id(current_error) not in visited_errors:
+        visited_errors.add(id(current_error))
+        error_details.extend(str(argument) for argument in getattr(current_error, 'args', ()))
+        current_error = getattr(current_error, '__cause__', None) or getattr(current_error, '__context__', None)
+    details = ' '.join(error_details).casefold()
+    return any(marker in details for marker in (
+        '08s01', '08001', '08s02', 'hyt00', 'hyt01', '40001', '1205',
+        'timeout', 'temporarily unavailable', 'connection is busy', 'exception set',
+    ))
+
+
+class _AnalyticsCursorDiagnostics:
+    """Log the failing SQL statement number and text for analytics queries."""
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self._query_number = 0
+        self._last_query = ''
+
+    def execute(self, query, *args, **kwargs):
+        self._query_number += 1
+        self._last_query = str(query)[:800]
+        try:
+            return self._cursor.execute(query, *args, **kwargs)
+        except pyodbc.Error:
+            app.logger.exception(
+                'Analytics SQL query #%s failed: %s', self._query_number, self._last_query
+            )
+            raise
+
+    def fetchone(self):
+        try:
+            return self._cursor.fetchone()
+        except pyodbc.Error:
+            app.logger.exception('Analytics fetchone failed after query: %s', self._last_query)
+            raise
+
+    def fetchall(self):
+        try:
+            return self._cursor.fetchall()
+        except pyodbc.Error:
+            app.logger.exception('Analytics fetchall failed after query: %s', self._last_query)
+            raise
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
 def _analytics_dashboard_data(cursor, days):
     inventory_columns = {
         column.lower(): column for column in get_table_columns(cursor, 'dbo.repuesto')
@@ -2997,9 +3049,35 @@ def analizar_inventario_analytics():
                 'Falta GEMINI_API_KEY. Configurála como variable de entorno o en el archivo .env.'
             )
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        analytics_data = _analytics_dashboard_data(cursor, days)
+        analytics_data = None
+        for attempt in range(2):
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                analytics_data = _analytics_dashboard_data(
+                    _AnalyticsCursorDiagnostics(cursor), days
+                )
+                break
+            except Exception as db_error:
+                if attempt or not _is_transient_analytics_db_error(db_error):
+                    raise
+                app.logger.warning(
+                    'Temporal SQL Server error loading Analytics; retrying with a new connection.'
+                )
+                time.sleep(0.5)
+            finally:
+                if cursor:
+                    try:
+                        cursor.close()
+                    except Exception as close_error:
+                        app.logger.warning('No se pudo cerrar el cursor de Analytics: %s', close_error)
+                    cursor = None
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception as close_error:
+                        app.logger.warning('No se pudo cerrar la conexion de Analytics: %s', close_error)
+                    conn = None
 
         from google import genai
 
@@ -3049,7 +3127,12 @@ def analizar_inventario_analytics():
         return jsonify({'success': True, 'analisis': response.text})
     except Exception as e:
         app.logger.exception('Error en Analítica IA (base de datos o Gemini).')
-        print(f"Error IA: {e}", flush=True)
+        if isinstance(e, pyodbc.Error):
+            error_message = (
+                'SQL Server no pudo completar una consulta de Analytics. '
+                'Revisa la conexion y las tablas de inventario y ventas; el detalle quedo en el registro del servidor.'
+            )
+            return jsonify({'success': False, 'error': error_message}), 503
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if cursor:
