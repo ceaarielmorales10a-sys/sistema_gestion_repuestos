@@ -8,9 +8,10 @@ import unicodedata
 import secrets 
 import csv
 from uuid import uuid4
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 import pyodbc
 try:
     import boto3
@@ -3235,6 +3236,15 @@ def _audit_text(value):
     return str(value).strip()
 
 
+def _audit_local_datetime_text(value):
+    """Format audit timestamps in Guatemala time; SQL Server stores them as UTC."""
+    if not isinstance(value, datetime):
+        return _audit_text(value)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(ZoneInfo('America/Guatemala')).strftime('%Y-%m-%d %H:%M:%S')
+
+
 def _audit_user_display(cursor, user_id):
     """Resolve an audit user ID using the exact usuario.id_usuario key."""
     if user_id is None:
@@ -3364,7 +3374,7 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
 
             for raw_row in cursor.fetchall():
                 data = dict(zip(result_columns, raw_row))
-                date_value = _audit_text(data.get(date_column)) if date_column else ''
+                date_value = _audit_local_datetime_text(data.get(date_column)) if date_column else ''
                 date_key = date_value[:10]
                 if from_date and (not date_key or date_key < from_date):
                     continue
@@ -3458,7 +3468,12 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                         detail_parts.append(f'{column.replace("_", " ").capitalize()}: {_audit_text(value)}')
                 detail = ' · '.join(detail_parts)
                 searchable_text = ' '.join(
-                    _audit_text(value) for value in data.values() if value is not None
+                    (
+                        _audit_local_datetime_text(value)
+                        if date_column and column.casefold() == date_column.casefold()
+                        else _audit_text(value)
+                    )
+                    for column, value in data.items() if value is not None
                 )
                 if query and not matches_multiword_search(query, {'text': searchable_text}, ['text']):
                     continue
@@ -3478,7 +3493,11 @@ def _mantenimiento_auditoria_rows(module_key, filters=None):
                     record['usuario'] = _audit_user_display(cursor, audit_user_id) or user_value
                     record['registro'] = _audit_text(data.get(_audit_column(result_columns, ('id_repuesto',)))) or '—'
                     record['raw_data'] = {
-                        col: _audit_text(data.get(col)) for col in REPUESTO_BITACORA_COLUMNS
+                        col: (
+                            _audit_local_datetime_text(data.get(col))
+                            if date_column and col.casefold() == date_column.casefold()
+                            else _audit_text(data.get(col))
+                        ) for col in REPUESTO_BITACORA_COLUMNS
                         if col in data
                     }
                     record['raw_data']['usuario'] = record['usuario']
