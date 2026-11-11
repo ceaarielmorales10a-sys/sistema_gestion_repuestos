@@ -3043,12 +3043,6 @@ def analizar_inventario_analytics():
     try:
         request_data = request.get_json(silent=True) or {}
         days = _analytics_days(request_data.get('dias', 30))
-        api_key = _get_gemini_api_key()
-        if not api_key:
-            raise RuntimeError(
-                'Falta GEMINI_API_KEY. Configurála como variable de entorno o en el archivo .env.'
-            )
-
         analytics_data = None
         for attempt in range(2):
             try:
@@ -3079,52 +3073,47 @@ def analizar_inventario_analytics():
                         app.logger.warning('No se pudo cerrar la conexion de Analytics: %s', close_error)
                     conn = None
 
-        from google import genai
-
-        client = genai.Client(api_key=api_key)
-        prompt = (
-            "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
-            "cuáles tienen stock bajo (menor al mínimo) y da recomendaciones breves "
-            "de reabastecimiento. Todos los montos deben expresarse en Quetzales (Q), "
-            f"no en dólares: {json.dumps(analytics_data, ensure_ascii=False)}"
-        )
-        primary_model = 'gemini-3.8-flash'
-        fallback_model = 'gemini-3.6-flash'
         try:
+            api_key = _get_gemini_api_key()
+            if not api_key:
+                raise RuntimeError('Falta GEMINI_API_KEY.')
+            from google import genai
+
+            client = genai.Client(api_key=api_key)
+            prompt = (
+                "Analiza el inventario de repuestos en Guatemala, identifica los de stock bajo y recomienda reposicion. "
+                f"Datos actuales: {json.dumps(analytics_data, ensure_ascii=False)}"
+            )
             response = client.models.generate_content(
-                model=primary_model,
-                contents=prompt,
+                model='gemini-2.5-flash', contents=prompt
             )
-        except Exception as first_error:
-            if not _is_gemini_capacity_error(first_error):
-                raise
-
-            app.logger.warning(
-                'Gemini tuvo alta demanda para %s; se reintentará una vez.',
-                primary_model,
+            if not response.text:
+                raise RuntimeError('Gemini devolvio una respuesta vacia.')
+            return jsonify({'success': True, 'analisis': response.text})
+        except Exception as ai_error:
+            print(f'Fallback activado debido a: {ai_error}')
+            metrics = analytics_data.get('metricas', {})
+            urgent_count = int(analytics_data.get('repuestos_urgentes', 0) or 0)
+            critical_items = analytics_data.get('predicciones', [])
+            if urgent_count:
+                items = '; '.join(
+                    f"{item.get('codigo', 'Sin codigo')}: stock {item.get('stock', 0)}, minimo {item.get('minimo', 0)} ({item.get('urgencia', 'Revisar')})"
+                    for item in critical_items if item.get('requiere_reabastecimiento')
+                )
+                analysis = (
+                    f"\U0001F916 [Analisis de Respaldo del Sistema]: Se detectan {urgent_count} repuestos que requieren atencion. "
+                    f"Prioriza la reposicion para evitar quiebres de inventario. Repuestos criticos: {items or 'revisar el inventario'}."
+                )
+            else:
+                analysis = (
+                    '[Analisis de Respaldo del Sistema]: No se detectan repuestos bajo el minimo recomendado. '
+                    'Manten el seguimiento periodico del inventario.'
+                )
+            analysis += (
+                f" El inventario contiene {metrics.get('repuestos', 0)} repuestos y "
+                f"{metrics.get('unidades_inventario', 0)} unidades."
             )
-            time.sleep(1)
-            try:
-                response = client.models.generate_content(
-                    model=primary_model,
-                    contents=prompt,
-                )
-            except Exception as retry_error:
-                if not _is_gemini_capacity_error(retry_error):
-                    raise
-                app.logger.warning(
-                    'Gemini sigue con alta demanda para %s; se usará %s.',
-                    primary_model,
-                    fallback_model,
-                )
-                response = client.models.generate_content(
-                    model=fallback_model,
-                    contents=prompt,
-                )
-
-        if not response.text:
-            raise RuntimeError('Gemini devolvió una respuesta vacía.')
-        return jsonify({'success': True, 'analisis': response.text})
+            return jsonify({'success': True, 'analisis': analysis})
     except Exception as e:
         app.logger.exception('Error en Analítica IA (base de datos o Gemini).')
         if isinstance(e, pyodbc.Error):
