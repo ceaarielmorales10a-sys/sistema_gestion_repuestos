@@ -318,6 +318,11 @@
                 if(requestId!==catalogSearchTimers[key]) return;
                 if(!response.ok||!data.success) throw new Error(data.error||'No se pudo buscar en el catálogo.');
                 renderCatalogoRows(table, data.rows, key);
+                const summary=table.querySelector('.catalog-pagination > span');
+                const pageLinks=table.querySelector('.catalog-pagination nav');
+                const total=Number(data.total ?? data.rows?.length ?? 0);
+                if(summary) summary.textContent=total ? `Mostrando ${total} de ${total} registros` : 'No hay datos que coincidan con la búsqueda.';
+                if(pageLinks) pageLinks.classList.toggle('hidden', Boolean(input?.value.trim()));
             }catch(error){
                 console.error('Error buscando catálogo:', error);
             }
@@ -325,7 +330,7 @@
 
         function renderCatalogoRows(table, rows, key){
             const tbody=table.querySelector('tbody');
-            const emptyMsg='No hay registros en este catálogo.';
+            const emptyMsg='No hay datos que coincidan con la búsqueda.';
             tbody.replaceChildren();
             if(!rows || rows.length===0){
                 const tr=document.createElement('tr');
@@ -369,9 +374,10 @@
         document.querySelectorAll('.catalog-table').forEach(table=>{
             const input=table.querySelector('.search input');
             const brand=table.querySelector('.brand-filter');
+            if(input) input.addEventListener('keydown',event=>{if(event.key==='Enter') event.preventDefault()});
             if(input) input.addEventListener('input',()=>{
                 window.clearTimeout(catalogSearchTimers[table.id.replace('catalog-','')]);
-                catalogSearchTimers[table.id.replace('catalog-','')]=window.setTimeout(()=>buscarCatalogo(table),300);
+                catalogSearchTimers[table.id.replace('catalog-','')]=window.setTimeout(()=>buscarCatalogo(table),150);
             });
             if(brand) brand.addEventListener('change',()=>buscarCatalogo(table));
         });
