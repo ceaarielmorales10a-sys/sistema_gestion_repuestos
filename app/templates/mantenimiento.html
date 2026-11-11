@@ -307,7 +307,7 @@
             const input=table.querySelector('.search input');
             const brand=table.querySelector('.brand-filter');
             const key=table.id.replace('catalog-','');
-            const url=new URL(table.dataset.url);
+            const url=new URL(table.dataset.url, window.location.origin);
             url.searchParams.set('q', input?.value||'');
             if(brand?.value) url.searchParams.set('marca', brand.value);
             const requestId=Date.now();
