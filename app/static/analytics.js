@@ -21,6 +21,9 @@
   };
   const translateAiError = (message, status) => {
     const detail = String(message || '').toLowerCase();
+    if (/sql server|consulta.*analytics/.test(detail)) {
+      return 'No se pudieron consultar los datos de inventario. Revisa la conexión con la base de datos e inténtalo de nuevo.';
+    }
     if (status === 503 || /\b503\b|unavailable|high demand|temporarily unavailable|temporalmente saturado/.test(detail)) {
       return 'El servicio de inteligencia artificial está temporalmente saturado. Inténtalo de nuevo en unos minutos.';
     }
@@ -341,16 +344,10 @@
           ? `Server error (HTTP ${response.status}): ${responseMessage}`
           : `Unexpected server response (HTTP ${response.status}).`);
       }
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result.success || result.proveedor !== 'gemini') {
         throw new Error(translateAiError(result.error, response.status));
       }
       renderAnalysis(output, result.analisis);
-      if (result.respaldo_local) {
-        const notice = document.createElement('p');
-        notice.className = 'ai-fallback-notice';
-        notice.textContent = 'Análisis automático basado en existencias y ventas; el servicio de IA no está disponible ahora.';
-        output.prepend(notice);
-      }
     } catch (error) {
       output.textContent = 'No se generaron recomendaciones en esta solicitud.';
       showError(aiErrorElement, translateAiError(error.message));

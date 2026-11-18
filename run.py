@@ -7,6 +7,8 @@ import re
 import unicodedata
 import secrets 
 import csv
+import hashlib
+import threading
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -42,6 +44,10 @@ app.config['MAX_CONTENT_LENGTH'] = None
 # En producción defina FLASK_SECRET_KEY con un valor largo y aleatorio.
 # Una clave conocida permitiría fabricar cookies de sesión.
 app.secret_key = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') or secrets.token_urlsafe(48)
+
+# Reduce llamadas repetidas y ráfagas dentro de cada proceso web.
+_analytics_ai_lock = threading.Lock()
+_analytics_ai_cache = {}
 
 # S3 se configura con variables de entorno o el proveedor de credenciales de AWS.
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-2')
@@ -2683,38 +2689,6 @@ def _is_gemini_capacity_error(error):
     )
 
 
-def _analytics_rule_based_recommendation(analytics_data):
-    """Return actionable inventory guidance without relying on the AI provider."""
-    predictions = analytics_data.get('predicciones') or []
-    urgent = [item for item in predictions if item.get('requiere_reabastecimiento')]
-    if not urgent:
-        return (
-            'No se detectan repuestos bajo el mínimo ni con riesgo de agotarse pronto. '
-            'Mantén el seguimiento de ventas y revisa nuevamente al cambiar el período.'
-        )
-
-    lines = [
-        f"Se recomienda revisar {len(urgent)} repuesto(s) para reabastecimiento. "
-        'Prioriza los agotados y los que tienen menos días de cobertura:'
-    ]
-    for item in sorted(
-        urgent,
-        key=lambda value: (
-            0 if value.get('stock', 0) <= 0 else 1,
-            value.get('dias_agotamiento')
-            if value.get('dias_agotamiento') is not None else float('inf'),
-        ),
-    ):
-        coverage = item.get('dias_agotamiento')
-        coverage_text = f"{coverage:g} día(s) de cobertura" if coverage is not None else 'sin ventas recientes'
-        lines.append(
-            f"- {item.get('codigo', 'Repuesto')}: stock {item.get('stock', 0):g}, "
-            f"mínimo {item.get('minimo', 0):g}; {coverage_text}."
-        )
-    lines.append('Confirma existencias físicas y tiempos del proveedor antes de emitir la compra.')
-    return '\n'.join(lines)
-
-
 def _is_transient_analytics_db_error(error):
     """Identify SQL Server errors that can succeed after reconnecting once."""
     error_details = []
@@ -3105,54 +3079,76 @@ def analizar_inventario_analytics():
                         app.logger.warning('No se pudo cerrar la conexion de Analytics: %s', close_error)
                     conn = None
 
-        recommendation = None
-        used_fallback = False
-        try:
-            api_key = _get_gemini_api_key()
-            if not api_key:
-                raise RuntimeError('GEMINI_API_KEY no está configurada.')
-            from google import genai
+        api_key = _get_gemini_api_key()
+        if not api_key:
+            return jsonify({
+                'success': False,
+                'error': 'Gemini no está configurado. Verifica la clave de API para generar el análisis.',
+            }), 500
 
+        # Enviar únicamente los datos necesarios reduce tokens y tiempo de respuesta.
+        model_input = {
+            'periodo_dias': analytics_data.get('periodo_dias', days),
+            'metricas': analytics_data.get('metricas', {}),
+            'repuestos_urgentes': analytics_data.get('repuestos_urgentes', 0),
+            'predicciones': analytics_data.get('predicciones', []),
+            'categorias': analytics_data.get('categorias', [])[:5],
+        }
+        serialized_data = json.dumps(model_input, ensure_ascii=False, sort_keys=True)
+        cache_key = hashlib.sha256(serialized_data.encode('utf-8')).hexdigest()
+
+        # Una caché corta evita volver a pagar/consultar por datos idénticos.
+        with _analytics_ai_lock:
+            cached = _analytics_ai_cache.get(cache_key)
+            now = time.monotonic()
+            if cached and now - cached[0] < 300:
+                return jsonify({'success': True, 'analisis': cached[1], 'proveedor': 'gemini'})
+
+            from google import genai
             client = genai.Client(api_key=api_key)
             prompt = (
-                "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
-                "cuales tienen stock bajo (menor al minimo) y recomienda reabastecimiento. "
-                f"Datos actuales: {json.dumps(analytics_data, ensure_ascii=False)}"
+                'Eres un analista de inventario para un taller de repuestos en Guatemala. '
+                'Responde en español, de forma breve y accionable. Analiza existencias, '
+                'ventas y cobertura. Prioriza agotados y riesgos de quiebre. No inventes '
+                'datos ni recomiendes comprar si no hay evidencia. Expresa dinero en quetzales, '
+                'no en dólares. '
+                f'Datos agregados: {serialized_data}'
             )
-            primary_model = 'gemini-3.8-flash'
-            stable_model = 'gemini-3.6-flash'
-            try:
-                response = client.models.generate_content(
-                    model=primary_model,
-                    contents=prompt,
-                )
-            except Exception as model_error:
-                if not _is_gemini_capacity_error(model_error):
-                    raise
+            models_to_try = ('gemini-3.8-flash', 'gemini-3.6-flash')
+            last_model_error = None
+            for model_index, model_name in enumerate(models_to_try):
+                # Reintento exponencial acotado; tras fallar el modelo principal,
+                # se intenta otra versión estable de Gemini.
+                for retry_index in range(2):
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt,
+                            config={'max_output_tokens': 500},
+                        )
+                        if not response.text:
+                            raise RuntimeError('Gemini devolvió una respuesta vacía.')
+                        _analytics_ai_cache[cache_key] = (time.monotonic(), response.text)
+                        if len(_analytics_ai_cache) > 128:
+                            oldest_key = min(_analytics_ai_cache, key=lambda key: _analytics_ai_cache[key][0])
+                            _analytics_ai_cache.pop(oldest_key, None)
+                        return jsonify({
+                            'success': True,
+                            'analisis': response.text,
+                            'proveedor': 'gemini',
+                        })
+                    except Exception as model_error:
+                        last_model_error = model_error
+                        if not _is_gemini_capacity_error(model_error):
+                            raise
+                        if retry_index == 0:
+                            time.sleep(1.5 * (2 ** model_index))
                 app.logger.warning(
-                    'Gemini tuvo alta demanda para %s; se probara el modelo estable %s.',
-                    primary_model,
-                    stable_model,
+                    'Gemini no respondió con %s; se intentará %s.',
+                    model_name,
+                    models_to_try[model_index + 1] if model_index + 1 < len(models_to_try) else 'ningún otro modelo',
                 )
-                response = client.models.generate_content(
-                    model=stable_model,
-                    contents=prompt,
-                )
-            if not response.text:
-                raise RuntimeError('Gemini devolvió una respuesta vacía.')
-            recommendation = response.text
-        except Exception:
-            used_fallback = True
-            app.logger.warning(
-                'Gemini no pudo generar el análisis; se usará la recomendación local basada en inventario.',
-                exc_info=True,
-            )
-            recommendation = _analytics_rule_based_recommendation(analytics_data)
-        return jsonify({
-            'success': True,
-            'analisis': recommendation,
-            'respaldo_local': used_fallback,
-        })
+            raise last_model_error or RuntimeError('Gemini no pudo generar la respuesta.')
     except Exception as e:
         app.logger.exception('Error en Analítica IA (base de datos o Gemini).')
         if isinstance(e, pyodbc.Error):
@@ -3161,10 +3157,16 @@ def analizar_inventario_analytics():
                 'Revisa la conexion y las tablas de inventario y ventas; el detalle quedo en el registro del servidor.'
             )
             return jsonify({'success': False, 'error': error_message}), 503
+        app.logger.warning('Gemini no pudo completar el análisis.', exc_info=True)
+        if _is_gemini_capacity_error(e):
+            return jsonify({
+                'success': False,
+                'error': 'Gemini está temporalmente saturado. Espera unos minutos y vuelve a intentarlo.',
+            }), 503
         return jsonify({
             'success': False,
-            'error': 'No fue posible generar el análisis. Revisa los datos y vuelve a intentarlo.',
-        }), 500
+            'error': 'Gemini no pudo completar el análisis. Revisa la configuración y vuelve a intentarlo.',
+        }), 502
     finally:
         if cursor:
             try:
