@@ -3095,7 +3095,9 @@ def analizar_inventario_analytics():
             'categorias': analytics_data.get('categorias', [])[:5],
         }
         serialized_data = json.dumps(model_input, ensure_ascii=False, sort_keys=True)
-        cache_key = hashlib.sha256(serialized_data.encode('utf-8')).hexdigest()
+        cache_key = hashlib.sha256(
+            f'gemini-3.5-flash-lite:{serialized_data}'.encode('utf-8')
+        ).hexdigest()
 
         # Una caché corta evita volver a pagar/consultar por datos idénticos.
         with _analytics_ai_lock:
@@ -3114,7 +3116,9 @@ def analizar_inventario_analytics():
                 'no en dólares. '
                 f'Datos agregados: {serialized_data}'
             )
-            models_to_try = ('gemini-3.8-flash', 'gemini-3.6-flash')
+            # Flash-Lite prioriza alta capacidad de procesamiento para tareas breves.
+            # Gemini 3.6 Flash queda como segundo modelo, también estable.
+            models_to_try = ('gemini-3.5-flash-lite', 'gemini-3.6-flash')
             last_model_error = None
             for model_index, model_name in enumerate(models_to_try):
                 # Reintento exponencial acotado; tras fallar el modelo principal,
