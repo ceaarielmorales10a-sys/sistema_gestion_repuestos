@@ -2683,6 +2683,38 @@ def _is_gemini_capacity_error(error):
     )
 
 
+def _analytics_rule_based_recommendation(analytics_data):
+    """Return actionable inventory guidance without relying on the AI provider."""
+    predictions = analytics_data.get('predicciones') or []
+    urgent = [item for item in predictions if item.get('requiere_reabastecimiento')]
+    if not urgent:
+        return (
+            'No se detectan repuestos bajo el mínimo ni con riesgo de agotarse pronto. '
+            'Mantén el seguimiento de ventas y revisa nuevamente al cambiar el período.'
+        )
+
+    lines = [
+        f"Se recomienda revisar {len(urgent)} repuesto(s) para reabastecimiento. "
+        'Prioriza los agotados y los que tienen menos días de cobertura:'
+    ]
+    for item in sorted(
+        urgent,
+        key=lambda value: (
+            0 if value.get('stock', 0) <= 0 else 1,
+            value.get('dias_agotamiento')
+            if value.get('dias_agotamiento') is not None else float('inf'),
+        ),
+    ):
+        coverage = item.get('dias_agotamiento')
+        coverage_text = f"{coverage:g} día(s) de cobertura" if coverage is not None else 'sin ventas recientes'
+        lines.append(
+            f"- {item.get('codigo', 'Repuesto')}: stock {item.get('stock', 0):g}, "
+            f"mínimo {item.get('minimo', 0):g}; {coverage_text}."
+        )
+    lines.append('Confirma existencias físicas y tiempos del proveedor antes de emitir la compra.')
+    return '\n'.join(lines)
+
+
 def _is_transient_analytics_db_error(error):
     """Identify SQL Server errors that can succeed after reconnecting once."""
     error_details = []
@@ -3043,10 +3075,6 @@ def analizar_inventario_analytics():
     try:
         request_data = request.get_json(silent=True) or {}
         days = _analytics_days(request_data.get('dias', 30))
-        api_key = _get_gemini_api_key()
-        if not api_key:
-            raise RuntimeError('Falta GEMINI_API_KEY. Configurala en el entorno o en .env.')
-
         analytics_data = None
         for attempt in range(2):
             try:
@@ -3077,37 +3105,54 @@ def analizar_inventario_analytics():
                         app.logger.warning('No se pudo cerrar la conexion de Analytics: %s', close_error)
                     conn = None
 
-        from google import genai
-
-        client = genai.Client(api_key=api_key)
-        prompt = (
-            "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
-            "cuales tienen stock bajo (menor al minimo) y recomienda reabastecimiento. "
-            f"Datos actuales: {json.dumps(analytics_data, ensure_ascii=False)}"
-        )
-        primary_model = 'gemini-3.8-flash'
-        stable_model = 'gemini-3.6-flash'
+        recommendation = None
+        used_fallback = False
         try:
-            response = client.models.generate_content(
-                model=primary_model,
-                contents=prompt,
-            )
-        except Exception as model_error:
-            if not _is_gemini_capacity_error(model_error):
-                raise
-            app.logger.warning(
-                'Gemini tuvo alta demanda para %s; se probara el modelo estable %s.',
-                primary_model,
-                stable_model,
-            )
-            response = client.models.generate_content(
-                model=stable_model,
-                contents=prompt,
-            )
+            api_key = _get_gemini_api_key()
+            if not api_key:
+                raise RuntimeError('GEMINI_API_KEY no está configurada.')
+            from google import genai
 
-        if not response.text:
-            raise RuntimeError('Gemini devolvio una respuesta vacia.')
-        return jsonify({'success': True, 'analisis': response.text})
+            client = genai.Client(api_key=api_key)
+            prompt = (
+                "Analiza el inventario de repuestos de mi taller en Guatemala, identifica "
+                "cuales tienen stock bajo (menor al minimo) y recomienda reabastecimiento. "
+                f"Datos actuales: {json.dumps(analytics_data, ensure_ascii=False)}"
+            )
+            primary_model = 'gemini-3.8-flash'
+            stable_model = 'gemini-3.6-flash'
+            try:
+                response = client.models.generate_content(
+                    model=primary_model,
+                    contents=prompt,
+                )
+            except Exception as model_error:
+                if not _is_gemini_capacity_error(model_error):
+                    raise
+                app.logger.warning(
+                    'Gemini tuvo alta demanda para %s; se probara el modelo estable %s.',
+                    primary_model,
+                    stable_model,
+                )
+                response = client.models.generate_content(
+                    model=stable_model,
+                    contents=prompt,
+                )
+            if not response.text:
+                raise RuntimeError('Gemini devolvió una respuesta vacía.')
+            recommendation = response.text
+        except Exception:
+            used_fallback = True
+            app.logger.warning(
+                'Gemini no pudo generar el análisis; se usará la recomendación local basada en inventario.',
+                exc_info=True,
+            )
+            recommendation = _analytics_rule_based_recommendation(analytics_data)
+        return jsonify({
+            'success': True,
+            'analisis': recommendation,
+            'respaldo_local': used_fallback,
+        })
     except Exception as e:
         app.logger.exception('Error en Analítica IA (base de datos o Gemini).')
         if isinstance(e, pyodbc.Error):
@@ -3116,7 +3161,10 @@ def analizar_inventario_analytics():
                 'Revisa la conexion y las tablas de inventario y ventas; el detalle quedo en el registro del servidor.'
             )
             return jsonify({'success': False, 'error': error_message}), 503
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': 'No fue posible generar el análisis. Revisa los datos y vuelve a intentarlo.',
+        }), 500
     finally:
         if cursor:
             try:

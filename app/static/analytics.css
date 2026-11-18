@@ -67,6 +67,7 @@
 .note-purple > i { background: #efe8ff; }
 .recommendation-content { flex: 1; min-width: 0; }
 .ai-analysis { margin-top: 8px; color: #53677e; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.ai-analysis .ai-fallback-notice { padding: 8px 10px; border: 1px solid #f1dfb4; border-radius: 7px; background: #fffaf0; color: #76591d; font-size: 11px; }
 .ai-analysis h3 { margin: 18px 0 8px; padding-bottom: 7px; border-bottom: 1px solid #e9e2f7; color: #293d58; font-size: 13px; line-height: 1.4; }
 .ai-analysis h3:first-child { margin-top: 8px; }
 .ai-analysis p { margin: 7px 0; color: #53677e; font-size: 12px; line-height: 1.7; white-space: normal; }

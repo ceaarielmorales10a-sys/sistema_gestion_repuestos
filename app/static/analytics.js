@@ -19,6 +19,13 @@
     element.textContent = message;
     element.hidden = false;
   };
+  const translateAiError = (message, status) => {
+    const detail = String(message || '').toLowerCase();
+    if (status === 503 || /\b503\b|unavailable|high demand|temporarily unavailable|temporalmente saturado/.test(detail)) {
+      return 'El servicio de inteligencia artificial está temporalmente saturado. Inténtalo de nuevo en unos minutos.';
+    }
+    return 'No se pudo completar el análisis. Inténtalo de nuevo más tarde.';
+  };
 
   // Render the small Markdown subset returned by the analysis API using DOM
   // nodes, so generated content is formatted without interpreting HTML.
@@ -334,11 +341,19 @@
           ? `Server error (HTTP ${response.status}): ${responseMessage}`
           : `Unexpected server response (HTTP ${response.status}).`);
       }
-      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo generar el análisis de IA.');
+      if (!response.ok || !result.success) {
+        throw new Error(translateAiError(result.error, response.status));
+      }
       renderAnalysis(output, result.analisis);
+      if (result.respaldo_local) {
+        const notice = document.createElement('p');
+        notice.className = 'ai-fallback-notice';
+        notice.textContent = 'Análisis automático basado en existencias y ventas; el servicio de IA no está disponible ahora.';
+        output.prepend(notice);
+      }
     } catch (error) {
       output.textContent = 'No se generaron recomendaciones en esta solicitud.';
-      showError(aiErrorElement, error.message || 'No se pudo generar el análisis de IA.');
+      showError(aiErrorElement, translateAiError(error.message));
     } finally {
       button.disabled = false;
     }
